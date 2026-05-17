@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const SECOND_BRAIN_PATH = process.env.SECOND_BRAIN_PATH || "C:\\Users\\Larry\\Documents\\SecondBrain";
+const IS_AVAILABLE = (() => { try { return fs.existsSync(SECOND_BRAIN_PATH); } catch { return false; } })();
 
 export function getSecondBrainPath(...parts: string[]) {
   return path.join(SECOND_BRAIN_PATH, ...parts);
@@ -29,11 +30,14 @@ export function appendToFile(relativePath: string, content: string) {
 
 // Read the master CLAUDE.md for system prompt injection
 export function getSecondBrainContext(): string {
+  if (!IS_AVAILABLE) return "";
   const master = readFile("CLAUDE.md");
   const tasks = readFile("TASKS.md");
   if (!master) return "";
   return `## Second Brain Context\n${master}\n\n## Current Tasks (TASKS.md)\n${tasks}`;
 }
+
+export function isSecondBrainAvailable() { return IS_AVAILABLE; }
 
 // Search all markdown files for a query, returns matching excerpts
 export function searchSecondBrain(query: string, maxResults = 5): { file: string; excerpt: string }[] {
