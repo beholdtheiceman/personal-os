@@ -35,44 +35,64 @@ function decodePartData(part: Record<string, unknown>): string {
   return "";
 }
 
-function findPartByMime(part: Record<string, unknown>, mime: string): string {
+function findPart(part: Record<string, unknown>, mime: string): string {
   if ((part.mimeType as string) === mime) {
     const text = decodePartData(part);
     if (text) return text;
   }
   if (part.parts) {
     for (const p of part.parts as Record<string, unknown>[]) {
-      const text = findPartByMime(p, mime);
+      const text = findPart(p, mime);
       if (text) return text;
     }
   }
   return "";
 }
 
-function cleanPlainText(text: string): string {
-  return text
-    // Remove markdown-style links [label](url) → keep label only
-    .replace(/\[([^\]]*)\]\(https?:\/\/[^)]+\)/g, "$1")
-    // Remove bare URLs
-    .replace(/https?:\/\/\S+/g, "")
-    // Remove leftover empty brackets
-    .replace(/\[\]/g, "")
-    // Collapse 3+ blank lines into 2
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+function htmlToReadable(html: string): string {
+  return html
+    // Remove entire head, style, script blocks
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    // Kill images entirely — no alt text artifacts
+    .replace(/<img[^>]*>/gi, "")
+    // Convert block-level elements to newlines
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(p|div|tr|h[1-6]|li|blockquote|pre|table|thead|tbody|tfoot)[^>]*>/gi, "\n")
+    // Strip all remaining tags
+    .replace(/<[^>]+>/g, "")
+    // Decode HTML entities
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(parseInt(n, 10)));
 }
 
-function decodeBody(part: Record<string, unknown>): { text: string; isHtml: boolean } {
-  // Prefer HTML so we can strip it ourselves
-  const html = findPartByMime(part, "text/html");
-  if (html) return { text: html, isHtml: true };
-
-  const plain = findPartByMime(part, "text/plain");
-  if (plain) return { text: plain, isHtml: false };
-
-  // Fallback: grab whatever data is on the root part
-  const raw = decodePartData(part);
-  return { text: raw, isHtml: false };
+function finalClean(text: string): string {
+  return text
+    // Remove all URLs — they're almost always tracking links
+    .replace(/https?:\/\/[^\s\])"<]+/g, "")
+    // Remove markdown-style [label](url) — label already kept, url gone above
+    .replace(/\[([^\]]{0,80})\]\(\s*\)/g, "$1")
+    // Remove bracket pairs that became empty after URL removal: []
+    .replace(/\[\s*\]/g, "")
+    // [short label] → label (image alt text fallback, marketing callouts)
+    .replace(/\[([^\]]{1,60})\]/g, "$1")
+    // Remove remaining long bracket blobs
+    .replace(/\[[^\]]+\]/g, "")
+    // Remove orphaned parens: ()
+    .replace(/\(\s*\)/g, "")
+    // Collapse whitespace within lines and remove lines that are just noise
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l.length > 1 && !/^[-_|=*]{1,5}$/.test(l))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export async function GET(req: NextRequest) {
@@ -92,27 +112,17 @@ export async function GET(req: NextRequest) {
     const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
     const get = (name: string) => headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
 
-    const { text: rawBody, isHtml } = decodeBody(msg.payload);
+    // Prefer plain text — simpler and avoids complex HTML table/image artifacts
+    const plain = findPart(msg.payload, "text/plain");
+    const html = findPart(msg.payload, "text/html");
+
     let body: string;
-    if (isHtml) {
-      body = rawBody
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-        .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<\/p>/gi, "\n\n")
-        .replace(/<\/div>/gi, "\n")
-        .replace(/<\/li>/gi, "\n")
-        .replace(/<[^>]+>/g, "")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
+    if (plain) {
+      body = finalClean(plain);
+    } else if (html) {
+      body = finalClean(htmlToReadable(html));
     } else {
-      body = cleanPlainText(rawBody);
+      body = "(no content)";
     }
 
     return NextResponse.json({
@@ -121,7 +131,7 @@ export async function GET(req: NextRequest) {
       from: get("From"),
       to: get("To"),
       date: get("Date"),
-      body: body.slice(0, 5000), // cap at 5k chars
+      body: body.slice(0, 6000),
     });
   } catch (err) {
     console.error("Gmail message error:", err);
