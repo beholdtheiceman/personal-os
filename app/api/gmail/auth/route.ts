@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     client_id: clientId,
     redirect_uri: `${req.nextUrl.origin}/api/gmail/callback`,
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/gmail.modify",
+    scope: "https://www.googleapis.com/auth/gmail",
     access_type: "offline",
     prompt: "consent",
     state: uid,

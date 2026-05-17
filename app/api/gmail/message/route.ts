@@ -127,6 +127,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       id: msg.id,
+      threadId: msg.threadId,
+      messageId: get("Message-ID"),
       subject: get("Subject"),
       from: get("From"),
       to: get("To"),
