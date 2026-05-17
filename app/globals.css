@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base resets ─────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background-color: #0d1117;
+  color: #e6edf3;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbar styling ───────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d1117;
+}
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+/* ─── Prose / markdown styles for Claude responses ─────────────────────────── */
+.prose-dark {
+  @apply text-text-primary leading-relaxed;
+}
+.prose-dark h1,
+.prose-dark h2,
+.prose-dark h3 {
+  @apply font-semibold text-text-primary mt-4 mb-2;
+}
+.prose-dark p {
+  @apply mb-3;
+}
+.prose-dark ul,
+.prose-dark ol {
+  @apply pl-5 mb-3 space-y-1;
+}
+.prose-dark li {
+  @apply text-text-primary;
+}
+.prose-dark ul li {
+  @apply list-disc;
+}
+.prose-dark ol li {
+  @apply list-decimal;
+}
+.prose-dark code {
+  @apply bg-bg-tertiary text-accent-text px-1.5 py-0.5 rounded text-sm font-mono;
+}
+.prose-dark pre {
+  @apply bg-bg-tertiary rounded-lg p-4 mb-3 overflow-x-auto;
+}
+.prose-dark pre code {
+  @apply bg-transparent p-0;
+}
+.prose-dark strong {
+  @apply font-semibold text-text-primary;
+}
+.prose-dark a {
+  @apply text-accent underline underline-offset-2;
+}
+.prose-dark blockquote {
+  @apply border-l-2 border-accent pl-4 italic text-text-secondary;
+}
+
+/* ─── Focus rings ─────────────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid #7c6af7;
+  outline-offset: 2px;
+}
+
+/* ─── Utility classes ─────────────────────────────────────────────────────── */
+.card {
+  @apply bg-bg-secondary border border-bg-border rounded-xl p-4;
+}
+
+.btn-primary {
+  @apply bg-accent hover:bg-accent-hover text-white font-medium px-4 py-2 rounded-lg transition-colors;
+}
+
+.btn-ghost {
+  @apply text-text-secondary hover:text-text-primary hover:bg-bg-tertiary px-3 py-2 rounded-lg transition-colors;
+}
+
+.input-base {
+  @apply bg-bg-tertiary border border-bg-border text-text-primary placeholder-text-muted rounded-lg px-3 py-2 w-full focus:border-accent outline-none transition-colors;
+}
