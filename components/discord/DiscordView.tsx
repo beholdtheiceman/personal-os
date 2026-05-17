@@ -3,12 +3,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import {
   RiDiscordLine, RiSendPlaneLine, RiHashtag, RiRefreshLine,
-  RiArrowDownLine,
 } from "react-icons/ri";
 import LoadingDots from "@/components/ui/LoadingDots";
 import toast from "react-hot-toast";
-import Image from "next/image";
-
 interface Guild { id: string; name: string; icon: string | null }
 interface Channel { id: string; name: string }
 interface ChannelGroup { id: string; name: string; channels: Channel[] }
@@ -23,12 +20,11 @@ interface Message {
 function Avatar({ author }: { author: Message["author"] }) {
   if (author.avatar) {
     return (
-      <Image
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
         src={author.avatar}
         alt={author.username}
-        width={36}
-        height={36}
-        className="rounded-full shrink-0"
+        className="rounded-full shrink-0 w-9 h-9 object-cover"
       />
     );
   }
