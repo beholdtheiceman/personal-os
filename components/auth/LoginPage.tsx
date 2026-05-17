@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { FcGoogle } from "react-icons/fc";
-import { RiDashboardLine } from "react-icons/ri";
+import AnimatedBackground from "@/components/layout/AnimatedBackground";
+import CherryBlossoms from "@/components/layout/CherryBlossoms";
 
 export default function LoginPage() {
   const { signInWithGoogle } = useAuth();
@@ -20,27 +21,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-primary flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <AnimatedBackground />
+      <CherryBlossoms />
       <div className="w-full max-w-sm">
-        {/* Logo / branding */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent/20 border border-accent/30 mb-4">
-            <RiDashboardLine className="w-8 h-8 text-accent" />
+        {/* Branding */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent text-white text-2xl font-semibold shadow-lg mb-5">
+            P
           </div>
-          <h1 className="text-3xl font-bold text-text-primary mb-2">Personal OS</h1>
+          <h1 className="text-4xl font-light text-text-primary tracking-tight mb-2">Personal OS</h1>
           <p className="text-text-secondary text-sm">Your AI-powered life dashboard</p>
         </div>
 
-        {/* Login card */}
+        {/* Glass card */}
         <div className="card">
-          <p className="text-text-secondary text-sm text-center mb-6">
+          <p className="text-text-secondary text-sm text-center mb-5">
             Sign in to access your dashboard, tasks, habits, and AI assistant.
           </p>
-
           <button
             onClick={handleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-bg-tertiary hover:bg-bg-border border border-bg-border text-text-primary font-medium px-4 py-3 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-3 bg-white/80 hover:bg-white border border-white/70 text-text-primary font-medium px-4 py-3 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
@@ -51,7 +53,7 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <p className="text-center text-text-muted text-xs mt-6">
+        <p className="text-center text-text-muted text-xs mt-5">
           Your data is stored privately in your own Firebase project.
         </p>
       </div>

@@ -4,8 +4,8 @@
   "description": "Your personal AI-powered life dashboard",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#6C8EF5",
+  "background_color": "#FAF5F6",
+  "theme_color": "#C4728A",
   "orientation": "portrait-primary",
   "icons": [
     {

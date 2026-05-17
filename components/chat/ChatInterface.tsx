@@ -23,8 +23,7 @@ export default function ChatInterface() {
   const [recording, setRecording] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -122,36 +121,40 @@ export default function ChatInterface() {
     }
   };
 
-  // ── Voice recording ──────────────────────────────────────────────────────────
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const fd = new FormData();
-        fd.append("audio", blob, "recording.webm");
-        try {
-          const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-          const { text } = await res.json();
-          if (text) sendMessage(text);
-        } catch {
-          toast.error("Transcription failed");
-        }
-      };
-      mr.start();
-      mediaRef.current = mr;
-      setRecording(true);
-    } catch {
-      toast.error("Microphone access denied");
+  // ── Web Speech API voice input ────────────────────────────────────────────
+  const startRecording = () => {
+    const SR = (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+      ?? (window as Window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+
+    if (!SR) {
+      toast.error("Speech recognition isn't supported in this browser. Try Chrome.");
+      return;
     }
+
+    const recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (e: SpeechRecognitionEvent) => {
+      const transcript = e.results[0][0].transcript;
+      setInput(transcript);
+    };
+
+    recognition.onerror = () => {
+      toast.error("Couldn't hear anything — try again");
+      setRecording(false);
+    };
+
+    recognition.onend = () => setRecording(false);
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setRecording(true);
   };
 
   const stopRecording = () => {
-    mediaRef.current?.stop();
+    recognitionRef.current?.stop();
     setRecording(false);
   };
 

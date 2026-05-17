@@ -14,91 +14,91 @@
 html,
 body {
   height: 100%;
-  background-color: #0d1117;
-  color: #e6edf3;
+  color: #0D2030;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ─── Scrollbar styling ───────────────────────────────────────────────────── */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ─── Animated blob keyframes ─────────────────────────────────────────────── */
+@keyframes blob1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%       { transform: translate(-40px, 30px) scale(1.05); }
+  66%       { transform: translate(30px, -20px) scale(0.96); }
 }
-::-webkit-scrollbar-track {
-  background: #0d1117;
+@keyframes blob2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%       { transform: translate(50px, -35px) scale(1.04); }
+  66%       { transform: translate(-25px, 40px) scale(0.97); }
 }
-::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 3px;
+@keyframes blob3 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  25%       { transform: translate(35px, 25px) scale(1.03); }
+  75%       { transform: translate(-30px, -30px) scale(0.98); }
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+@keyframes blob4 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  40%       { transform: translate(-45px, -25px) scale(1.06); }
+  70%       { transform: translate(20px, 35px) scale(0.95); }
+}
+@keyframes blob5 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  30%       { transform: translate(30px, 40px) scale(1.04); }
+  60%       { transform: translate(-20px, -15px) scale(0.97); }
 }
 
-/* ─── Prose / markdown styles for Claude responses ─────────────────────────── */
-.prose-dark {
-  @apply text-text-primary leading-relaxed;
-}
-.prose-dark h1,
-.prose-dark h2,
-.prose-dark h3 {
-  @apply font-semibold text-text-primary mt-4 mb-2;
-}
-.prose-dark p {
-  @apply mb-3;
-}
-.prose-dark ul,
-.prose-dark ol {
-  @apply pl-5 mb-3 space-y-1;
-}
-.prose-dark li {
-  @apply text-text-primary;
-}
-.prose-dark ul li {
-  @apply list-disc;
-}
-.prose-dark ol li {
-  @apply list-decimal;
-}
-.prose-dark code {
-  @apply bg-bg-tertiary text-accent-text px-1.5 py-0.5 rounded text-sm font-mono;
-}
-.prose-dark pre {
-  @apply bg-bg-tertiary rounded-lg p-4 mb-3 overflow-x-auto;
-}
-.prose-dark pre code {
-  @apply bg-transparent p-0;
-}
-.prose-dark strong {
-  @apply font-semibold text-text-primary;
-}
-.prose-dark a {
-  @apply text-accent underline underline-offset-2;
-}
-.prose-dark blockquote {
-  @apply border-l-2 border-accent pl-4 italic text-text-secondary;
-}
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(13,32,48,0.18); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #C4728A; }
 
 /* ─── Focus rings ─────────────────────────────────────────────────────────── */
 *:focus-visible {
-  outline: 2px solid #7c6af7;
+  outline: 2px solid #C4728A;
   outline-offset: 2px;
 }
 
-/* ─── Utility classes ─────────────────────────────────────────────────────── */
+/* ─── Prose / markdown styles for Claude responses ─────────────────────────── */
+.prose-dark { @apply text-text-primary leading-relaxed; }
+.prose-dark h1, .prose-dark h2, .prose-dark h3 { @apply font-semibold text-text-primary mt-4 mb-2; }
+.prose-dark p { @apply mb-3; }
+.prose-dark ul, .prose-dark ol { @apply pl-5 mb-3 space-y-1; }
+.prose-dark li { @apply text-text-primary; }
+.prose-dark ul li { @apply list-disc; }
+.prose-dark ol li { @apply list-decimal; }
+.prose-dark code { @apply bg-bg-tertiary text-accent-text px-1.5 py-0.5 rounded text-sm font-mono; }
+.prose-dark pre { @apply bg-bg-tertiary rounded-lg p-4 mb-3 overflow-x-auto; }
+.prose-dark pre code { @apply bg-transparent p-0; }
+.prose-dark strong { @apply font-semibold text-text-primary; }
+.prose-dark a { @apply text-accent underline underline-offset-2; }
+.prose-dark blockquote { @apply border-l-2 border-accent pl-4 italic text-text-secondary; }
+
+/* ─── Glass card ──────────────────────────────────────────────────────────── */
 .card {
-  @apply bg-bg-secondary border border-bg-border rounded-xl p-4;
+  @apply rounded-2xl p-4;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.70);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+/* Page-level headings sit outside cards and need to read against the photo */
+h1 {
+  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.6);
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
 .btn-primary {
-  @apply bg-accent hover:bg-accent-hover text-white font-medium px-4 py-2 rounded-lg transition-colors;
+  @apply bg-accent hover:bg-accent-hover text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-ghost {
-  @apply text-text-secondary hover:text-text-primary hover:bg-bg-tertiary px-3 py-2 rounded-lg transition-colors;
+  @apply text-text-secondary hover:text-text-primary hover:bg-black/5 px-3 py-2 rounded-lg transition-colors;
 }
 
+/* ─── Input ───────────────────────────────────────────────────────────────── */
 .input-base {
-  @apply bg-bg-tertiary border border-bg-border text-text-primary placeholder-text-muted rounded-lg px-3 py-2 w-full focus:border-accent outline-none transition-colors;
+  @apply bg-white/60 border border-bg-border text-text-primary placeholder-text-muted rounded-lg px-3 py-2 w-full focus:border-accent outline-none transition-colors;
+  backdrop-filter: blur(8px);
 }

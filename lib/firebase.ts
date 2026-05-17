@@ -23,5 +23,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
+export { app };
+
 // Request Google Calendar scope when user signs in
 googleProvider.addScope("https://www.googleapis.com/auth/calendar.readonly");

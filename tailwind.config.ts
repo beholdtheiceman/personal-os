@@ -10,31 +10,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Base dark palette
+        // Glass / hi-tech palette
         bg: {
-          primary: "#0d1117",    // deepest background
-          secondary: "#161b22",  // card/panel background
-          tertiary: "#21262d",   // hover / input backgrounds
-          border: "#30363d",     // subtle borders
+          primary:   "#C2CDD6",   // steel-blue canvas (shows behind glass)
+          secondary: "#FFFFFF",   // white base for cards / panels
+          tertiary:  "#EEF2F5",   // hover / input fill
+          border:    "#D0DCE6",   // subtle border
         },
-        // Accent — electric indigo
+        // Accent — cherry blossom rose
         accent: {
-          DEFAULT: "#7c6af7",
-          hover: "#6a58e8",
-          muted: "#7c6af720",
-          text: "#a89cf8",
+          DEFAULT: "#C4728A",
+          hover:   "#B05E78",
+          muted:   "#C4728A18",
+          text:    "#A05470",
         },
-        // Text
+        // Text — dark navy on light backgrounds
         text: {
-          primary: "#e6edf3",
-          secondary: "#8b949e",
-          muted: "#484f58",
+          primary:   "#0D2030",
+          secondary: "#4A6070",
+          muted:     "#8CA0AC",
         },
-        // Status colors
-        success: "#3fb950",
-        warning: "#d29922",
-        danger: "#f85149",
-        info: "#58a6ff",
+        // Status
+        success: "#4E9E77",
+        warning: "#C07830",
+        danger:  "#C94848",
+        info:    "#4A7FC1",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

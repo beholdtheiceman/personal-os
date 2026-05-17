@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   RiDashboardLine, RiTaskLine, RiRobot2Line,
-  RiMailLine, RiDiscordLine,
+  RiMailLine, RiMusicLine,
 } from "react-icons/ri";
 
 // Only the 5 most-used sections appear in mobile nav
@@ -12,7 +12,7 @@ const MOBILE_NAV = [
   { href: "/dashboard", label: "Home",    icon: RiDashboardLine },
   { href: "/tasks",     label: "Tasks",   icon: RiTaskLine },
   { href: "/gmail",     label: "Gmail",   icon: RiMailLine },
-  { href: "/discord",   label: "Discord", icon: RiDiscordLine },
+  { href: "/media",     label: "Media",   icon: RiMusicLine },
   { href: "/chat",      label: "Chat",    icon: RiRobot2Line },
 ];
 
@@ -20,7 +20,7 @@ export default function MobileNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-bg-secondary border-t border-bg-border flex z-40">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 flex z-40" style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.6)" }}>
       {MOBILE_NAV.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
