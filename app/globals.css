@@ -11,10 +11,25 @@
   padding: 0;
 }
 
+/* ─── Text color variables ────────────────────────────────────────────────── */
+/* Outside glass cards: white/warm on the photo background                    */
+/* Inside .card or header: flips to dark                                      */
+:root {
+  --color-text-primary:   #F8EEF2;
+  --color-text-secondary: #DDBFCA;
+  --color-text-muted:     #B899A8;
+}
+
+.card, header {
+  --color-text-primary:   #1A0A14;
+  --color-text-secondary: #4A3040;
+  --color-text-muted:     #8A6070;
+}
+
 html,
 body {
   height: 100%;
-  color: #0D2030;
+  color: var(--color-text-primary);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -83,10 +98,6 @@ body {
   box-shadow: 0 4px 32px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-/* Page-level headings sit outside cards and need to read against the photo */
-h1 {
-  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.6);
-}
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
 .btn-primary {

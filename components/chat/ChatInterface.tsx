@@ -23,7 +23,7 @@ export default function ChatInterface() {
   const [recording, setRecording] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   useEffect(() => {
     if (!user) return;
