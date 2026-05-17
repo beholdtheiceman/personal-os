@@ -4,16 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   RiDashboardLine, RiTaskLine, RiRobot2Line,
-  RiCalendarLine, RiMailLine,
+  RiMailLine, RiDiscordLine,
 } from "react-icons/ri";
 
 // Only the 5 most-used sections appear in mobile nav
 const MOBILE_NAV = [
-  { href: "/dashboard", label: "Home",     icon: RiDashboardLine },
-  { href: "/tasks",     label: "Tasks",    icon: RiTaskLine },
-  { href: "/calendar",  label: "Calendar", icon: RiCalendarLine },
-  { href: "/gmail",     label: "Gmail",    icon: RiMailLine },
-  { href: "/chat",      label: "Chat",     icon: RiRobot2Line },
+  { href: "/dashboard", label: "Home",    icon: RiDashboardLine },
+  { href: "/tasks",     label: "Tasks",   icon: RiTaskLine },
+  { href: "/gmail",     label: "Gmail",   icon: RiMailLine },
+  { href: "/discord",   label: "Discord", icon: RiDiscordLine },
+  { href: "/chat",      label: "Chat",    icon: RiRobot2Line },
 ];
 
 export default function MobileNav() {
