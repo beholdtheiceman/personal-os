@@ -6,6 +6,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Personal OS",
   description: "Your personal AI-powered life dashboard",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Personal OS" },
+  other: { "mobile-web-app-capable": "yes" },
 };
 
 export default function RootLayout({
@@ -15,6 +18,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <meta name="theme-color" content="#6C8EF5" />
+        <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/icons/icon.svg" />
+      </head>
       <body suppressHydrationWarning>
         <AuthProvider>
           {children}

@@ -1,12 +1,13 @@
-import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 const ADMIN_CONFIGURED =
   !!process.env.FIREBASE_ADMIN_CLIENT_EMAIL &&
   !!process.env.FIREBASE_ADMIN_PRIVATE_KEY &&
   process.env.FIREBASE_ADMIN_PRIVATE_KEY !== '""';
 
-export function getAdminDb() {
+function initAdmin() {
   if (!ADMIN_CONFIGURED) throw new Error("Firebase Admin not configured");
   if (!getApps().length) {
     initializeApp({
@@ -17,5 +18,14 @@ export function getAdminDb() {
       }),
     });
   }
+  return getApp();
+}
+
+export function getAdminDb() {
+  initAdmin();
   return getFirestore();
+}
+
+export function getAdminMessaging() {
+  return getMessaging(initAdmin());
 }
