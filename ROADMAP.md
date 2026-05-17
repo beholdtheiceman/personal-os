@@ -23,6 +23,9 @@
 ### Data & Integrations
 - **Google Drive** — Read docs into chat context, save exports, sync with second brain.
 - **Instacart / Walmart Grocery** — Build grocery lists from chat and push directly to a cart for pickup scheduling. Instacart API is the most accessible path; covers Walmart, Target, and others.
+- **Messaging Hub** — Unified inbox for chat platforms. Slack and Discord are the most accessible (good APIs, developer-friendly). Google Messages has no clean API. iMessage/WhatsApp locked down.
+  - **Slack** — Read channels/DMs, send messages, AI draft replies. Best candidate.
+  - **Discord** — Bot API access, read/send in servers. Good for community use.
 
 ### Media Player
 Full **Media tab** with persistent mini-player at the bottom of the layout:
