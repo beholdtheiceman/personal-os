@@ -28,17 +28,51 @@ async function refreshToken(uid: string): Promise<string> {
   return accessToken;
 }
 
-function decodeBody(part: Record<string, unknown>): string {
+function decodePartData(part: Record<string, unknown>): string {
   if (part.body && (part.body as Record<string, unknown>).data) {
     return Buffer.from((part.body as Record<string, string>).data, "base64").toString("utf8");
   }
+  return "";
+}
+
+function findPartByMime(part: Record<string, unknown>, mime: string): string {
+  if ((part.mimeType as string) === mime) {
+    const text = decodePartData(part);
+    if (text) return text;
+  }
   if (part.parts) {
     for (const p of part.parts as Record<string, unknown>[]) {
-      const text = decodeBody(p);
+      const text = findPartByMime(p, mime);
       if (text) return text;
     }
   }
   return "";
+}
+
+function cleanPlainText(text: string): string {
+  return text
+    // Remove markdown-style links [label](url) → keep label only
+    .replace(/\[([^\]]*)\]\(https?:\/\/[^)]+\)/g, "$1")
+    // Remove bare URLs
+    .replace(/https?:\/\/\S+/g, "")
+    // Remove leftover empty brackets
+    .replace(/\[\]/g, "")
+    // Collapse 3+ blank lines into 2
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function decodeBody(part: Record<string, unknown>): { text: string; isHtml: boolean } {
+  // Prefer HTML so we can strip it ourselves
+  const html = findPartByMime(part, "text/html");
+  if (html) return { text: html, isHtml: true };
+
+  const plain = findPartByMime(part, "text/plain");
+  if (plain) return { text: plain, isHtml: false };
+
+  // Fallback: grab whatever data is on the root part
+  const raw = decodePartData(part);
+  return { text: raw, isHtml: false };
 }
 
 export async function GET(req: NextRequest) {
@@ -58,10 +92,27 @@ export async function GET(req: NextRequest) {
     const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
     const get = (name: string) => headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
 
-    // Try to get plain text, fall back to HTML stripped of tags
-    let body = decodeBody(msg.payload);
-    if (body.includes("<html") || body.includes("<body")) {
-      body = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const { text: rawBody, isHtml } = decodeBody(msg.payload);
+    let body: string;
+    if (isHtml) {
+      body = rawBody
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n")
+        .replace(/<\/div>/gi, "\n")
+        .replace(/<\/li>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    } else {
+      body = cleanPlainText(rawBody);
     }
 
     return NextResponse.json({
