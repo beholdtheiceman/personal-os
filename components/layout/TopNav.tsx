@@ -160,9 +160,6 @@ export default function TopNav() {
               WebkitBackdropFilter: "blur(16px)",
               border: "1px solid rgba(255,255,255,0.7)",
               boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-              ["--color-text-primary" as string]: "#1A0A14",
-              ["--color-text-secondary" as string]: "#4A3040",
-              ["--color-text-muted" as string]: "#8A6070",
             }}
           >
             <div className="px-4 py-2.5 border-b border-black/5">

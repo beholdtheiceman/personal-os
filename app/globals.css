@@ -11,25 +11,10 @@
   padding: 0;
 }
 
-/* ─── Text color variables ────────────────────────────────────────────────── */
-/* Outside glass cards: white/warm on the photo background                    */
-/* Inside .card or header: flips to dark                                      */
-:root {
-  --color-text-primary:   #F8EEF2;
-  --color-text-secondary: #DDBFCA;
-  --color-text-muted:     #B899A8;
-}
-
-.card, header {
-  --color-text-primary:   #1A0A14;
-  --color-text-secondary: #4A3040;
-  --color-text-muted:     #8A6070;
-}
-
 html,
 body {
   height: 100%;
-  color: var(--color-text-primary);
+  color: #1A0A14;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }

@@ -24,11 +24,10 @@ const config: Config = {
           muted:   "#C4728A18",
           text:    "#A05470",
         },
-        // Text — CSS variables so color flips between photo bg and glass cards
         text: {
-          primary:   "var(--color-text-primary)",
-          secondary: "var(--color-text-secondary)",
-          muted:     "var(--color-text-muted)",
+          primary:   "#1A0A14",
+          secondary: "#4A3040",
+          muted:     "#8A6070",
         },
         // Status
         success: "#4E9E77",
