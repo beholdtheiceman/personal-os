@@ -7,7 +7,7 @@ import {
   RiDashboardLine, RiTaskLine, RiCalendarLine, RiDatabase2Line,
   RiBookLine, RiHeartPulseLine, RiBowlLine, RiLineChartLine,
   RiFolderLine, RiMoneyDollarCircleLine, RiRobot2Line, RiLogoutBoxLine,
-  RiLoopLeftLine,
+  RiLoopLeftLine, RiMailLine,
 } from "react-icons/ri";
 
 const NAV_ITEMS = [
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/tasks",      label: "Tasks",      icon: RiTaskLine },
   { href: "/habits",     label: "Habits",     icon: RiLoopLeftLine },
   { href: "/calendar",   label: "Calendar",   icon: RiCalendarLine },
+  { href: "/gmail",      label: "Gmail",      icon: RiMailLine },
   { href: "/memory",     label: "Memory",     icon: RiDatabase2Line },
   { href: "/journal",    label: "Journal",    icon: RiBookLine },
   { href: "/nutrition",  label: "Nutrition",  icon: RiBowlLine },

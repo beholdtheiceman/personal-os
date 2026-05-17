@@ -21,6 +21,31 @@ async function findDoc(uid: string, collection: string, searchField: string, sea
   return doc ?? null;
 }
 
+async function refreshGmailToken(uid: string): Promise<string> {
+  const db = getAdminDb();
+  const doc = await db.doc(`users/${uid}/integrations/gmail`).get();
+  if (!doc.exists) throw new Error("Gmail not connected");
+  const data = doc.data()!;
+  let accessToken: string = data.access_token;
+  if (Date.now() > data.expires_at - 60000) {
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CALENDAR_CLIENT_ID,
+        client_secret: GOOGLE_CALENDAR_CLIENT_SECRET,
+        refresh_token: data.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    });
+    const refreshed = await res.json();
+    if (refreshed.error) throw new Error(refreshed.error_description);
+    accessToken = refreshed.access_token;
+    await doc.ref.update({ access_token: accessToken, expires_at: Date.now() + 3600 * 1000 });
+  }
+  return accessToken;
+}
+
 async function refreshCalendarToken(uid: string): Promise<string> {
   const db = getAdminDb();
   const tokenDoc = await db.doc(`users/${uid}/integrations/google_calendar`).get();
@@ -327,6 +352,31 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  // ── Gmail ──
+  {
+    name: "search_gmail",
+    description: "Search Gmail inbox for emails matching a query. Use when the user asks to find an email, check for messages from someone, or look up email content.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Gmail search query, e.g. 'from:boss@company.com' or 'invoice' or 'subject:meeting'" },
+        max_results: { type: "number", description: "Max emails to return, default 10" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_email_content",
+    description: "Get the full body of a specific email by its ID. Use after search_gmail to read the full content of an email.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        email_id: { type: "string", description: "The email message ID from search_gmail results" },
+      },
+      required: ["email_id"],
+    },
+  },
+
   // ── Memory ──
   {
     name: "update_memory",
@@ -583,6 +633,84 @@ async function executeTool(uid: string, toolName: string, input: ToolInput): Pro
         created_at: FieldValue.serverTimestamp(),
       });
       return `Card "${input.title}" added to project "${project.data().name}".`;
+    }
+
+    // ── Gmail ──────────────────────────────────────────────────────────────────
+    case "search_gmail": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const q = encodeURIComponent(input.query as string);
+        const max = (input.max_results as number) ?? 10;
+        const listRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=${max}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const listData = await listRes.json();
+        if (listData.error) return `Gmail search error: ${listData.error.message}`;
+        const ids: string[] = (listData.messages ?? []).map((m: { id: string }) => m.id);
+        if (ids.length === 0) return `No emails found matching "${input.query}".`;
+
+        const results = await Promise.all(
+          ids.slice(0, max).map((id) =>
+            fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            ).then((r) => r.json())
+          )
+        );
+
+        const summary = results
+          .filter((m) => !m.error)
+          .map((msg) => {
+            const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
+            const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+            return `ID: ${msg.id}\nFrom: ${get("From")}\nSubject: ${get("Subject")}\nDate: ${get("Date")}\nSnippet: ${msg.snippet ?? ""}`;
+          })
+          .join("\n\n---\n\n");
+
+        return `Found ${results.length} email(s) matching "${input.query}":\n\n${summary}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail not connected or error: ${msg}`;
+      }
+    }
+
+    case "get_email_content": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${input.email_id}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const msg = await res.json();
+        if (msg.error) return `Error fetching email: ${msg.error.message}`;
+
+        const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
+        const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+        function decodeBody(part: Record<string, unknown>): string {
+          if (part.body && (part.body as Record<string, unknown>).data) {
+            return Buffer.from((part.body as Record<string, string>).data, "base64").toString("utf8");
+          }
+          if (part.parts) {
+            for (const p of part.parts as Record<string, unknown>[]) {
+              const text = decodeBody(p);
+              if (text) return text;
+            }
+          }
+          return "";
+        }
+
+        let body = decodeBody(msg.payload);
+        if (body.includes("<html") || body.includes("<body")) {
+          body = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        }
+
+        return `From: ${get("From")}\nTo: ${get("To")}\nSubject: ${get("Subject")}\nDate: ${get("Date")}\n\n${body.slice(0, 4000)}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Could not fetch email: ${msg}`;
+      }
     }
 
     // ── Second Brain ───────────────────────────────────────────────────────────

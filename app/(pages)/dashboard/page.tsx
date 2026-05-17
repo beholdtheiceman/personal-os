@@ -13,7 +13,7 @@ import TaskCard from "@/components/tasks/TaskCard";
 import {
   RiRefreshLine, RiLoopLeftLine, RiTaskLine, RiCheckLine,
   RiMoonLine, RiFlashlightLine, RiBookLine, RiHeartPulseLine,
-  RiCalendarLine, RiBowlLine,
+  RiCalendarLine, RiBowlLine, RiMailLine,
 } from "react-icons/ri";
 
 interface DailyVerse { text: string; reference: string; }
@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [verse, setVerse] = useState<DailyVerse | null>(null);
+  const [gmailMessages, setGmailMessages] = useState<{ id: string; from: string; subject: string; date: string; read: boolean }[]>([]);
+  const [gmailConnected, setGmailConnected] = useState(false);
   const today = format(new Date(), "yyyy-MM-dd");
 
   // Load cached report
@@ -141,6 +143,20 @@ export default function DashboardPage() {
       .then(setVerse)
       .catch(() => {});
   }, []);
+
+  // Gmail unread preview
+  useEffect(() => {
+    if (!user) return;
+    fetch(`/api/gmail/messages?uid=${user.uid}&max=10`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.connected) {
+          setGmailConnected(true);
+          setGmailMessages(data.messages ?? []);
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
   const toggleHabit = async (id: string) => {
     if (!user) return;
@@ -499,6 +515,45 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Gmail ── */}
+      {gmailConnected && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+              <RiMailLine className="w-3.5 h-3.5" /> Gmail
+            </h2>
+            <div className="flex items-center gap-2">
+              {gmailMessages.filter((m) => !m.read).length > 0 && (
+                <span className="text-xs font-semibold bg-accent/15 text-accent px-2 py-0.5 rounded-full">
+                  {gmailMessages.filter((m) => !m.read).length} unread
+                </span>
+              )}
+              <a href="/gmail" className="text-xs text-accent hover:text-accent-text">Open inbox</a>
+            </div>
+          </div>
+          {gmailMessages.length === 0 ? (
+            <p className="text-xs text-text-muted text-center py-3">Inbox is empty</p>
+          ) : (
+            <div className="space-y-1">
+              {gmailMessages.slice(0, 5).map((msg) => (
+                <a
+                  key={msg.id}
+                  href="/gmail"
+                  className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
+                >
+                  {!msg.read && <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />}
+                  {msg.read && <div className="w-1.5 h-1.5 shrink-0" />}
+                  <span className={`text-sm flex-1 truncate ${!msg.read ? "font-medium text-text-primary" : "text-text-secondary"}`}>
+                    {msg.subject || "(no subject)"}
+                  </span>
+                  <span className="text-xs text-text-muted shrink-0">{msg.from}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
