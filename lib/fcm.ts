@@ -2,29 +2,37 @@
 import { getApp } from "firebase/app";
 import { getMessaging, getToken } from "firebase/messaging";
 
-export async function registerForPushNotifications(): Promise<string | null> {
-  if (typeof window === "undefined") return null;
-  if (!("Notification" in window) || !("serviceWorker" in navigator)) return null;
+export async function registerForPushNotifications(): Promise<{ token: string } | { error: string }> {
+  if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
+    return { error: "Push notifications not supported in this browser" };
+  }
 
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") return null;
+  if (permission !== "granted") {
+    return { error: "Notification permission denied — enable it in Chrome site settings" };
+  }
 
   try {
     const registration = await navigator.serviceWorker.register(
       "/api/firebase-messaging-sw",
       { scope: "/" }
     );
+    await navigator.serviceWorker.ready;
 
     const messaging = getMessaging(getApp());
+    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    if (!vapidKey) return { error: "VAPID key not configured" };
+
     const token = await getToken(messaging, {
-      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+      vapidKey,
       serviceWorkerRegistration: registration,
     });
 
-    return token ?? null;
+    if (!token) return { error: "FCM returned empty token — check Firebase Cloud Messaging is enabled" };
+    return { token };
   } catch (err) {
     console.error("FCM registration error:", err);
-    return null;
+    return { error: err instanceof Error ? err.message : String(err) };
   }
 }
 

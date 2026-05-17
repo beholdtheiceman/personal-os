@@ -39,15 +39,15 @@ export default function TopBar() {
         toast.success("Notifications disabled");
       } else {
         const { registerForPushNotifications } = await import("@/lib/fcm");
-        const token = await registerForPushNotifications();
-        if (!token) {
-          toast.error("Notification permission denied");
+        const result = await registerForPushNotifications();
+        if ("error" in result) {
+          toast.error(result.error);
           return;
         }
         await fetch("/api/notifications/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uid: user.uid, token }),
+          body: JSON.stringify({ uid: user.uid, token: result.token }),
         });
         setNotifEnabled(true);
         toast.success("Notifications enabled!");
