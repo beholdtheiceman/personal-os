@@ -8,20 +8,21 @@
 - **Chat Tool Use** — 16 tools: full CRUD across tasks, calendar, habits, nutrition, health, journal, goals, finance, projects, memory
 - **Second Brain** — PARA vault auto-injected into chat context, search + capture tools
 - **Bible Verse** — Verse of the day on dashboard (NLT, free API)
+- **Phase 5** — Gmail integration: inbox, email detail, reply, archive, trash, mark read/unread, dashboard widget, chat tools (search_gmail, get_email_content)
 
 ---
 
 ## 🔜 Next Up
 - **Plaid Integration** — Auto-sync bank/credit card transactions into Finance tracker. No more manual entries. (Direction confirmed)
+- **Dashboard widgets for Phase 4** — Goals progress, active projects, finance summary not yet on dashboard.
 
 ---
 
 ## 📋 Roadmap
 
 ### Data & Integrations
-- **Web Search** — Tavily or Brave Search API as a chat tool. Real-time lookups, news, research.
 - **Google Drive** — Read docs into chat context, save exports, sync with second brain.
-- **Plaid** — Bank + credit card transaction sync for Finance tab.
+- **Instacart / Walmart Grocery** — Build grocery lists from chat and push directly to a cart for pickup scheduling. Instacart API is the most accessible path; covers Walmart, Target, and others.
 
 ### Media Player
 Full **Media tab** with persistent mini-player at the bottom of the layout:
@@ -34,7 +35,6 @@ Full **Media tab** with persistent mini-player at the bottom of the layout:
 - **Dashboard widgets for Phase 4** — Goals, Projects, Finance tiles not on dashboard yet.
 
 ### AI & Automation
-- **Web Search in Chat** — Let Claude look things up in real time during conversations.
 - **Weekly AI Review** — Sunday summary across all tabs: what went well, what didn't, focus for next week.
 - **Smart Notifications** — Streak alerts, habit nudges, goal deadline reminders.
 
