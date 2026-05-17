@@ -123,8 +123,8 @@ export default function ChatInterface() {
 
   // ── Web Speech API voice input ────────────────────────────────────────────
   const startRecording = () => {
-    const SR = (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      ?? (window as Window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
 
     if (!SR) {
       toast.error("Speech recognition isn't supported in this browser. Try Chrome.");
@@ -136,7 +136,8 @@ export default function ChatInterface() {
     recognition.continuous = false;
     recognition.interimResults = false;
 
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => {
       const transcript = e.results[0][0].transcript;
       setInput(transcript);
     };
