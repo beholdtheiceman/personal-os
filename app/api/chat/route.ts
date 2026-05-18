@@ -804,7 +804,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate } = await req.json();
+    const { messages, systemPrompt, uid, localDate, imageBase64 } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -814,7 +814,33 @@ export async function POST(req: NextRequest) {
     }
 
     const actions: string[] = [];
+
+    // If an image was attached, convert the last user message to a multimodal content array
     let currentMessages: Anthropic.MessageParam[] = messages;
+    if (imageBase64) {
+      const lastIdx = currentMessages.length - 1;
+      const lastMsg = currentMessages[lastIdx];
+      if (lastMsg?.role === "user") {
+        const textContent = typeof lastMsg.content === "string" ? lastMsg.content : "";
+        currentMessages = [
+          ...currentMessages.slice(0, lastIdx),
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/jpeg",
+                  data: imageBase64 as string,
+                },
+              },
+              { type: "text", text: textContent },
+            ],
+          },
+        ];
+      }
+    }
 
     // Augment system prompt with second brain master context
     const secondBrainCtx = getSecondBrainContext();

@@ -6,13 +6,15 @@ import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
 import ReactMarkdown from "react-markdown";
 import LoadingDots from "@/components/ui/LoadingDots";
-import { RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine } from "react-icons/ri";
+import CameraCapture from "./CameraCapture";
+import { RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine, RiCameraLine, RiCloseLine } from "react-icons/ri";
 import toast from "react-hot-toast";
 import type { ChatMessage } from "@/types";
 import { format } from "date-fns";
 
 interface AssistantMessage extends ChatMessage {
   actions?: string[];
+  image?: string; // base64 data URL for display only (not persisted)
 }
 
 export default function ChatInterface() {
@@ -22,6 +24,8 @@ export default function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
@@ -50,29 +54,34 @@ export default function ChatInterface() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const saveMessage = async (msg: Omit<AssistantMessage, "id">) => {
+  const saveMessage = async (msg: Omit<AssistantMessage, "id" | "image">) => {
     if (!user) return;
     const ref = await addDoc(collection(db, "users", user.uid, "chat_history"), msg);
     return ref.id;
   };
 
   const sendMessage = async (text: string) => {
-    if (!text.trim() || !user || loading) return;
+    if ((!text.trim() && !capturedImage) || !user || loading) return;
+
+    const displayText = text.trim() || (capturedImage ? "What's in this image?" : "");
+    const imageToSend = capturedImage;
 
     const userMsg: AssistantMessage = {
       id: Date.now().toString(),
       role: "user",
-      content: text.trim(),
+      content: displayText,
       timestamp: new Date().toISOString(),
+      image: imageToSend ?? undefined,
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setCapturedImage(null);
     setLoading(true);
 
     await saveMessage({ role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
 
-    // Build conversation history (last 20 turns)
+    // Build conversation history (last 20 turns, text only for history)
     const history = [...messages.slice(-19), userMsg].map((m) => ({
       role: m.role,
       content: m.content,
@@ -89,10 +98,22 @@ export default function ChatInterface() {
 
     try {
       const idToken = await user.getIdToken();
+
+      // Strip the data URL prefix for the API (e.g. "data:image/jpeg;base64,")
+      const imageBase64 = imageToSend
+        ? imageToSend.replace(/^data:image\/\w+;base64,/, "")
+        : undefined;
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ messages: history, systemPrompt, uid: user.uid, localDate: format(new Date(), "yyyy-MM-dd") }),
+        body: JSON.stringify({
+          messages: history,
+          systemPrompt,
+          uid: user.uid,
+          localDate: format(new Date(), "yyyy-MM-dd"),
+          imageBase64,
+        }),
       });
 
       const data = await res.json();
@@ -146,18 +167,17 @@ export default function ChatInterface() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (e: any) => {
       const messages: Record<string, string> = {
-        "not-allowed":      "Microphone permission denied — check browser settings",
-        "no-speech":        "No speech detected — try again",
-        "network":          "Network error — speech recognition requires internet",
+        "not-allowed":         "Microphone permission denied — check browser settings",
+        "no-speech":           "No speech detected — try again",
+        "network":             "Network error — speech recognition requires internet",
         "service-not-allowed": "Speech service blocked — try on HTTPS",
-        "audio-capture":    "No microphone found",
+        "audio-capture":       "No microphone found",
       };
       toast.error(messages[e.error] ?? `Speech error: ${e.error}`);
       setRecording(false);
     };
 
     recognition.onend = () => setRecording(false);
-
     recognition.start();
     recognitionRef.current = recognition;
     setRecording(true);
@@ -189,6 +209,16 @@ export default function ChatInterface() {
                 ? "bg-accent text-white rounded-tr-sm"
                 : "bg-bg-secondary border border-bg-border rounded-tl-sm"
             }`}>
+              {/* Image attachment */}
+              {msg.image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={msg.image}
+                  alt="Attached"
+                  className="rounded-xl mb-2 max-w-full max-h-48 object-cover"
+                />
+              )}
+
               {msg.role === "assistant" ? (
                 msg.content ? (
                   <>
@@ -203,7 +233,6 @@ export default function ChatInterface() {
                         {msg.content}
                       </ReactMarkdown>
                     </div>
-                    {/* Action confirmations */}
                     {msg.actions?.map((action, i) => (
                       <div key={i} className="flex items-center gap-1.5 mt-2 text-[11px] text-success bg-success/10 rounded-lg px-2.5 py-1.5">
                         <RiCheckLine className="w-3.5 h-3.5 shrink-0" />
@@ -229,10 +258,28 @@ export default function ChatInterface() {
 
       {/* Input bar */}
       <div className="border-t border-bg-border bg-bg-secondary px-4 py-3">
+        {/* Image preview */}
+        {capturedImage && (
+          <div className="relative inline-block mb-2 ml-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={capturedImage}
+              alt="Captured"
+              className="h-16 w-16 rounded-xl object-cover border-2 border-accent/30"
+            />
+            <button
+              onClick={() => setCapturedImage(null)}
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-danger text-white flex items-center justify-center"
+            >
+              <RiCloseLine className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
         <div className="flex items-end gap-2 max-w-4xl mx-auto">
           <textarea
             className="input-base flex-1 resize-none min-h-[44px] max-h-40 py-2.5 text-sm"
-            placeholder="Message your AI assistant… or ask it to add a task, schedule an event, log health…"
+            placeholder={capturedImage ? "Ask about this image… (or send as-is)" : "Message your AI assistant…"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -245,6 +292,17 @@ export default function ChatInterface() {
             rows={1}
           />
 
+          {/* Camera */}
+          <button
+            onClick={() => setShowCamera(true)}
+            disabled={loading}
+            className="p-2.5 rounded-lg border transition-colors bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
+            title="Attach photo"
+          >
+            <RiCameraLine className="w-5 h-5" />
+          </button>
+
+          {/* Mic */}
           <button
             onClick={recording ? stopRecording : startRecording}
             disabled={loading}
@@ -259,7 +317,7 @@ export default function ChatInterface() {
 
           <button
             onClick={() => sendMessage(input)}
-            disabled={!input.trim() || loading}
+            disabled={(!input.trim() && !capturedImage) || loading}
             className="btn-primary p-2.5 disabled:opacity-50"
           >
             <RiSendPlane2Line className="w-5 h-5" />
@@ -269,6 +327,13 @@ export default function ChatInterface() {
           Shift+Enter for new line · Enter to send
         </p>
       </div>
+
+      {showCamera && (
+        <CameraCapture
+          onCapture={(dataUrl) => setCapturedImage(dataUrl)}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
     </div>
   );
 }
