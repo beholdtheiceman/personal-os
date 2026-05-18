@@ -11,7 +11,6 @@ export async function GET(req: NextRequest) {
 
   const db = getAdminDb();
   const now = new Date();
-  const todayUTC = now.toISOString().slice(0, 10);
 
   // Get all users
   const usersSnap = await db.collection("users").get();
@@ -25,19 +24,27 @@ export async function GET(req: NextRequest) {
       const habit = habitDoc.data();
       if (!habit.reminder_enabled || !habit.reminder_time) continue;
 
-      // Check time window (within 30 min of scheduled time)
+      // Convert current UTC time to the habit's stored timezone
+      const tz = (habit.reminder_timezone as string | undefined) ?? "America/New_York";
+      const localTimeStr = now.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
+      const [localH, localM] = localTimeStr.split(":").map(Number);
+      const localMinutes = localH * 60 + localM;
+
       const [rh, rm] = (habit.reminder_time as string).split(":").map(Number);
       const reminderMinutes = rh * 60 + rm;
-      const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-      if (Math.abs(nowMinutes - reminderMinutes) > 30) continue;
+      if (Math.abs(localMinutes - reminderMinutes) > 30) continue;
+
+      // Today's date in the user's timezone
+      const todayLocal = now.toLocaleDateString("en-CA", { timeZone: tz }); // "YYYY-MM-DD"
 
       // Check not already completed today
       const completions: string[] = habit.completions ?? [];
-      if (completions.includes(todayUTC)) continue;
+      if (completions.includes(todayLocal)) continue;
 
-      // Check target days
+      // Check target days (use local day-of-week)
+      const localDay = new Date(now.toLocaleString("en-US", { timeZone: tz })).getDay();
       const targetDays: number[] = habit.target_days ?? [0,1,2,3,4,5,6];
-      if (!targetDays.includes(now.getUTCDay())) continue;
+      if (!targetDays.includes(localDay)) continue;
 
       // Check user has tokens
       const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();

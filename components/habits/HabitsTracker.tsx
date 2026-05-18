@@ -74,6 +74,24 @@ export default function HabitsTracker() {
     toast.success("Habit deleted");
   };
 
+  const setReminder = async (id: string, time: string | null) => {
+    if (!user) return;
+    if (time) {
+      await updateDoc(doc(db, "users", user.uid, "habits", id), {
+        reminder_enabled: true,
+        reminder_time: time,
+        reminder_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      toast.success(`Reminder set for ${time}`);
+    } else {
+      await updateDoc(doc(db, "users", user.uid, "habits", id), {
+        reminder_enabled: false,
+        reminder_time: null,
+      });
+      toast.success("Reminder cleared");
+    }
+  };
+
   const completedToday = habits.filter((h) => h.completions.includes(todayStr)).length;
 
   if (loading) {
@@ -131,6 +149,7 @@ export default function HabitsTracker() {
               onToggle={toggleToday}
               onEdit={setEditingHabit}
               onDelete={deleteHabit}
+              onSetReminder={setReminder}
             />
           ))}
         </div>

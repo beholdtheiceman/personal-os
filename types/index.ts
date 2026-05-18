@@ -57,6 +57,9 @@ export interface Habit {
   category: string;
   target_days: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
   completions: string[]; // array of "YYYY-MM-DD" date strings
+  reminder_enabled?: boolean;
+  reminder_time?: string;     // "HH:mm" in user's local timezone
+  reminder_timezone?: string; // e.g. "America/New_York"
 }
 
 // ─── Journal ──────────────────────────────────────────────────────────────────

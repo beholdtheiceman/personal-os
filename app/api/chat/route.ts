@@ -393,6 +393,21 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  // ── Notifications ──
+  {
+    name: "set_habit_reminder",
+    description: "Set or clear a push notification reminder for a habit. Use when the user asks to be reminded about a habit at a specific time.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        habit_name_search: { type: "string", description: "Partial habit name to find it" },
+        reminder_time: { type: "string", description: "Time in HH:mm 24-hour format (user's local time). Omit or set to null to clear the reminder." },
+        enabled: { type: "boolean", description: "true to enable, false to clear" },
+      },
+      required: ["habit_name_search"],
+    },
+  },
+
   // ── Memory ──
   {
     name: "update_memory",
@@ -740,6 +755,24 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       const dest = (input.destination as string) === "tasks" ? "tasks" : "inbox";
       const file = captureToInbox(input.text as string, dest);
       return `Captured to ${file}: "${input.text}"`;
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────────────
+    case "set_habit_reminder": {
+      const doc = await findDoc(uid, "habits", "name", input.habit_name_search as string);
+      if (!doc) return `No habit found matching "${input.habit_name_search}".`;
+      const habitName = doc.data().name as string;
+      const clearing = !input.reminder_time || input.enabled === false;
+      if (clearing) {
+        await doc.ref.update({ reminder_enabled: false, reminder_time: null });
+        return `Reminder cleared for habit "${habitName}".`;
+      }
+      await doc.ref.update({
+        reminder_enabled: true,
+        reminder_time: input.reminder_time,
+        reminder_timezone: "America/New_York", // server-side default; UI overrides with real tz
+      });
+      return `Reminder set for "${habitName}" at ${input.reminder_time} daily.`;
     }
 
     // ── Memory ─────────────────────────────────────────────────────────────────
