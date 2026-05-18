@@ -38,26 +38,35 @@ interface HabitCardProps {
   onToggle: (id: string) => void;
   onEdit: (habit: Habit) => void;
   onDelete: (id: string) => void;
-  onSetReminder: (id: string, time: string | null) => void;
+  onSetReminders: (id: string, times: string[]) => void;
 }
 
-export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete, onSetReminder }: HabitCardProps) {
+export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete, onSetReminders }: HabitCardProps) {
   const completedToday = habit.completions.includes(todayStr);
   const streak = calcStreak(habit.completions);
   const week = last7Days();
-  const hasReminder = habit.reminder_enabled && habit.reminder_time;
 
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [pickerTime, setPickerTime] = useState(habit.reminder_time ?? "08:00");
+  // Support both old single reminder_time and new reminder_times array
+  const times: string[] = habit.reminder_times?.length
+    ? habit.reminder_times
+    : habit.reminder_time ? [habit.reminder_time] : [];
+  const hasReminders = habit.reminder_enabled && times.length > 0;
 
-  const handleSave = () => {
-    onSetReminder(habit.id, pickerTime);
-    setShowTimePicker(false);
+  const [showPanel, setShowPanel] = useState(false);
+  const [newTime, setNewTime] = useState("08:00");
+  const [adding, setAdding] = useState(false);
+
+  const addTime = () => {
+    if (!newTime || times.includes(newTime)) { setAdding(false); return; }
+    const sorted = [...times, newTime].sort();
+    onSetReminders(habit.id, sorted);
+    setAdding(false);
+    setNewTime("08:00");
   };
 
-  const handleClear = () => {
-    onSetReminder(habit.id, null);
-    setShowTimePicker(false);
+  const removeTime = (t: string) => {
+    const next = times.filter((x) => x !== t);
+    onSetReminders(habit.id, next);
   };
 
   return (
@@ -92,15 +101,13 @@ export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete,
                   {streak}
                 </span>
               )}
-              {/* Bell / reminder toggle */}
+              {/* Bell toggle */}
               <button
-                onClick={() => setShowTimePicker((v) => !v)}
-                className={`p-1 transition-colors ${hasReminder ? "text-accent" : "text-text-muted hover:text-accent opacity-0 group-hover:opacity-100"}`}
-                title={hasReminder ? `Reminder at ${fmt12h(habit.reminder_time!)}` : "Set reminder"}
+                onClick={() => setShowPanel((v) => !v)}
+                className={`p-1 transition-colors ${hasReminders ? "text-accent" : "text-text-muted hover:text-accent opacity-0 group-hover:opacity-100"}`}
+                title={hasReminders ? `${times.length} reminder${times.length > 1 ? "s" : ""}` : "Set reminders"}
               >
-                {hasReminder
-                  ? <RiNotificationLine className="w-3.5 h-3.5" />
-                  : <RiNotificationOffLine className="w-3.5 h-3.5" />}
+                {hasReminders ? <RiNotificationLine className="w-3.5 h-3.5" /> : <RiNotificationOffLine className="w-3.5 h-3.5" />}
               </button>
               <button onClick={() => onEdit(habit)} className="p-1 text-text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity">
                 <RiEditLine className="w-3.5 h-3.5" />
@@ -111,33 +118,52 @@ export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete,
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {habit.category && (
               <span className="text-[10px] text-text-muted">{habit.category}</span>
             )}
-            {hasReminder && (
+            {hasReminders && (
               <span className="text-[10px] text-accent flex items-center gap-0.5">
                 <RiNotificationLine className="w-2.5 h-2.5" />
-                {fmt12h(habit.reminder_time!)}
+                {times.map(fmt12h).join(" · ")}
               </span>
             )}
           </div>
 
-          {/* Inline time picker */}
-          {showTimePicker && (
-            <div className="mt-2 flex items-center gap-2 p-2 bg-bg-tertiary rounded-xl">
-              <input
-                type="time"
-                value={pickerTime}
-                onChange={(e) => setPickerTime(e.target.value)}
-                className="input-base text-sm py-1 px-2 flex-1"
-              />
-              <button onClick={handleSave} className="btn-primary text-xs py-1 px-3">
-                Save
-              </button>
-              {hasReminder && (
-                <button onClick={handleClear} className="text-xs py-1 px-2 text-danger hover:bg-danger/10 rounded-lg transition-colors">
-                  Clear
+          {/* Reminders panel */}
+          {showPanel && (
+            <div className="mt-2 p-2.5 bg-bg-tertiary rounded-xl space-y-2">
+              {/* Existing times */}
+              {times.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {times.map((t) => (
+                    <span key={t} className="flex items-center gap-1 text-[11px] bg-accent/10 text-accent rounded-lg px-2 py-0.5">
+                      {fmt12h(t)}
+                      <button onClick={() => removeTime(t)} className="hover:text-danger transition-colors leading-none">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Add time row */}
+              {adding ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="input-base text-sm py-1 px-2 flex-1"
+                    autoFocus
+                  />
+                  <button onClick={addTime} className="btn-primary text-xs py-1 px-3">Add</button>
+                  <button onClick={() => setAdding(false)} className="text-xs text-text-muted hover:text-text-primary px-1">Cancel</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAdding(true)}
+                  className="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1 transition-colors"
+                >
+                  + Add reminder time
                 </button>
               )}
             </div>

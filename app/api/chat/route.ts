@@ -396,15 +396,18 @@ const TOOLS: Anthropic.Tool[] = [
   // ── Notifications ──
   {
     name: "set_habit_reminder",
-    description: "Set or clear a push notification reminder for a habit. Use when the user asks to be reminded about a habit at a specific time.",
+    description: "Set or clear push notification reminders for a habit. Supports multiple times per day — ideal for habits like drinking water. When the user says 'every X hours', generate the full list of times. Pass an empty array to clear all reminders.",
     input_schema: {
       type: "object" as const,
       properties: {
         habit_name_search: { type: "string", description: "Partial habit name to find it" },
-        reminder_time: { type: "string", description: "Time in HH:mm 24-hour format (user's local time). Omit or set to null to clear the reminder." },
-        enabled: { type: "boolean", description: "true to enable, false to clear" },
+        reminder_times: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of HH:mm times in 24h format (user's local time). E.g. ['08:00','10:00','12:00']. Pass [] to clear all reminders.",
+        },
       },
-      required: ["habit_name_search"],
+      required: ["habit_name_search", "reminder_times"],
     },
   },
 
@@ -762,17 +765,18 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       const doc = await findDoc(uid, "habits", "name", input.habit_name_search as string);
       if (!doc) return `No habit found matching "${input.habit_name_search}".`;
       const habitName = doc.data().name as string;
-      const clearing = !input.reminder_time || input.enabled === false;
-      if (clearing) {
-        await doc.ref.update({ reminder_enabled: false, reminder_time: null });
-        return `Reminder cleared for habit "${habitName}".`;
+      const times = (input.reminder_times as string[]) ?? [];
+      if (times.length === 0) {
+        await doc.ref.update({ reminder_enabled: false, reminder_times: [] });
+        return `All reminders cleared for habit "${habitName}".`;
       }
+      const sorted = [...times].sort();
       await doc.ref.update({
         reminder_enabled: true,
-        reminder_time: input.reminder_time,
-        reminder_timezone: "America/New_York", // server-side default; UI overrides with real tz
+        reminder_times: sorted,
+        reminder_timezone: "America/New_York",
       });
-      return `Reminder set for "${habitName}" at ${input.reminder_time} daily.`;
+      return `${sorted.length} reminder${sorted.length > 1 ? "s" : ""} set for "${habitName}": ${sorted.join(", ")}.`;
     }
 
     // ── Memory ─────────────────────────────────────────────────────────────────

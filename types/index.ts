@@ -58,8 +58,9 @@ export interface Habit {
   target_days: number[]; // 0=Sun, 1=Mon, ..., 6=Sat
   completions: string[]; // array of "YYYY-MM-DD" date strings
   reminder_enabled?: boolean;
-  reminder_time?: string;     // "HH:mm" in user's local timezone
+  reminder_times?: string[];  // ["08:00", "12:00", "18:00"] in user's local timezone
   reminder_timezone?: string; // e.g. "America/New_York"
+  /** @deprecated use reminder_times */ reminder_time?: string;
 }
 
 // ─── Journal ──────────────────────────────────────────────────────────────────

@@ -22,7 +22,13 @@ export async function GET(req: NextRequest) {
 
     for (const habitDoc of habitsSnap.docs) {
       const habit = habitDoc.data();
-      if (!habit.reminder_enabled || !habit.reminder_time) continue;
+      if (!habit.reminder_enabled) continue;
+
+      // Support both new reminder_times array and legacy reminder_time string
+      const reminderTimes: string[] = habit.reminder_times?.length
+        ? (habit.reminder_times as string[])
+        : habit.reminder_time ? [habit.reminder_time as string] : [];
+      if (reminderTimes.length === 0) continue;
 
       // Convert current UTC time to the habit's stored timezone
       const tz = (habit.reminder_timezone as string | undefined) ?? "America/New_York";
@@ -30,21 +36,26 @@ export async function GET(req: NextRequest) {
       const [localH, localM] = localTimeStr.split(":").map(Number);
       const localMinutes = localH * 60 + localM;
 
-      const [rh, rm] = (habit.reminder_time as string).split(":").map(Number);
-      const reminderMinutes = rh * 60 + rm;
-      if (Math.abs(localMinutes - reminderMinutes) > 30) continue;
+      // Check if any reminder time falls within a 15-min window of now
+      const isDue = reminderTimes.some((t) => {
+        const [rh, rm] = t.split(":").map(Number);
+        return Math.abs(localMinutes - (rh * 60 + rm)) <= 15;
+      });
+      if (!isDue) continue;
 
       // Today's date in the user's timezone
-      const todayLocal = now.toLocaleDateString("en-CA", { timeZone: tz }); // "YYYY-MM-DD"
-
-      // Check not already completed today
-      const completions: string[] = habit.completions ?? [];
-      if (completions.includes(todayLocal)) continue;
+      const todayLocal = now.toLocaleDateString("en-CA", { timeZone: tz });
 
       // Check target days (use local day-of-week)
       const localDay = new Date(now.toLocaleString("en-US", { timeZone: tz })).getDay();
       const targetDays: number[] = habit.target_days ?? [0,1,2,3,4,5,6];
       if (!targetDays.includes(localDay)) continue;
+
+      // For non-completion habits (like water), skip the completion check
+      // For regular habits, skip if already done today
+      const skipIfDone = habit.skip_if_done !== false; // default true
+      const completions: string[] = habit.completions ?? [];
+      if (skipIfDone && completions.includes(todayLocal)) continue;
 
       // Check user has tokens
       const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
