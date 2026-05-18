@@ -142,8 +142,16 @@ export default function ChatInterface() {
       setInput(transcript);
     };
 
-    recognition.onerror = () => {
-      toast.error("Couldn't hear anything — try again");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (e: any) => {
+      const messages: Record<string, string> = {
+        "not-allowed":      "Microphone permission denied — check browser settings",
+        "no-speech":        "No speech detected — try again",
+        "network":          "Network error — speech recognition requires internet",
+        "service-not-allowed": "Speech service blocked — try on HTTPS",
+        "audio-capture":    "No microphone found",
+      };
+      toast.error(messages[e.error] ?? `Speech error: ${e.error}`);
       setRecording(false);
     };
 
