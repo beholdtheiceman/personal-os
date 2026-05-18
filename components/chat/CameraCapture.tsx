@@ -26,7 +26,9 @@ export default function CameraCapture({ onCapture, onClose }: Props) {
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(() => {});
+        };
       }
       setError(null);
     } catch {
