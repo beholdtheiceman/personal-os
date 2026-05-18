@@ -14,6 +14,10 @@
 - **Media Player** — YouTube search + IFrame playback, Suno track management (Firestore URL-based), persistent MiniPlayer
 - **UI Redesign** — Top nav replacing sidebar, glassmorphism cards, cherry blossom color palette, animated gradient blob background
 - **Web Speech API** — Live in chat, replaced OpenAI Whisper (free, browser-native, no API key)
+- **Web Search** — Tavily integration: live web search from chat, prompt injection defense, links open in new tab
+- **Chat date timezone fix** — Server now uses client's local date so nutrition/task entries logged in evening EST are correct
+- **API auth** — `/api/chat` verifies Firebase ID token; uid spoofing blocked
+- **Dashboard widgets** — Goals (milestone progress bars), active projects, finance monthly summary
 
 ---
 
@@ -21,9 +25,8 @@
 
 - **Suno playback** — URL-based track saving works; Suno CDN requires auth so playback needs a storage solution for uploaded MP3s
   - Options: Firebase Storage (Blaze plan upgrade), Vercel Blob (500MB free), Cloudflare R2 (10GB free)
-- **Web Speech API — Journal** — Chat uses it. Journal voice input still uses old MediaRecorder → Whisper flow, needs same swap
+- ~~**Web Speech API — Journal**~~ — Done, swapped to Web Speech API matching chat
 - **Background photo** — Cherry blossom night photo implemented but text readability needs design work before re-enabling
-- **YouTube in prod** — Needs `YOUTUBE_API_KEY` added to Vercel environment variables
 
 ---
 
@@ -36,25 +39,21 @@
 - **Messaging Hub** — Unified inbox for chat platforms. Discord done.
   - **Slack** — Read channels/DMs, send messages, AI draft replies
   - Google Messages — no clean API, likely not feasible
+  - **Beeper Desktop API** — Local REST API + MCP server covering WhatsApp, Telegram, Signal, Slack, iMessage, Messenger, Instagram, LinkedIn, X, Google Messages, Google Chat, Google Voice. Local-only (requires Beeper Desktop running) so not deployable to prod — better suited as a local Claude Desktop MCP add-on. Public beta. *(Consider)*
 
 ### Media
 - **Suno MP3 uploads** — Requires storage solution (see above). Once solved: upload MP3s directly, full audio player
 - **Spotify** — OAuth + Web Playback SDK, play/pause/skip/queue, music + podcasts. Requires Spotify Premium.
 
 ### Dashboard Additions
-- **Dashboard widgets** — Goals progress, active projects, finance summary not yet on dashboard
 - **Quick Links** — Grid of frequently visited sites, configurable
 
 ### AI & Automation
-- **Web connectivity** — Give AI ability to search the web for recipes, news, research
-  - Deferred: Claude's built-in knowledge covers most cases without it
-  - Would unlock: live recipe search, grocery list generation, current events
 - **Weekly AI Review** — Sunday summary: what went well, what didn't, focus for next week
 - **Smart Notifications** — Streak alerts, habit nudges, goal deadline reminders
 
 ### UI / Design
 - **Background photo** — Re-enable cherry blossom night photo (Meguro River) once text contrast solved
-- **Hi-tech dashboard layout** — Large display typography, stat cards inspired by mockup
 
 ### Life OS Features
 - **XP / Gamification** — Earn XP for completing tasks, habits, goals, journal entries. Level up, streaks, badges.

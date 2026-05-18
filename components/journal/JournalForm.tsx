@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import { RiMicLine, RiMicOffLine, RiCloseLine, RiSendPlane2Line } from "react-icons/ri";
 import LoadingDots from "@/components/ui/LoadingDots";
+import toast from "react-hot-toast";
 
 interface Props {
   onSave: (text: string) => Promise<void>;
@@ -12,40 +13,47 @@ export default function JournalForm({ onSave, onClose }: Props) {
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setTranscribing(true);
-        try {
-          const form = new FormData();
-          form.append("audio", blob, "recording.webm");
-          const res = await fetch("/api/transcribe", { method: "POST", body: form });
-          const data = await res.json();
-          if (data.text) setText((prev) => prev + (prev ? " " : "") + data.text);
-        } finally {
-          setTranscribing(false);
-        }
-      };
-      mr.start();
-      mediaRef.current = mr;
-      setRecording(true);
-    } catch {
-      alert("Microphone access denied.");
+  const startRecording = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast.error("Speech recognition isn't supported in this browser. Try Chrome.");
+      return;
     }
+    const recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setText((prev) => prev + (prev ? " " : "") + transcript);
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (e: any) => {
+      const messages: Record<string, string> = {
+        "not-allowed":         "Microphone permission denied — check browser settings",
+        "no-speech":           "No speech detected — try again",
+        "network":             "Network error — speech recognition requires internet",
+        "service-not-allowed": "Speech service blocked — try on HTTPS",
+        "audio-capture":       "No microphone found",
+      };
+      toast.error(messages[e.error] ?? `Speech error: ${e.error}`);
+      setRecording(false);
+    };
+
+    recognition.onend = () => setRecording(false);
+    recognition.start();
+    recognitionRef.current = recognition;
+    setRecording(true);
   };
 
   const stopRecording = () => {
-    mediaRef.current?.stop();
+    recognitionRef.current?.stop();
     setRecording(false);
   };
 
@@ -81,7 +89,7 @@ export default function JournalForm({ onSave, onClose }: Props) {
           <div className="flex items-center gap-3">
             <button
               onClick={recording ? stopRecording : startRecording}
-              disabled={transcribing || saving}
+              disabled={saving}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 recording
                   ? "bg-danger/20 text-danger border border-danger/40 animate-pulse"
@@ -89,7 +97,7 @@ export default function JournalForm({ onSave, onClose }: Props) {
               }`}
             >
               {recording ? <RiMicOffLine className="w-4 h-4" /> : <RiMicLine className="w-4 h-4" />}
-              {recording ? "Stop" : transcribing ? "Transcribing…" : "Record"}
+              {recording ? "Stop" : "Record"}
             </button>
 
             <div className="flex-1" />

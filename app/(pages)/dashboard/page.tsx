@@ -13,13 +13,14 @@ import TaskCard from "@/components/tasks/TaskCard";
 import {
   RiRefreshLine, RiLoopLeftLine, RiTaskLine, RiCheckLine,
   RiMoonLine, RiFlashlightLine, RiBookLine, RiHeartPulseLine,
-  RiCalendarLine, RiBowlLine, RiMailLine,
+  RiCalendarLine, RiBowlLine, RiMailLine, RiLineChartLine,
+  RiFolderLine, RiMoneyDollarCircleLine, RiArrowUpLine, RiArrowDownLine,
 } from "react-icons/ri";
 
 interface DailyVerse { text: string; reference: string; }
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import toast from "react-hot-toast";
-import type { Task, Habit, HealthLog, JournalEntry, NutritionLog } from "@/types";
+import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
 interface CalendarEvent {
   id: string;
@@ -51,7 +52,11 @@ export default function DashboardPage() {
   const [verse, setVerse] = useState<DailyVerse | null>(null);
   const [gmailMessages, setGmailMessages] = useState<{ id: string; from: string; subject: string; date: string; read: boolean }[]>([]);
   const [gmailConnected, setGmailConnected] = useState(false);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const today = format(new Date(), "yyyy-MM-dd");
+  const thisMonth = format(new Date(), "yyyy-MM");
 
   // Load cached report
   useEffect(() => {
@@ -158,6 +163,33 @@ export default function DashboardPage() {
       .catch(() => {});
   }, [user]);
 
+  // Live goals
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "users", user.uid, "goals"), orderBy("created_at", "desc"));
+    return onSnapshot(q, (snap) => {
+      setGoals(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Goal)));
+    });
+  }, [user]);
+
+  // Live projects
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "users", user.uid, "projects"), orderBy("created_at", "desc"));
+    return onSnapshot(q, (snap) => {
+      setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Project)));
+    });
+  }, [user]);
+
+  // Live transactions
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "users", user.uid, "transactions"), orderBy("date", "desc"), limit(200));
+    return onSnapshot(q, (snap) => {
+      setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Transaction)));
+    });
+  }, [user]);
+
   const toggleHabit = async (id: string) => {
     if (!user) return;
     const habit = habits.find((h) => h.id === id);
@@ -262,6 +294,21 @@ export default function DashboardPage() {
     (acc, l) => ({ cal: acc.cal + l.calories_estimated, protein: acc.protein + l.protein_g }),
     { cal: 0, protein: 0 }
   );
+
+  // Finance — this month's totals
+  const monthTransactions = transactions.filter((t) => t.date?.startsWith(thisMonth));
+  const monthIncome = monthTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const monthExpense = monthTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const monthNet = monthIncome - monthExpense;
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+
+  // Active goals with milestone progress
+  const activeGoals = goals.filter((g) => g.status === "active").slice(0, 3);
+
+  // Active projects
+  const activeProjects = projects.filter((p) => p.status === "active").slice(0, 4);
 
   // Group upcoming calendar events — today + tomorrow only for dashboard
   const upcomingEvents = calendarEvents.filter((e) => {
@@ -515,6 +562,109 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Goals + Projects ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+              <RiLineChartLine className="w-3.5 h-3.5" /> Active Goals
+            </h2>
+            <a href="/goals" className="text-xs text-accent hover:text-accent-text">View all</a>
+          </div>
+          {activeGoals.length === 0 ? (
+            <p className="text-xs text-text-muted text-center py-4">
+              No active goals. <a href="/goals" className="text-accent">Add one</a>
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {activeGoals.map((goal) => {
+                const total = goal.milestones?.length ?? 0;
+                const done = goal.milestones?.filter((m) => m.completed).length ?? 0;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div key={goal.id}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-text-primary truncate flex-1">{goal.title}</span>
+                      {total > 0 && (
+                        <span className="text-xs text-text-muted ml-2 shrink-0">{done}/{total}</span>
+                      )}
+                    </div>
+                    {total > 0 && (
+                      <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-accent transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+              <RiFolderLine className="w-3.5 h-3.5" /> Active Projects
+            </h2>
+            <a href="/projects" className="text-xs text-accent hover:text-accent-text">View all</a>
+          </div>
+          {activeProjects.length === 0 ? (
+            <p className="text-xs text-text-muted text-center py-4">
+              No active projects. <a href="/projects" className="text-accent">Add one</a>
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {activeProjects.map((project) => (
+                <a
+                  key={project.id}
+                  href="/projects"
+                  className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
+                >
+                  <div
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: project.color_tag ?? "#C4728A" }}
+                  />
+                  <span className="text-sm text-text-primary flex-1 truncate">{project.name}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Finance ── */}
+      {monthTransactions.length > 0 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+              <RiMoneyDollarCircleLine className="w-3.5 h-3.5" /> Finance — {format(new Date(), "MMMM")}
+            </h2>
+            <a href="/finance" className="text-xs text-accent hover:text-accent-text">Details</a>
+          </div>
+          <div className="flex gap-6">
+            <div className="flex items-center gap-1.5">
+              <RiArrowUpLine className="w-4 h-4 text-success shrink-0" />
+              <span className="text-sm font-medium text-text-primary">{fmt(monthIncome)}</span>
+              <span className="text-xs text-text-muted">income</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <RiArrowDownLine className="w-4 h-4 text-danger shrink-0" />
+              <span className="text-sm font-medium text-text-primary">{fmt(monthExpense)}</span>
+              <span className="text-xs text-text-muted">expenses</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-sm font-semibold ${monthNet >= 0 ? "text-success" : "text-danger"}`}>
+                {monthNet >= 0 ? "+" : ""}{fmt(monthNet)}
+              </span>
+              <span className="text-xs text-text-muted">net</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Gmail ── */}
       {gmailConnected && (
