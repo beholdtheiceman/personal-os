@@ -12,7 +12,7 @@ const MEAL_COLORS: Record<string, string> = {
 
 interface Props {
   log: NutritionLog;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 export default function MealCard({ log, onDelete }: Props) {
@@ -43,12 +43,14 @@ export default function MealCard({ log, onDelete }: Props) {
             "h:mm a"
           )}
         </span>
-        <button
-          onClick={() => onDelete(log.id)}
-          className="text-text-muted hover:text-danger transition-colors"
-        >
-          <RiDeleteBinLine className="w-4 h-4" />
-        </button>
+        {onDelete && (
+          <button
+            onClick={() => onDelete(log.id)}
+            className="text-text-muted hover:text-danger transition-colors"
+          >
+            <RiDeleteBinLine className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );

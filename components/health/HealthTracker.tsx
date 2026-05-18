@@ -14,6 +14,7 @@ import {
 import LoadingDots from "@/components/ui/LoadingDots";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
+import { useToday } from "@/hooks/useToday";
 import type { HealthLog } from "@/types";
 
 interface FitbitData {
@@ -52,7 +53,7 @@ export default function HealthTracker() {
   const [fitbit, setFitbit] = useState<FitbitData | null>(null);
   const [fitbitLoading, setFitbitLoading] = useState(false);
   const [formPrefill, setFormPrefill] = useState<Partial<HealthLog> | undefined>();
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = useToday();
   const todayLog = logs.find((l) => l.date === today);
 
   useEffect(() => {

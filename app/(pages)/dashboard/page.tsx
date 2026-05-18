@@ -19,6 +19,7 @@ import {
 
 interface DailyVerse { text: string; reference: string; }
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
+import { useToday } from "@/hooks/useToday";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -55,8 +56,8 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const today = format(new Date(), "yyyy-MM-dd");
-  const thisMonth = format(new Date(), "yyyy-MM");
+  const today = useToday();
+  const thisMonth = today.slice(0, 7);
 
   // Load cached report
   useEffect(() => {

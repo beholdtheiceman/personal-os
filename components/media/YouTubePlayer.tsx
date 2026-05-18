@@ -46,5 +46,9 @@ export default function YouTubePlayer() {
     }
   }, [onYTReady, onYTStateChange]);
 
-  return <div ref={containerRef} className="hidden" />;
+  return (
+    <div style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}>
+      <div ref={containerRef} />
+    </div>
+  );
 }

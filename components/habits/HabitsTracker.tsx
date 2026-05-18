@@ -10,6 +10,7 @@ import HabitForm from "./HabitForm";
 import LoadingDots from "@/components/ui/LoadingDots";
 import { RiAddLine, RiLoopLeftLine } from "react-icons/ri";
 import { format } from "date-fns";
+import { useToday } from "@/hooks/useToday";
 import toast from "react-hot-toast";
 import type { Habit } from "@/types";
 
@@ -20,7 +21,7 @@ export default function HabitsTracker() {
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
 
-  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const todayStr = useToday();
 
   useEffect(() => {
     if (!user) return;

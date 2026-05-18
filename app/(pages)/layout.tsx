@@ -5,9 +5,30 @@ import { useAuth } from "@/contexts/AuthContext";
 import TopNav from "@/components/layout/TopNav";
 import MobileNav from "@/components/layout/MobileNav";
 import QuickLogButton from "@/components/layout/QuickLogButton";
-import { PlayerProvider } from "@/contexts/PlayerContext";
+import { PlayerProvider, usePlayer } from "@/contexts/PlayerContext";
 import MiniPlayer from "@/components/media/MiniPlayer";
 import AnimatedBackground from "@/components/layout/AnimatedBackground";
+import dynamic from "next/dynamic";
+
+const YouTubePlayer = dynamic(() => import("@/components/media/YouTubePlayer"), { ssr: false });
+
+function AppShell({ children }: { children: React.ReactNode }) {
+  const { currentTrack } = usePlayer();
+  const hasPlayer = !!currentTrack;
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden">
+      <TopNav />
+      <main className={`flex-1 overflow-y-auto p-4 md:p-6 ${hasPlayer ? "pb-36 md:pb-24" : "pb-20 md:pb-6"}`}>
+        {children}
+      </main>
+      <MobileNav />
+      <QuickLogButton />
+      <MiniPlayer />
+      <YouTubePlayer />
+    </div>
+  );
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -28,15 +49,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <PlayerProvider>
       <AnimatedBackground />
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
-          {children}
-        </main>
-        <MobileNav />
-        <QuickLogButton />
-        <MiniPlayer />
-      </div>
+      <AppShell>{children}</AppShell>
     </PlayerProvider>
   );
 }

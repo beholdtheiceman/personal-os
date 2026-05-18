@@ -8,10 +8,12 @@ export type PlayerTrack =
 interface PlayerContextType {
   currentTrack: PlayerTrack | null;
   isPlaying: boolean;
+  volume: number;
   play: (track: PlayerTrack) => void;
   pause: () => void;
   resume: () => void;
   stop: () => void;
+  setVolume: (vol: number) => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   ytPlayerRef: React.MutableRefObject<YTPlayer | null>;
   onYTReady: (player: YTPlayer) => void;
@@ -25,6 +27,7 @@ export interface YTPlayer {
   stopVideo: () => void;
   loadVideoById: (videoId: string) => void;
   getPlayerState: () => number;
+  setVolume: (volume: number) => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -32,6 +35,7 @@ const PlayerContext = createContext<PlayerContextType | null>(null);
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolumeState] = useState(100);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ytPlayerRef = useRef<YTPlayer | null>(null);
 
@@ -93,9 +97,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTrack(null);
   }, [stopCurrent]);
 
+  const setVolume = useCallback((vol: number) => {
+    const clamped = Math.max(0, Math.min(100, vol));
+    setVolumeState(clamped);
+    if (audioRef.current) audioRef.current.volume = clamped / 100;
+    try { ytPlayerRef.current?.setVolume(clamped); } catch {}
+  }, []);
+
   const onYTReady = useCallback((player: YTPlayer) => {
     ytPlayerRef.current = player;
-  }, []);
+    try { player.setVolume(volume); } catch {}
+  }, [volume]);
 
   const onYTStateChange = useCallback((state: number) => {
     // YT.PlayerState: PLAYING=1, PAUSED=2, ENDED=0
@@ -105,7 +117,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   return (
     <PlayerContext.Provider value={{
-      currentTrack, isPlaying, play, pause, resume, stop,
+      currentTrack, isPlaying, volume, play, pause, resume, stop, setVolume,
       audioRef, ytPlayerRef, onYTReady, onYTStateChange,
     }}>
       {children}
