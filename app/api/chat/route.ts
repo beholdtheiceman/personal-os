@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, TAVILY_API_KEY } from "@/lib/env";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { searchSecondBrain, captureToInbox, getSecondBrainContext } from "@/lib/second-brain";
 
@@ -411,7 +411,7 @@ const TOOLS: Anthropic.Tool[] = [
 
 // ── Tool execution ─────────────────────────────────────────────────────────────
 
-async function executeTool(uid: string, toolName: string, input: ToolInput): Promise<string> {
+async function executeTool(uid: string, toolName: string, input: ToolInput, today: () => string): Promise<string> {
   const db = getAdminDb();
 
   switch (toolName) {
@@ -798,8 +798,15 @@ async function executeTool(uid: string, toolName: string, input: ToolInput): Pro
 
 export async function POST(req: NextRequest) {
   try {
+    const idToken = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!idToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const decoded = await getAdminAuth().verifyIdToken(idToken).catch(() => null);
+    if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const { messages, systemPrompt, uid, localDate } = await req.json();
+
+    if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
 
     if (!messages?.length) {
@@ -839,7 +846,7 @@ export async function POST(req: NextRequest) {
 
         for (const tool of toolUseBlocks) {
           const result = uid
-            ? await executeTool(uid, tool.name, tool.input as ToolInput)
+            ? await executeTool(uid, tool.name, tool.input as ToolInput, today)
             : "Action skipped — user not authenticated.";
           actions.push(result);
           toolResults.push({ type: "tool_result", tool_use_id: tool.id, content: result });

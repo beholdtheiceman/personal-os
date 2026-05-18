@@ -88,9 +88,10 @@ export default function ChatInterface() {
     }]);
 
     try {
+      const idToken = await user.getIdToken();
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ messages: history, systemPrompt, uid: user.uid, localDate: format(new Date(), "yyyy-MM-dd") }),
       });
 

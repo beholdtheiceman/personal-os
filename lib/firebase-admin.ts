@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { getAuth } from "firebase-admin/auth";
 
 const ADMIN_CONFIGURED =
   !!process.env.FIREBASE_ADMIN_CLIENT_EMAIL &&
@@ -28,4 +29,8 @@ export function getAdminDb() {
 
 export function getAdminMessaging() {
   return getMessaging(initAdmin());
+}
+
+export function getAdminAuth() {
+  return getAuth(initAdmin());
 }
