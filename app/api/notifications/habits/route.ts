@@ -1,56 +1,70 @@
-// GET /api/notifications/habits — cron job: evening habit reminder
-// Scheduled via vercel.json: 01:00 UTC daily (~9pm EDT)
-import { NextResponse } from "next/server";
-import { getAdminDb, getAdminMessaging } from "@/lib/firebase-admin";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminDb } from "@/lib/firebase-admin";
+import { getEnv } from "@/lib/env";
 
-export async function GET() {
-  try {
-    const db = getAdminDb();
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Get all users with notifications enabled
-    const notifSnap = await db.collectionGroup("notifications").get();
-
-    const sends: Promise<unknown>[] = [];
-    for (const notifDoc of notifSnap.docs) {
-      const { fcm_token, enabled } = notifDoc.data();
-      if (!enabled || !fcm_token) continue;
-
-      // Extract uid from path: users/{uid}/settings/notifications
-      const uid = notifDoc.ref.path.split("/")[1];
-
-      // Count habits and how many are done today
-      const habitsSnap = await db.collection(`users/${uid}/habits`).get();
-      const total = habitsSnap.size;
-      if (total === 0) continue;
-
-      const done = habitsSnap.docs.filter((d) =>
-        (d.data().completions as string[] ?? []).includes(today)
-      ).length;
-
-      if (done >= total) continue; // All habits complete — no nudge needed
-
-      const remaining = total - done;
-      sends.push(
-        getAdminMessaging().send({
-          token: fcm_token,
-          notification: {
-            title: "Habit check-in 🔁",
-            body: `${remaining} habit${remaining > 1 ? "s" : ""} left to complete today. Keep your streak going!`,
-          },
-          data: { url: "/habits" },
-          webpush: {
-            notification: { icon: "/icons/icon.svg", badge: "/icons/icon.svg" },
-            fcmOptions: { link: "/habits" },
-          },
-        }).catch((err) => console.error("Habit send failed:", err))
-      );
-    }
-
-    await Promise.all(sends);
-    return NextResponse.json({ ok: true, sent: sends.length });
-  } catch (err) {
-    console.error("Habits notification cron error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+export async function GET(req: NextRequest) {
+  const cronSecret = getEnv("CRON_SECRET");
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const db = getAdminDb();
+  const now = new Date();
+  const todayUTC = now.toISOString().slice(0, 10);
+
+  // Get all users
+  const usersSnap = await db.collection("users").get();
+  const notified: string[] = [];
+
+  for (const userDoc of usersSnap.docs) {
+    const uid = userDoc.id;
+    const habitsSnap = await db.collection(`users/${uid}/habits`).get();
+
+    for (const habitDoc of habitsSnap.docs) {
+      const habit = habitDoc.data();
+      if (!habit.reminder_enabled || !habit.reminder_time) continue;
+
+      // Check time window (within 30 min of scheduled time)
+      const [rh, rm] = (habit.reminder_time as string).split(":").map(Number);
+      const reminderMinutes = rh * 60 + rm;
+      const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+      if (Math.abs(nowMinutes - reminderMinutes) > 30) continue;
+
+      // Check not already completed today
+      const completions: string[] = habit.completions ?? [];
+      if (completions.includes(todayUTC)) continue;
+
+      // Check target days
+      const targetDays: number[] = habit.target_days ?? [0,1,2,3,4,5,6];
+      if (!targetDays.includes(now.getUTCDay())) continue;
+
+      // Check user has tokens
+      const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
+      if (tokensSnap.empty) continue;
+
+      // Send via internal send endpoint
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000";
+
+      await fetch(`${baseUrl}/api/notifications/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${cronSecret}`,
+        },
+        body: JSON.stringify({
+          uid,
+          title: `⏰ Habit Reminder`,
+          body: `Don't forget: ${habit.name}`,
+          tag: `habit-${habitDoc.id}`,
+        }),
+      });
+
+      notified.push(`${uid}:${habit.name}`);
+    }
+  }
+
+  return NextResponse.json({ checked: usersSnap.size, notified });
 }

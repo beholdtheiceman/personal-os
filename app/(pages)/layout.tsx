@@ -9,11 +9,13 @@ import { PlayerProvider, usePlayer } from "@/contexts/PlayerContext";
 import MiniPlayer from "@/components/media/MiniPlayer";
 import AnimatedBackground from "@/components/layout/AnimatedBackground";
 import dynamic from "next/dynamic";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const YouTubePlayer = dynamic(() => import("@/components/media/YouTubePlayer"), { ssr: false });
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { currentTrack } = usePlayer();
+  useNotifications();
   const hasPlayer = !!currentTrack;
 
   return (

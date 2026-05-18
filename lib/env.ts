@@ -29,7 +29,7 @@ function readEnvLocal(): Record<string, string> {
 
 const _env = readEnvLocal();
 
-function getEnv(key: string): string {
+export function getEnv(key: string): string {
   return process.env[key] || _env[key] || "";
 }
 
@@ -37,3 +37,4 @@ export const ANTHROPIC_API_KEY = getEnv("ANTHROPIC_API_KEY");
 export const GOOGLE_CALENDAR_CLIENT_ID = getEnv("GOOGLE_CALENDAR_CLIENT_ID");
 export const GOOGLE_CALENDAR_CLIENT_SECRET = getEnv("GOOGLE_CALENDAR_CLIENT_SECRET");
 export const TAVILY_API_KEY = getEnv("TAVILY_API_KEY");
+export const CRON_SECRET = getEnv("CRON_SECRET");
