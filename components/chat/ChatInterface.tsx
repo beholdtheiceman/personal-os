@@ -17,6 +17,32 @@ interface AssistantMessage extends ChatMessage {
   image?: string; // base64 data URL for display only (not persisted)
 }
 
+function ActionsLog({ actions }: { actions: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-[11px] text-success/80 hover:text-success transition-colors"
+      >
+        <RiCheckLine className="w-3 h-3" />
+        {actions.length} action{actions.length > 1 ? "s" : ""} taken
+        <span className="ml-0.5 opacity-60">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-1 space-y-1">
+          {actions.map((action, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[11px] text-success bg-success/10 rounded-lg px-2.5 py-1.5">
+              <RiCheckLine className="w-3.5 h-3.5 shrink-0" />
+              {action}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatInterface() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -243,12 +269,9 @@ export default function ChatInterface() {
                         {msg.content}
                       </ReactMarkdown>
                     </div>
-                    {msg.actions?.map((action, i) => (
-                      <div key={i} className="flex items-center gap-1.5 mt-2 text-[11px] text-success bg-success/10 rounded-lg px-2.5 py-1.5">
-                        <RiCheckLine className="w-3.5 h-3.5 shrink-0" />
-                        {action}
-                      </div>
-                    ))}
+                    {msg.actions?.length ? (
+                      <ActionsLog actions={msg.actions} />
+                    ) : null}
                   </>
                 ) : (
                   <LoadingDots />
