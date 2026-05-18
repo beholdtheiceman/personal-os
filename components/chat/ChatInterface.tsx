@@ -204,7 +204,7 @@ export default function ChatInterface() {
 
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-3 ${
+            <div className={`max-w-[85%] md:max-w-[70%] min-w-0 rounded-2xl px-4 py-3 overflow-hidden ${
               msg.role === "user"
                 ? "bg-accent text-white rounded-tr-sm"
                 : "bg-bg-secondary border border-bg-border rounded-tl-sm"
@@ -222,12 +222,22 @@ export default function ChatInterface() {
               {msg.role === "assistant" ? (
                 msg.content ? (
                   <>
-                    <div className="prose-dark text-sm">
+                    <div className="prose-dark text-sm break-words min-w-0">
                       <ReactMarkdown
                         components={{
-                          a: ({ href, children }) => (
-                            <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-                          ),
+                          a: ({ href, children }) => {
+                            // If the visible text is just the raw URL, shorten it for readability
+                            const text = String(children);
+                            const isRawUrl = text.startsWith("http://") || text.startsWith("https://");
+                            const label = isRawUrl
+                              ? (() => { try { return new URL(text).hostname; } catch { return text.slice(0, 40) + "…"; } })()
+                              : children;
+                            return (
+                              <a href={href} target="_blank" rel="noopener noreferrer" title={href}>
+                                {label}
+                              </a>
+                            );
+                          },
                         }}
                       >
                         {msg.content}
@@ -244,7 +254,7 @@ export default function ChatInterface() {
                   <LoadingDots />
                 )
               ) : (
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
               )}
               <p className={`text-[10px] mt-1.5 ${msg.role === "user" ? "text-white/60 text-right" : "text-text-muted"}`}>
                 {format(new Date(msg.timestamp), "HH:mm")}

@@ -70,7 +70,7 @@ body {
 .prose-dark pre { @apply bg-bg-tertiary rounded-lg p-4 mb-3 overflow-x-auto; }
 .prose-dark pre code { @apply bg-transparent p-0; }
 .prose-dark strong { @apply font-semibold text-text-primary; }
-.prose-dark a { @apply text-accent underline underline-offset-2; }
+.prose-dark a { @apply text-accent underline underline-offset-2 break-all; }
 .prose-dark blockquote { @apply border-l-2 border-accent pl-4 italic text-text-secondary; }
 
 /* ─── Glass card ──────────────────────────────────────────────────────────── */
