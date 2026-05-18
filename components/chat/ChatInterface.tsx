@@ -91,7 +91,7 @@ export default function ChatInterface() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, systemPrompt, uid: user.uid }),
+        body: JSON.stringify({ messages: history, systemPrompt, uid: user.uid, localDate: format(new Date(), "yyyy-MM-dd") }),
       });
 
       const data = await res.json();
@@ -192,7 +192,15 @@ export default function ChatInterface() {
                 msg.content ? (
                   <>
                     <div className="prose-dark text-sm">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown
+                        components={{
+                          a: ({ href, children }) => (
+                            <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                     {/* Action confirmations */}
                     {msg.actions?.map((action, i) => (
