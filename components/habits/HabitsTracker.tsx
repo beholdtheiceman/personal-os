@@ -8,9 +8,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import HabitCard from "./HabitCard";
 import HabitForm from "./HabitForm";
 import LoadingDots from "@/components/ui/LoadingDots";
-import { RiAddLine, RiLoopLeftLine } from "react-icons/ri";
+import { RiAddLine, RiLoopLeftLine, RiNotificationLine, RiNotificationOffLine } from "react-icons/ri";
 import { format } from "date-fns";
 import { useToday } from "@/hooks/useToday";
+import { useNotifications } from "@/hooks/useNotifications";
 import toast from "react-hot-toast";
 import type { Habit } from "@/types";
 
@@ -22,6 +23,7 @@ export default function HabitsTracker() {
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
 
   const todayStr = useToday();
+  const { permission, enable } = useNotifications();
 
   useEffect(() => {
     if (!user) return;
@@ -76,6 +78,14 @@ export default function HabitsTracker() {
 
   const setReminders = async (id: string, times: string[]) => {
     if (!user) return;
+    // Request notification permission if setting reminders and not yet granted
+    if (times.length > 0 && permission !== "granted") {
+      await enable();
+      if (Notification.permission !== "granted") {
+        toast.error("Enable notifications in your browser to receive reminders");
+        return;
+      }
+    }
     await updateDoc(doc(db, "users", user.uid, "habits", id), {
       reminder_enabled: times.length > 0,
       reminder_times: times,
@@ -100,6 +110,24 @@ export default function HabitsTracker() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
+      {/* Notification permission banner */}
+      {permission === "default" && (
+        <button
+          onClick={enable}
+          className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl bg-accent/10 border border-accent/20 text-sm text-accent hover:bg-accent/15 transition-colors text-left"
+        >
+          <RiNotificationLine className="w-4 h-4 shrink-0" />
+          <span className="flex-1">Enable notifications to receive habit reminders</span>
+          <span className="text-xs opacity-70">Tap to allow →</span>
+        </button>
+      )}
+      {permission === "denied" && (
+        <div className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl bg-danger/10 border border-danger/20 text-sm text-danger">
+          <RiNotificationOffLine className="w-4 h-4 shrink-0" />
+          Notifications blocked — enable them in your browser settings to receive reminders
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
