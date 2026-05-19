@@ -9,7 +9,7 @@ import {
   RiDiscordLine, RiRobot2Line, RiLoopLeftLine, RiMusicLine,
   RiDatabase2Line, RiBookLine, RiBowlLine, RiHeartPulseLine,
   RiLineChartLine, RiMoneyDollarCircleLine, RiFolderLine,
-  RiMoreLine, RiLogoutBoxLine,
+  RiMoreLine, RiLogoutBoxLine, RiSettings3Line,
 } from "react-icons/ri";
 
 const PRIMARY_NAV = [
@@ -133,7 +133,7 @@ export default function TopNav() {
         </div>
       </nav>
 
-      {/* User menu */}
+      {/* User menu — visible on all screen sizes */}
       <div ref={userRef} className="relative shrink-0">
         <button
           onClick={() => setUserOpen((o) => !o)}
@@ -166,6 +166,14 @@ export default function TopNav() {
               <p className="text-sm font-medium text-text-primary">{user?.displayName}</p>
               <p className="text-xs text-text-muted truncate">{user?.email}</p>
             </div>
+            <Link
+              href="/settings"
+              onClick={() => setUserOpen(false)}
+              className="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-black/5 transition-colors"
+            >
+              <RiSettings3Line className="w-4 h-4" />
+              Settings
+            </Link>
             <button
               onClick={() => { setUserOpen(false); signOutUser(); }}
               className="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-text-secondary hover:text-danger hover:bg-danger/10 transition-colors"
