@@ -7,6 +7,7 @@ import {
   RiLoopLeftLine, RiCalendarLine, RiDiscordLine, RiDatabase2Line,
   RiBookLine, RiBowlLine, RiHeartPulseLine, RiLineChartLine,
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line,
+  RiSettings3Line,
 } from "react-icons/ri";
 
 const PRIMARY = [
@@ -28,6 +29,7 @@ const MORE = [
   { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
   { href: "/finance",   label: "Finance",   icon: RiMoneyDollarCircleLine },
   { href: "/projects",  label: "Projects",  icon: RiFolderLine },
+  { href: "/settings",  label: "Settings",  icon: RiSettings3Line },
 ];
 
 export default function MobileNav() {

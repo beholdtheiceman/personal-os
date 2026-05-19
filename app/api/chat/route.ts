@@ -395,6 +395,23 @@ const TOOLS: Anthropic.Tool[] = [
 
   // ── Notifications ──
   {
+    name: "configure_notification",
+    description: "Enable or disable a notification category and set its time. Use when the user asks to set up reminders like 'remind me every morning at 7am', 'send me a streak alert at 9pm', or 'turn off my journal reminder'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category: {
+          type: "string",
+          enum: ["morning_briefing", "streak_alert", "task_reminder", "goal_deadline", "journal_reminder", "health_reminder", "weekly_review"],
+          description: "Which notification category to configure",
+        },
+        enabled: { type: "boolean", description: "true to enable, false to disable" },
+        time: { type: "string", description: "HH:mm in 24h format (user local time). Required when enabling a time-based notification." },
+      },
+      required: ["category", "enabled"],
+    },
+  },
+  {
     name: "set_habit_reminder",
     description: "Set or clear push notification reminders for a habit. Supports multiple times per day — ideal for habits like drinking water. When the user says 'every X hours', generate the full list of times. Pass an empty array to clear all reminders.",
     input_schema: {
@@ -761,6 +778,24 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
     }
 
     // ── Notifications ──────────────────────────────────────────────────────────
+    case "configure_notification": {
+      const adminDb = getAdminDb();
+      const settingsRef = adminDb.doc(`users/${uid}/settings/notifications`);
+      const snap = await settingsRef.get();
+      const current = snap.data() ?? {};
+      const category = input.category as string;
+      const patch = {
+        ...((current[category] as object) ?? {}),
+        enabled: input.enabled,
+        ...(input.time ? { time: input.time } : {}),
+      };
+      await settingsRef.set({ ...current, [category]: patch }, { merge: true });
+      const label = category.replace(/_/g, " ");
+      return input.enabled
+        ? `${label} notifications enabled${input.time ? ` at ${input.time}` : ""}.`
+        : `${label} notifications disabled.`;
+    }
+
     case "set_habit_reminder": {
       const doc = await findDoc(uid, "habits", "name", input.habit_name_search as string);
       if (!doc) return `No habit found matching "${input.habit_name_search}".`;

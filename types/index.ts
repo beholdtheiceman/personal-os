@@ -50,6 +50,35 @@ export interface Task {
   source: "manual" | "voice" | "ai";
 }
 
+// ─── Notifications ────────────────────────────────────────────────────────────
+export interface NotificationCategory {
+  enabled: boolean;
+  time?: string;       // "HH:mm" local time
+  timezone?: string;
+  days_before?: number; // for deadline-based alerts
+  day_of_week?: number; // 0=Sun for weekly review
+}
+
+export interface NotificationSettings {
+  morning_briefing: NotificationCategory;
+  streak_alert: NotificationCategory;
+  task_reminder: NotificationCategory;
+  goal_deadline: NotificationCategory;
+  journal_reminder: NotificationCategory;
+  health_reminder: NotificationCategory;
+  weekly_review: NotificationCategory;
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  morning_briefing:  { enabled: false, time: "07:00" },
+  streak_alert:      { enabled: false, time: "20:00" },
+  task_reminder:     { enabled: false, time: "09:00" },
+  goal_deadline:     { enabled: false, days_before: 3 },
+  journal_reminder:  { enabled: false, time: "21:00" },
+  health_reminder:   { enabled: false, time: "20:00" },
+  weekly_review:     { enabled: false, time: "09:00", day_of_week: 0 },
+};
+
 // ─── Habits ───────────────────────────────────────────────────────────────────
 export interface Habit {
   id: string;
