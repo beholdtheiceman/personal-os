@@ -167,12 +167,12 @@ export default function NotificationSettings() {
                     <button
                       onClick={() => update(key, { enabled: !cat.enabled })}
                       disabled={permission !== "granted"}
-                      className={`relative w-10 h-5.5 rounded-full transition-colors shrink-0 ${
-                        cat.enabled ? "bg-accent" : "bg-bg-border"
+                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                        cat.enabled ? "bg-accent" : "bg-gray-300"
                       } ${permission !== "granted" ? "opacity-40 cursor-not-allowed" : ""}`}
                     >
-                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                        cat.enabled ? "translate-x-5" : "translate-x-0.5"
+                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                        cat.enabled ? "translate-x-6" : "translate-x-1"
                       }`} />
                     </button>
                   </div>
