@@ -41,7 +41,7 @@ export default function MobileNav() {
       {/* Bottom tab bar */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 flex z-40"
-        style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.6)" }}
+        style={{ background: "rgba(18, 7, 15, 0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.10)" }}
       >
         {PRIMARY.map(({ href, label, icon: Icon }) => (
           <Link
@@ -80,13 +80,13 @@ export default function MobileNav() {
           {/* Sheet */}
           <div
             className="relative rounded-t-2xl p-5 pb-8"
-            style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+            style={{ background: "rgba(18, 7, 15, 0.96)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.10)" }}
           >
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-semibold text-text-primary">All Pages</span>
               <button
                 onClick={() => setOpen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-bg-tertiary text-text-secondary"
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-text-secondary"
               >
                 <RiCloseLine className="w-4 h-4" />
               </button>
@@ -101,7 +101,7 @@ export default function MobileNav() {
                   className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-colors ${
                     isActive(href)
                       ? "bg-accent/15 text-accent"
-                      : "bg-bg-tertiary text-text-secondary hover:text-text-primary"
+                      : "bg-white/10 text-text-secondary hover:text-text-primary"
                   }`}
                 >
                   <Icon className="w-6 h-6" />

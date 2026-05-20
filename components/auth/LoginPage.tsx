@@ -20,7 +20,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="parallax-page min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <ParallaxBackground />
       <div className="w-full max-w-sm">
         {/* Branding */}
@@ -40,7 +40,7 @@ export default function LoginPage() {
           <button
             onClick={handleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white/80 hover:bg-white border border-white/70 text-text-primary font-medium px-4 py-3 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
+            className="w-full flex items-center justify-center gap-3 bg-white/90 hover:bg-white border border-white/70 text-[#1A0A14] font-medium px-4 py-3 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />

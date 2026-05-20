@@ -57,10 +57,10 @@ export default function TopNav() {
     <header
       className="shrink-0 h-14 px-4 flex items-center justify-between gap-4 z-40 relative"
       style={{
-        background: "rgba(255,255,255,0.75)",
+        background: "rgba(18, 7, 15, 0.88)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        borderBottom: "1px solid rgba(255,255,255,0.6)",
+        borderBottom: "1px solid rgba(255,255,255,0.10)",
       }}
     >
       {/* Logo */}
@@ -82,7 +82,7 @@ export default function TopNav() {
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 active
                   ? "bg-accent/15 text-accent"
-                  : "text-text-secondary hover:text-text-primary hover:bg-black/5"
+                  : "text-text-secondary hover:text-text-primary hover:bg-white/10"
               }`}
             >
               {label}
@@ -97,7 +97,7 @@ export default function TopNav() {
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               moreActive
                 ? "bg-accent/15 text-accent"
-                : "text-text-secondary hover:text-text-primary hover:bg-black/5"
+                : "text-text-secondary hover:text-text-primary hover:bg-white/10"
             }`}
           >
             More <RiMoreLine className="w-3.5 h-3.5" />
@@ -106,11 +106,11 @@ export default function TopNav() {
             <div
               className="absolute top-full mt-2 left-0 min-w-[160px] rounded-xl py-1 z-50"
               style={{
-                background: "rgba(255,255,255,0.92)",
+                background: "rgba(18, 7, 15, 0.95)",
                 backdropFilter: "blur(16px)",
                 WebkitBackdropFilter: "blur(16px)",
-                border: "1px solid rgba(255,255,255,0.7)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.50)",
               }}
             >
               {MORE_NAV.map(({ href, label, icon: Icon }) => (
@@ -121,7 +121,7 @@ export default function TopNav() {
                   className={`flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
                     isActive(href)
                       ? "text-accent bg-accent/10"
-                      : "text-text-secondary hover:text-text-primary hover:bg-black/5"
+                      : "text-text-secondary hover:text-text-primary hover:bg-white/10"
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
@@ -137,7 +137,7 @@ export default function TopNav() {
       <div ref={userRef} className="relative shrink-0">
         <button
           onClick={() => setUserOpen((o) => !o)}
-          className="flex items-center gap-2 hover:bg-black/5 rounded-lg px-2 py-1.5 transition-colors"
+          className="flex items-center gap-2 hover:bg-white/10 rounded-lg px-2 py-1.5 transition-colors"
         >
           {user?.photoURL ? (
             <Image src={user.photoURL} alt="Avatar" width={28} height={28} className="rounded-full" />
@@ -162,14 +162,14 @@ export default function TopNav() {
               boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
             }}
           >
-            <div className="px-4 py-2.5 border-b border-black/5">
+            <div className="px-4 py-2.5 border-b border-white/10">
               <p className="text-sm font-medium text-text-primary">{user?.displayName}</p>
               <p className="text-xs text-text-muted truncate">{user?.email}</p>
             </div>
             <Link
               href="/settings"
               onClick={() => setUserOpen(false)}
-              className="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-black/5 transition-colors"
+              className="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/10 transition-colors"
             >
               <RiSettings3Line className="w-4 h-4" />
               Settings

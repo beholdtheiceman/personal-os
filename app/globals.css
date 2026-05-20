@@ -14,42 +14,16 @@
 html,
 body {
   height: 100%;
-  color: #1A0A14;
+  color: #FFFFFF;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ─── Text color tokens — white outside cards, dark inside ───────────────── */
+/* ─── Text color tokens — white everywhere (dark glass UI) ───────────────── */
 :root {
-  --color-text-primary:   #1A0A14;
-  --color-text-secondary: #4A3040;
-  --color-text-muted:     #8A6070;
-}
-
-/* Page-level text (headers, labels outside cards) → white on parallax bg */
-main,
-.parallax-page {
   --color-text-primary:   #FFFFFF;
-  --color-text-secondary: rgba(255, 255, 255, 0.80);
-  --color-text-muted:     rgba(255, 255, 255, 0.55);
-}
-
-/* Chat input placeholder → readable on dark surface */
-main textarea::placeholder,
-main input::placeholder {
-  color: rgba(255, 255, 255, 0.40);
-}
-main .card textarea::placeholder,
-main .card input::placeholder {
-  color: #8A6070;
-}
-
-/* Inside glass cards → restore dark readable text */
-main .card,
-.card {
-  --color-text-primary:   #1A0A14;
-  --color-text-secondary: #4A3040;
-  --color-text-muted:     #8A6070;
+  --color-text-secondary: rgba(255, 255, 255, 0.75);
+  --color-text-muted:     rgba(255, 255, 255, 0.45);
 }
 
 /* ─── Parallax background scroll ──────────────────────────────────────────── */
@@ -88,7 +62,7 @@ main .card,
 /* ─── Scrollbar ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(13,32,48,0.18); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #C4728A; }
 
 /* ─── Focus rings ─────────────────────────────────────────────────────────── */
@@ -105,23 +79,22 @@ main .card,
 .prose-dark li { @apply text-text-primary; }
 .prose-dark ul li { @apply list-disc; }
 .prose-dark ol li { @apply list-decimal; }
-.prose-dark code { @apply bg-bg-tertiary text-accent-text px-1.5 py-0.5 rounded text-sm font-mono; }
-.prose-dark pre { @apply bg-bg-tertiary rounded-lg p-4 mb-3 overflow-x-auto; }
+.prose-dark code { background: rgba(255,255,255,0.12); @apply text-accent px-1.5 py-0.5 rounded text-sm font-mono; }
+.prose-dark pre { background: rgba(0,0,0,0.35); @apply rounded-lg p-4 mb-3 overflow-x-auto; }
 .prose-dark pre code { @apply bg-transparent p-0; }
 .prose-dark strong { @apply font-semibold text-text-primary; }
 .prose-dark a { @apply text-accent underline underline-offset-2 break-all; }
 .prose-dark blockquote { @apply border-l-2 border-accent pl-4 italic text-text-secondary; }
 
-/* ─── Glass card ──────────────────────────────────────────────────────────── */
+/* ─── Dark glass card ─────────────────────────────────────────────────────── */
 .card {
   @apply rounded-2xl p-4;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.70);
+  background: rgba(20, 8, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.25);
 }
-
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
 .btn-primary {
@@ -129,11 +102,18 @@ main .card,
 }
 
 .btn-ghost {
-  @apply text-text-secondary hover:text-text-primary hover:bg-black/5 px-3 py-2 rounded-lg transition-colors;
+  @apply text-text-secondary hover:text-text-primary hover:bg-white/10 px-3 py-2 rounded-lg transition-colors;
 }
 
 /* ─── Input ───────────────────────────────────────────────────────────────── */
 .input-base {
-  @apply bg-white/60 border border-bg-border text-text-primary placeholder-text-muted rounded-lg px-3 py-2 w-full focus:border-accent outline-none transition-colors;
+  @apply border rounded-lg px-3 py-2 w-full focus:border-accent outline-none transition-colors;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: white;
   backdrop-filter: blur(8px);
+}
+
+.input-base::placeholder {
+  color: rgba(255, 255, 255, 0.38);
 }

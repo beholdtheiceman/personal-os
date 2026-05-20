@@ -12,10 +12,10 @@ const config: Config = {
       colors: {
         // Glass / hi-tech palette
         bg: {
-          primary:   "#C2CDD6",   // steel-blue canvas (shows behind glass)
-          secondary: "#FFFFFF",   // white base for cards / panels
-          tertiary:  "#EEF2F5",   // hover / input fill
-          border:    "#D0DCE6",   // subtle border
+          primary:   "#080305",   // near-black plum base
+          secondary: "#14080F",   // dark plum panel
+          tertiary:  "#1E0E18",   // hover / raised state
+          border:    "#ffffff1a", // rgba(255,255,255,0.10) subtle border
         },
         // Accent — cherry blossom rose
         accent: {
