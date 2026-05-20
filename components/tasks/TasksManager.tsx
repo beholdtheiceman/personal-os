@@ -151,7 +151,7 @@ export default function TasksManager() {
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors capitalize ${
                 filter === f
                   ? "bg-accent/20 border-accent/40 text-accent-text"
-                  : "border-bg-border text-text-secondary hover:border-accent/30"
+                  : "bg-white/8 border-white/20 text-text-secondary hover:bg-white/12 hover:border-accent/30 hover:text-text-primary"
               }`}
             >
               {f}

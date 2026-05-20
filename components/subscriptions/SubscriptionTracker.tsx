@@ -163,7 +163,7 @@ export default function SubscriptionTracker() {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize ${
-                filter === f ? "bg-accent/25 text-accent" : "text-text-secondary hover:text-text-primary"
+                filter === f ? "bg-accent/25 text-accent" : "bg-white/8 text-text-secondary hover:bg-white/12 hover:text-text-primary"
               }`}
             >
               {f}

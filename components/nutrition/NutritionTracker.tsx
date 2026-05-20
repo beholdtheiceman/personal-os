@@ -141,7 +141,7 @@ export default function NutritionTracker() {
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
               activeTab === tab
                 ? "bg-accent/25 text-accent shadow-sm"
-                : "text-text-secondary hover:text-text-primary"
+                : "bg-white/8 text-text-secondary hover:bg-white/12 hover:text-text-primary"
             }`}
           >
             {tab}

@@ -78,7 +78,7 @@ export default function GoalsManager() {
               key={tab}
               onClick={() => setStatusTab(tab)}
               className={`text-xs px-3 py-1.5 rounded-md capitalize transition-colors ${
-                statusTab === tab ? "bg-accent text-white" : "text-text-secondary hover:text-text-primary"
+                statusTab === tab ? "bg-accent text-white" : "bg-white/8 text-text-secondary hover:bg-white/12 hover:text-text-primary"
               }`}
             >
               {tab}
