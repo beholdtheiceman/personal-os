@@ -17,7 +17,7 @@ export default function FinancePage() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: "rgba(255,255,255,0.06)" }}>
+      <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit">
         {([
           { key: "transactions",  label: "Transactions" },
           { key: "subscriptions", label: "Subscriptions" },

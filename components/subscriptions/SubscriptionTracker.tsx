@@ -157,7 +157,7 @@ export default function SubscriptionTracker() {
       {/* Controls */}
       <div className="flex items-center justify-between gap-3">
         {/* Filter tabs */}
-        <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl">
           {(["active", "all", "cancelled"] as const).map((f) => (
             <button
               key={f}
