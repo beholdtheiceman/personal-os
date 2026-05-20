@@ -19,6 +19,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ─── Parallax background scroll ──────────────────────────────────────────── */
+@keyframes parallax-scroll {
+  from { background-position-x: 0; }
+  to   { background-position-x: -177.78vh; }
+}
+
 /* ─── Animated blob keyframes ─────────────────────────────────────────────── */
 @keyframes blob1 {
   0%, 100% { transform: translate(0px, 0px) scale(1); }

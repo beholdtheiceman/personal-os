@@ -7,7 +7,7 @@ import MobileNav from "@/components/layout/MobileNav";
 import QuickLogButton from "@/components/layout/QuickLogButton";
 import { PlayerProvider, usePlayer } from "@/contexts/PlayerContext";
 import MiniPlayer from "@/components/media/MiniPlayer";
-import AnimatedBackground from "@/components/layout/AnimatedBackground";
+import ParallaxBackground from "@/components/layout/ParallaxBackground";
 import dynamic from "next/dynamic";
 import { useNotifications } from "@/hooks/useNotifications";
 
@@ -50,7 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <PlayerProvider>
-      <AnimatedBackground />
+      <ParallaxBackground />
       <AppShell>{children}</AppShell>
     </PlayerProvider>
   );

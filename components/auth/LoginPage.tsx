@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { FcGoogle } from "react-icons/fc";
-import AnimatedBackground from "@/components/layout/AnimatedBackground";
+import ParallaxBackground from "@/components/layout/ParallaxBackground";
 
 export default function LoginPage() {
   const { signInWithGoogle } = useAuth();
@@ -21,7 +21,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <AnimatedBackground />
+      <ParallaxBackground />
       <div className="w-full max-w-sm">
         {/* Branding */}
         <div className="text-center mb-8">
