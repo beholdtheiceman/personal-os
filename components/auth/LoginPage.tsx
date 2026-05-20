@@ -20,7 +20,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="parallax-page min-h-screen flex items-center justify-center p-4">
       <ParallaxBackground />
       <div className="w-full max-w-sm">
         {/* Branding */}

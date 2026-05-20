@@ -19,6 +19,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ─── Text color tokens — white outside cards, dark inside ───────────────── */
+:root {
+  --color-text-primary:   #1A0A14;
+  --color-text-secondary: #4A3040;
+  --color-text-muted:     #8A6070;
+}
+
+/* Page-level text (headers, labels outside cards) → white on parallax bg */
+main,
+.parallax-page {
+  --color-text-primary:   #FFFFFF;
+  --color-text-secondary: rgba(255, 255, 255, 0.80);
+  --color-text-muted:     rgba(255, 255, 255, 0.55);
+}
+
+/* Inside glass cards → restore dark readable text */
+main .card,
+.card {
+  --color-text-primary:   #1A0A14;
+  --color-text-secondary: #4A3040;
+  --color-text-muted:     #8A6070;
+}
+
 /* ─── Parallax background scroll ──────────────────────────────────────────── */
 @keyframes parallax-scroll {
   from { background-position-x: 0; }

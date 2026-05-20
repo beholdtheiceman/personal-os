@@ -25,9 +25,9 @@ const config: Config = {
           text:    "#A05470",
         },
         text: {
-          primary:   "#1A0A14",
-          secondary: "#4A3040",
-          muted:     "#8A6070",
+          primary:   "var(--color-text-primary)",
+          secondary: "var(--color-text-secondary)",
+          muted:     "var(--color-text-muted)",
         },
         // Status
         success: "#4E9E77",
