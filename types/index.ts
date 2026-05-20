@@ -79,6 +79,28 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   weekly_review:     { enabled: false, time: "09:00", day_of_week: 0 },
 };
 
+// ─── XP / Gamification ───────────────────────────────────────────────────────
+export type XPEventType =
+  | "habit_complete"
+  | "task_complete"
+  | "journal_entry"
+  | "health_log"
+  | "goal_milestone"
+  | "goal_complete"
+  | "streak_bonus";
+
+export interface XPEvent {
+  id: string;
+  type: XPEventType;
+  xp: number;
+  description: string;
+  timestamp: string;
+}
+
+export interface UserXP {
+  total: number;
+}
+
 // ─── Habits ───────────────────────────────────────────────────────────────────
 export interface Habit {
   id: string;

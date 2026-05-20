@@ -11,6 +11,9 @@ import LoadingDots from "@/components/ui/LoadingDots";
 import {
   RiAddLine, RiListCheck, RiLayoutColumnLine, RiFilterLine,
 } from "react-icons/ri";
+import { useXP } from "@/hooks/useXP";
+import { awardXP } from "@/lib/awardXP";
+import { taskXP } from "@/lib/xp";
 import toast from "react-hot-toast";
 import type { Task, TaskStatus, TaskTag } from "@/types";
 
@@ -24,6 +27,7 @@ const KANBAN_COLS: { id: TaskStatus; label: string }[] = [
 
 export default function TasksManager() {
   const { user } = useAuth();
+  const { totalXP } = useXP();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("list");
@@ -69,6 +73,10 @@ export default function TasksManager() {
     if (!task || !user) return;
     const newStatus: TaskStatus = task.status === "completed" ? "active" : "completed";
     await updateDoc(doc(db, "users", user.uid, "tasks", id), { status: newStatus });
+    if (newStatus === "completed") {
+      const xp = taskXP(task.priority_score ?? 50);
+      await awardXP(user.uid, xp, "task_complete", `Task: ${task.title}`, totalXP);
+    }
   };
 
   const deleteTask = async (id: string) => {

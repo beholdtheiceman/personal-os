@@ -12,8 +12,25 @@ import { RiAddLine, RiLoopLeftLine, RiNotificationLine, RiNotificationOffLine } 
 import { format } from "date-fns";
 import { useToday } from "@/hooks/useToday";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useXP } from "@/hooks/useXP";
+import { awardXP } from "@/lib/awardXP";
+import { habitXP } from "@/lib/xp";
 import toast from "react-hot-toast";
 import type { Habit } from "@/types";
+
+function calcStreak(completions: string[], todayStr: string): number {
+  let streak = 0;
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const base = new Date(y, m - 1, d);
+  for (let i = 1; i <= 365; i++) {
+    const prev = new Date(base);
+    prev.setDate(prev.getDate() - i);
+    const s = prev.toLocaleDateString("en-CA");
+    if (completions.includes(s)) streak++;
+    else break;
+  }
+  return streak;
+}
 
 export default function HabitsTracker() {
   const { user } = useAuth();
@@ -24,6 +41,7 @@ export default function HabitsTracker() {
 
   const todayStr = useToday();
   const { permission, enable } = useNotifications();
+  const { totalXP } = useXP();
 
   useEffect(() => {
     if (!user) return;
@@ -63,11 +81,18 @@ export default function HabitsTracker() {
     const habit = habits.find((h) => h.id === id);
     if (!habit || !user) return;
 
-    const completions = habit.completions.includes(todayStr)
-      ? habit.completions.filter((d) => d !== todayStr)
-      : [...habit.completions, todayStr];
+    const completing = !habit.completions.includes(todayStr);
+    const completions = completing
+      ? [...habit.completions, todayStr]
+      : habit.completions.filter((d) => d !== todayStr);
 
     await updateDoc(doc(db, "users", user.uid, "habits", id), { completions });
+
+    if (completing) {
+      const streak = calcStreak(habit.completions, todayStr);
+      const xp = habitXP(streak);
+      await awardXP(user.uid, xp, "habit_complete", `Habit: ${habit.name}`, totalXP);
+    }
   };
 
   const deleteHabit = async (id: string) => {

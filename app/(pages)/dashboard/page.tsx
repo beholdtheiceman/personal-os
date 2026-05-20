@@ -20,6 +20,10 @@ import {
 interface DailyVerse { text: string; reference: string; }
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { useToday } from "@/hooks/useToday";
+import { useXP } from "@/hooks/useXP";
+import { awardXP } from "@/lib/awardXP";
+import { habitXP, taskXP } from "@/lib/xp";
+import XPWidget from "@/components/xp/XPWidget";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -41,6 +45,7 @@ function eventDayLabel(dateStr: string) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { totalXP } = useXP();
   const [report, setReport] = useState("");
   const [loadingReport, setLoadingReport] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -195,19 +200,34 @@ export default function DashboardPage() {
     if (!user) return;
     const habit = habits.find((h) => h.id === id);
     if (!habit) return;
-    const completions = habit.completions.includes(today)
-      ? habit.completions.filter((d) => d !== today)
-      : [...habit.completions, today];
+    const completing = !habit.completions.includes(today);
+    const completions = completing
+      ? [...habit.completions, today]
+      : habit.completions.filter((d) => d !== today);
     await updateDoc(doc(db, "users", user.uid, "habits", id), { completions });
+    if (completing) {
+      // simple streak: count consecutive days before today
+      let streak = 0;
+      const base = new Date(today);
+      for (let i = 1; i <= 365; i++) {
+        const prev = new Date(base);
+        prev.setDate(prev.getDate() - i);
+        if (habit.completions.includes(prev.toLocaleDateString("en-CA"))) streak++;
+        else break;
+      }
+      await awardXP(user.uid, habitXP(streak), "habit_complete", `Habit: ${habit.name}`, totalXP);
+    }
   };
 
   const completeTask = async (id: string) => {
     if (!user) return;
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
-    await updateDoc(doc(db, "users", user.uid, "tasks", id), {
-      status: task.status === "completed" ? "active" : "completed",
-    });
+    const newStatus = task.status === "completed" ? "active" : "completed";
+    await updateDoc(doc(db, "users", user.uid, "tasks", id), { status: newStatus });
+    if (newStatus === "completed") {
+      await awardXP(user.uid, taskXP(task.priority_score ?? 50), "task_complete", `Task: ${task.title}`, totalXP);
+    }
   };
 
   const generateReport = async () => {
@@ -329,6 +349,9 @@ export default function DashboardPage() {
           {loadingReport ? <LoadingDots /> : <><RiRefreshLine className="w-4 h-4" /> Generate Report</>}
         </button>
       </div>
+
+      {/* ── XP / Level ── */}
+      <XPWidget />
 
       {/* ── AI Briefing ── */}
       <div className="card">
