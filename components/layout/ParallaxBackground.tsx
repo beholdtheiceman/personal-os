@@ -38,18 +38,22 @@ export default function ParallaxBackground() {
     backgroundSize: "177.78vh auto",
     imageRendering: "pixelated",
     backgroundPosition: "bottom",
+    // Knocks out white backgrounds so layers composite correctly
+    mixBlendMode: "multiply",
   };
 
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden">
-      {/* Sky — animated frames, no scroll */}
+      {/* Sky — animated frames, no scroll, no blend mode needed */}
       <div
         style={{
-          ...baseStyle,
+          position: "absolute",
+          inset: 0,
           backgroundImage: `url('${SKY_FRAMES[skyFrame]}')`,
           backgroundRepeat: "repeat-x",
+          backgroundSize: "177.78vh auto",
+          imageRendering: "pixelated",
           backgroundPosition: "top",
-          transition: "background-image 0.05s",
         }}
       />
 
