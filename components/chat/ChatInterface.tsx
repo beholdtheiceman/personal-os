@@ -1,20 +1,35 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, addDoc, getDocs, query, orderBy, limit } from "firebase/firestore";
+import {
+  collection, addDoc, getDocs, query, orderBy, limit,
+  onSnapshot, doc, updateDoc, setDoc, serverTimestamp, Timestamp,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
 import ReactMarkdown from "react-markdown";
 import LoadingDots from "@/components/ui/LoadingDots";
 import CameraCapture from "./CameraCapture";
-import { RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine, RiCameraLine, RiCloseLine } from "react-icons/ri";
+import {
+  RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
+  RiCameraLine, RiCloseLine, RiAddLine, RiChat1Line,
+  RiEditLine, RiMenuLine,
+} from "react-icons/ri";
 import toast from "react-hot-toast";
 import type { ChatMessage } from "@/types";
-import { format } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 
 interface AssistantMessage extends ChatMessage {
   actions?: string[];
-  image?: string; // base64 data URL for display only (not persisted)
+  image?: string;
+}
+
+interface Chat {
+  id: string;
+  name: string;
+  lastMessage: string;
+  updatedAt: string;
+  createdAt: string;
 }
 
 function ActionsLog({ actions }: { actions: string[] }) {
@@ -43,8 +58,24 @@ function ActionsLog({ actions }: { actions: string[] }) {
   );
 }
 
+function chatDateLabel(iso: string) {
+  const d = new Date(iso);
+  if (isToday(d)) return format(d, "h:mm a");
+  if (isYesterday(d)) return "Yesterday";
+  return format(d, "MMM d");
+}
+
 export default function ChatInterface() {
   const { user } = useAuth();
+
+  // ── Chats list state ─────────────────────────────────────────────────────
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ── Active chat state ────────────────────────────────────────────────────
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,45 +83,117 @@ export default function ChatInterface() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [chatsLoaded, setChatsLoaded] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Build system prompt once ─────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-    (async () => {
-      const q = query(
-        collection(db, "users", user.uid, "chat_history"),
-        orderBy("timestamp", "desc"),
-        limit(50)
-      );
-      const snap = await getDocs(q);
-      const history = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AssistantMessage)).reverse();
-      setMessages(history);
-
-      const memory = await fetchMemoryEntries(user.uid);
+    fetchMemoryEntries(user.uid).then((memory) => {
       const memCtx = buildMemoryContext(memory);
       const prompt = buildSystemPrompt(memCtx, user.displayName ?? "User", {
         date: new Date().toDateString(),
       });
       setSystemPrompt(prompt);
-    })();
+    });
   }, [user]);
+
+  // ── Live chats list ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, "users", user.uid, "chats"),
+      orderBy("updatedAt", "desc"),
+      limit(50)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Chat));
+      setChats(list);
+      setChatsLoaded(true);
+      // Auto-select the most recent chat on first load
+      if (!activeChatId && list.length > 0) {
+        setActiveChatId(list[0].id);
+      }
+    });
+    return unsub;
+  }, [user]);
+
+  // ── Load messages for active chat ────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !activeChatId) return;
+    setMessages([]);
+    const q = query(
+      collection(db, "users", user.uid, "chats", activeChatId, "messages"),
+      orderBy("timestamp", "asc"),
+      limit(100)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AssistantMessage)));
+    });
+    return unsub;
+  }, [user, activeChatId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const saveMessage = async (msg: Omit<AssistantMessage, "id" | "image">) => {
-    if (!user) return;
-    const ref = await addDoc(collection(db, "users", user.uid, "chat_history"), msg);
+  // ── Create new chat ──────────────────────────────────────────────────────
+  const createChat = async (name = "New Chat") => {
+    if (!user) return null;
+    const now = new Date().toISOString();
+    const ref = await addDoc(collection(db, "users", user.uid, "chats"), {
+      name,
+      lastMessage: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    setActiveChatId(ref.id);
+    setSidebarOpen(false);
     return ref.id;
   };
 
+  // ── Rename chat ───────────────────────────────────────────────────────────
+  const renameChat = async (chatId: string, name: string) => {
+    if (!user || !name.trim()) return;
+    await updateDoc(doc(db, "users", user.uid, "chats", chatId), { name: name.trim() });
+    setEditingChatId(null);
+  };
+
+  // Start inline rename
+  const startRename = (chat: Chat) => {
+    setEditingChatId(chat.id);
+    setEditingName(chat.name);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  // ── Save message to Firestore ────────────────────────────────────────────
+  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id" | "image">) => {
+    if (!user) return;
+    await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
+    // Update chat metadata
+    await updateDoc(doc(db, "users", user.uid, "chats", chatId), {
+      lastMessage: msg.content.slice(0, 80),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  // ── Send message ─────────────────────────────────────────────────────────
   const sendMessage = async (text: string) => {
     if ((!text.trim() && !capturedImage) || !user || loading) return;
 
+    // Create a new chat if none is active
+    let chatId = activeChatId;
+    if (!chatId) {
+      chatId = await createChat();
+      if (!chatId) return;
+    }
+
     const displayText = text.trim() || (capturedImage ? "What's in this image?" : "");
     const imageToSend = capturedImage;
+    const isFirstMessage = messages.length === 0;
 
     const userMsg: AssistantMessage = {
       id: Date.now().toString(),
@@ -105,27 +208,20 @@ export default function ChatInterface() {
     setCapturedImage(null);
     setLoading(true);
 
-    await saveMessage({ role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
+    await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
 
-    // Build conversation history (last 20 turns, text only for history)
     const history = [...messages.slice(-19), userMsg].map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
-    // Placeholder while Claude thinks
     const placeholderId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, {
-      id: placeholderId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date().toISOString(),
+      id: placeholderId, role: "assistant", content: "", timestamp: new Date().toISOString(),
     }]);
 
     try {
       const idToken = await user.getIdToken();
-
-      // Strip the data URL prefix for the API (e.g. "data:image/jpeg;base64,")
       const imageBase64 = imageToSend
         ? imageToSend.replace(/^data:image\/\w+;base64,/, "")
         : undefined;
@@ -137,13 +233,20 @@ export default function ChatInterface() {
           messages: history,
           systemPrompt,
           uid: user.uid,
+          chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
           imageBase64,
+          isFirstMessage,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Request failed");
+
+      // Handle rename action from API
+      if (data.renamedChat) {
+        // Chat name updated server-side, nothing to do — sidebar listener picks it up
+      }
 
       const assistantMsg: AssistantMessage = {
         id: placeholderId,
@@ -154,8 +257,7 @@ export default function ChatInterface() {
       };
 
       setMessages((prev) => prev.map((m) => m.id === placeholderId ? assistantMsg : m));
-
-      await saveMessage({
+      await saveMessage(chatId, {
         role: "assistant",
         content: assistantMsg.content,
         timestamp: assistantMsg.timestamp,
@@ -169,196 +271,283 @@ export default function ChatInterface() {
     }
   };
 
-  // ── Web Speech API voice input ────────────────────────────────────────────
+  // ── Voice input ──────────────────────────────────────────────────────────
   const startRecording = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-
-    if (!SR) {
-      toast.error("Speech recognition isn't supported in this browser. Try Chrome.");
-      return;
-    }
-
+    if (!SR) { toast.error("Speech recognition isn't supported in this browser. Try Chrome."); return; }
     const recognition = new SR();
     recognition.lang = "en-US";
     recognition.continuous = false;
     recognition.interimResults = false;
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      setInput(transcript);
-    };
-
+    recognition.onresult = (e: any) => setInput(e.results[0][0].transcript);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (e: any) => {
-      const messages: Record<string, string> = {
-        "not-allowed":         "Microphone permission denied — check browser settings",
-        "no-speech":           "No speech detected — try again",
-        "network":             "Network error — speech recognition requires internet",
-        "service-not-allowed": "Speech service blocked — try on HTTPS",
-        "audio-capture":       "No microphone found",
+      const msgs: Record<string, string> = {
+        "not-allowed": "Microphone permission denied",
+        "no-speech": "No speech detected — try again",
+        "network": "Network error",
+        "audio-capture": "No microphone found",
       };
-      toast.error(messages[e.error] ?? `Speech error: ${e.error}`);
+      toast.error(msgs[e.error] ?? `Speech error: ${e.error}`);
       setRecording(false);
     };
-
     recognition.onend = () => setRecording(false);
     recognition.start();
     recognitionRef.current = recognition;
     setRecording(true);
   };
 
-  const stopRecording = () => {
-    recognitionRef.current?.stop();
-    setRecording(false);
-  };
+  const stopRecording = () => { recognitionRef.current?.stop(); setRecording(false); };
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center py-16 text-text-secondary">
-            <p className="text-lg font-medium text-text-primary mb-2">
-              Hey {user?.displayName?.split(" ")[0] ?? "there"} 👋
-            </p>
-            <p className="text-sm mb-1">Ask me anything. I have your full context loaded.</p>
-            <p className="text-xs text-text-muted">I can also add tasks, schedule events, log health, set goals, and track expenses.</p>
-          </div>
-        )}
+  const activeChat = chats.find((c) => c.id === activeChatId);
 
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] md:max-w-[70%] min-w-0 rounded-2xl px-4 py-3 overflow-hidden ${
-              msg.role === "user"
-                ? "bg-accent text-white rounded-tr-sm"
-                : "bg-bg-secondary border border-bg-border rounded-tl-sm"
-            }`}>
-              {/* Image attachment */}
-              {msg.image && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={msg.image}
-                  alt="Attached"
-                  className="rounded-xl mb-2 max-w-full max-h-48 object-cover"
-                />
-              )}
-
-              {msg.role === "assistant" ? (
-                msg.content ? (
-                  <>
-                    <div className="prose-dark text-sm break-words min-w-0">
-                      <ReactMarkdown
-                        components={{
-                          a: ({ href, children }) => {
-                            // If the visible text is just the raw URL, shorten it for readability
-                            const text = String(children);
-                            const isRawUrl = text.startsWith("http://") || text.startsWith("https://");
-                            const label = isRawUrl
-                              ? (() => { try { return new URL(text).hostname; } catch { return text.slice(0, 40) + "…"; } })()
-                              : children;
-                            return (
-                              <a href={href} target="_blank" rel="noopener noreferrer" title={href}>
-                                {label}
-                              </a>
-                            );
-                          },
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                    {msg.actions?.length ? (
-                      <ActionsLog actions={msg.actions} />
-                    ) : null}
-                  </>
-                ) : (
-                  <LoadingDots />
-                )
-              ) : (
-                <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-              )}
-              <p className={`text-[10px] mt-1.5 ${msg.role === "user" ? "text-white/60 text-right" : "text-text-muted"}`}>
-                {format(new Date(msg.timestamp), "HH:mm")}
-              </p>
-            </div>
-          </div>
-        ))}
-
-        <div ref={bottomRef} />
+  // ── Sidebar ──────────────────────────────────────────────────────────────
+  const Sidebar = (
+    <div className="flex flex-col h-full w-64 border-r border-bg-border bg-bg-secondary shrink-0">
+      <div className="p-3 border-b border-bg-border">
+        <button
+          onClick={() => createChat()}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+        >
+          <RiAddLine className="w-4 h-4" />
+          New Chat
+        </button>
       </div>
 
-      {/* Input bar */}
-      <div className="border-t border-bg-border bg-bg-secondary px-4 py-3">
-        {/* Image preview */}
-        {capturedImage && (
-          <div className="relative inline-block mb-2 ml-1">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={capturedImage}
-              alt="Captured"
-              className="h-16 w-16 rounded-xl object-cover border-2 border-accent/30"
-            />
-            <button
-              onClick={() => setCapturedImage(null)}
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-danger text-white flex items-center justify-center"
+      <div className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2">
+        {!chatsLoaded ? (
+          <div className="flex justify-center py-8"><LoadingDots /></div>
+        ) : chats.length === 0 ? (
+          <p className="text-xs text-text-muted text-center py-8">No chats yet</p>
+        ) : (
+          chats.map((chat) => (
+            <div
+              key={chat.id}
+              onClick={() => { setActiveChatId(chat.id); setSidebarOpen(false); }}
+              className={`group relative flex items-start gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
+                chat.id === activeChatId
+                  ? "bg-accent/15 text-accent"
+                  : "hover:bg-bg-tertiary text-text-secondary"
+              }`}
             >
-              <RiCloseLine className="w-3 h-3" />
-            </button>
-          </div>
+              <RiChat1Line className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                {editingChatId === chat.id ? (
+                  <input
+                    ref={renameInputRef}
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={() => renameChat(chat.id, editingName)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") renameChat(chat.id, editingName);
+                      if (e.key === "Escape") setEditingChatId(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full text-xs bg-transparent border-b border-accent outline-none text-text-primary"
+                  />
+                ) : (
+                  <p className="text-xs font-medium truncate">{chat.name}</p>
+                )}
+                <p className="text-[10px] text-text-muted truncate mt-0.5">{chat.lastMessage || "No messages yet"}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <span className="text-[10px] text-text-muted">{chatDateLabel(chat.updatedAt)}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); startRename(chat); }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:text-accent"
+                >
+                  <RiEditLine className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ))
         )}
+      </div>
+    </div>
+  );
 
-        <div className="flex items-end gap-2 max-w-4xl mx-auto">
-          <textarea
-            className="input-base flex-1 resize-none min-h-[44px] max-h-40 py-2.5 text-sm"
-            placeholder={capturedImage ? "Ask about this image… (or send as-is)" : "Message your AI assistant…"}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage(input);
-              }
-            }}
-            disabled={loading}
-            rows={1}
-          />
+  return (
+    <div className="flex h-full overflow-hidden">
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex">
+        {Sidebar}
+      </div>
 
-          {/* Camera */}
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
+          <div className="relative z-10 flex">
+            {Sidebar}
+          </div>
+        </div>
+      )}
+
+      {/* Chat area */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Chat header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-bg-border bg-bg-secondary shrink-0">
           <button
-            onClick={() => setShowCamera(true)}
-            disabled={loading}
-            className="p-2.5 rounded-lg border transition-colors bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
-            title="Attach photo"
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
           >
-            <RiCameraLine className="w-5 h-5" />
+            <RiMenuLine className="w-5 h-5" />
           </button>
-
-          {/* Mic */}
+          <div className="flex-1 min-w-0">
+            {activeChatId && editingChatId === activeChatId ? (
+              <input
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                onBlur={() => renameChat(activeChatId, editingName)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") renameChat(activeChatId!, editingName);
+                  if (e.key === "Escape") setEditingChatId(null);
+                }}
+                className="text-sm font-medium bg-transparent border-b border-accent outline-none text-text-primary w-full max-w-xs"
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={() => activeChat && startRename(activeChat)}
+                className="text-sm font-medium text-text-primary hover:text-accent transition-colors truncate max-w-xs flex items-center gap-1.5 group"
+                title="Click to rename"
+              >
+                {activeChat?.name ?? "Select a chat"}
+                {activeChat && <RiEditLine className="w-3 h-3 opacity-0 group-hover:opacity-60 shrink-0" />}
+              </button>
+            )}
+          </div>
           <button
-            onClick={recording ? stopRecording : startRecording}
-            disabled={loading}
-            className={`p-2.5 rounded-lg border transition-colors ${
-              recording
-                ? "bg-danger/20 text-danger border-danger/30 animate-pulse"
-                : "bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
-            }`}
+            onClick={() => createChat()}
+            className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+            title="New chat"
           >
-            {recording ? <RiMicOffLine className="w-5 h-5" /> : <RiMicLine className="w-5 h-5" />}
-          </button>
-
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={(!input.trim() && !capturedImage) || loading}
-            className="btn-primary p-2.5 disabled:opacity-50"
-          >
-            <RiSendPlane2Line className="w-5 h-5" />
+            <RiAddLine className="w-5 h-5" />
           </button>
         </div>
-        <p className="text-center text-[11px] text-text-muted mt-2">
-          Shift+Enter for new line · Enter to send
-        </p>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
+          {!activeChatId ? (
+            <div className="text-center py-16 text-text-secondary">
+              <RiChat1Line className="w-10 h-10 text-text-muted mx-auto mb-3" />
+              <p className="text-lg font-medium text-text-primary mb-2">
+                Hey {user?.displayName?.split(" ")[0] ?? "there"} 👋
+              </p>
+              <p className="text-sm mb-4">Start a new chat or select one from the sidebar.</p>
+              <button onClick={() => createChat()} className="btn-primary text-sm">
+                New Chat
+              </button>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-16 text-text-secondary">
+              <p className="text-lg font-medium text-text-primary mb-2">
+                Hey {user?.displayName?.split(" ")[0] ?? "there"} 👋
+              </p>
+              <p className="text-sm mb-1">Ask me anything. I have your full context loaded.</p>
+              <p className="text-xs text-text-muted">I can add tasks, schedule events, log health, set goals, and more.</p>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] md:max-w-[70%] min-w-0 rounded-2xl px-4 py-3 overflow-hidden ${
+                  msg.role === "user"
+                    ? "bg-accent text-white rounded-tr-sm"
+                    : "bg-bg-secondary border border-bg-border rounded-tl-sm"
+                }`}>
+                  {msg.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={msg.image} alt="Attached" className="rounded-xl mb-2 max-w-full max-h-48 object-cover" />
+                  )}
+                  {msg.role === "assistant" ? (
+                    msg.content ? (
+                      <>
+                        <div className="prose-dark text-sm break-words min-w-0">
+                          <ReactMarkdown
+                            components={{
+                              a: ({ href, children }) => {
+                                const text = String(children);
+                                const isRawUrl = text.startsWith("http://") || text.startsWith("https://");
+                                const label = isRawUrl
+                                  ? (() => { try { return new URL(text).hostname; } catch { return text.slice(0, 40) + "…"; } })()
+                                  : children;
+                                return <a href={href} target="_blank" rel="noopener noreferrer" title={href}>{label}</a>;
+                              },
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                        {msg.actions?.length ? <ActionsLog actions={msg.actions} /> : null}
+                      </>
+                    ) : <LoadingDots />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                  )}
+                  <p className={`text-[10px] mt-1.5 ${msg.role === "user" ? "text-white/60 text-right" : "text-text-muted"}`}>
+                    {format(new Date(msg.timestamp), "HH:mm")}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="border-t border-bg-border bg-bg-secondary px-4 py-3 shrink-0">
+          {capturedImage && (
+            <div className="relative inline-block mb-2 ml-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={capturedImage} alt="Captured" className="h-16 w-16 rounded-xl object-cover border-2 border-accent/30" />
+              <button
+                onClick={() => setCapturedImage(null)}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-danger text-white flex items-center justify-center"
+              >
+                <RiCloseLine className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          <div className="flex items-end gap-2 max-w-4xl mx-auto">
+            <textarea
+              className="input-base flex-1 resize-none min-h-[44px] max-h-40 py-2.5 text-sm"
+              placeholder={capturedImage ? "Ask about this image…" : "Message your AI assistant…"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
+              }}
+              disabled={loading}
+              rows={1}
+            />
+            <button
+              onClick={() => setShowCamera(true)}
+              disabled={loading}
+              className="p-2.5 rounded-lg border transition-colors bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
+            >
+              <RiCameraLine className="w-5 h-5" />
+            </button>
+            <button
+              onClick={recording ? stopRecording : startRecording}
+              disabled={loading}
+              className={`p-2.5 rounded-lg border transition-colors ${
+                recording ? "bg-danger/20 text-danger border-danger/30 animate-pulse" : "bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
+              }`}
+            >
+              {recording ? <RiMicOffLine className="w-5 h-5" /> : <RiMicLine className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={(!input.trim() && !capturedImage) || loading}
+              className="btn-primary p-2.5 disabled:opacity-50"
+            >
+              <RiSendPlane2Line className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-center text-[11px] text-text-muted mt-2">Shift+Enter for new line · Enter to send</p>
+        </div>
       </div>
 
       {showCamera && (

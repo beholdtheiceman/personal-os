@@ -442,11 +442,24 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["key", "value"],
     },
   },
+
+  // ── Chat ──
+  {
+    name: "rename_chat",
+    description: "Rename the current chat conversation. Use when the user says 'name this chat X', 'call this X', 'rename this conversation to X', 'save this as X', etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "The new name for this chat conversation" },
+      },
+      required: ["name"],
+    },
+  },
 ];
 
 // ── Tool execution ─────────────────────────────────────────────────────────────
 
-async function executeTool(uid: string, toolName: string, input: ToolInput, today: () => string): Promise<string> {
+async function executeTool(uid: string, toolName: string, input: ToolInput, today: () => string, chatId?: string): Promise<string> {
   const db = getAdminDb();
 
   switch (toolName) {
@@ -765,6 +778,13 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
     }
 
     // ── Second Brain ───────────────────────────────────────────────────────────
+    case "rename_chat": {
+      if (!chatId) return "No active chat to rename.";
+      const db2 = getAdminDb();
+      await db2.doc(`users/${uid}/chats/${chatId}`).update({ name: input.name });
+      return `Chat renamed to "${input.name}"`;
+    }
+
     case "search_second_brain": {
       const results = await searchSecondBrainFromDB(uid, input.query as string);
       if (results.length === 0) return `No notes found matching "${input.query}" in your second brain.`;
@@ -876,7 +896,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate, imageBase64 } = await req.json();
+    const { messages, systemPrompt, uid, localDate, imageBase64, chatId, isFirstMessage } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -933,7 +953,29 @@ export async function POST(req: NextRequest) {
 
       if (response.stop_reason === "end_turn") {
         const text = response.content.find((b) => b.type === "text")?.text ?? "";
-        return NextResponse.json({ text, actions });
+
+        // Auto-name the chat after the first exchange
+        let renamedChat: string | null = null;
+        if (isFirstMessage && chatId && uid) {
+          try {
+            const firstUserMsg = messages[messages.length - 1]?.content ?? "";
+            const nameRes = await client.messages.create({
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 20,
+              messages: [{
+                role: "user",
+                content: `Give this chat a short name (3-5 words max, no quotes): "${String(firstUserMsg).slice(0, 200)}"`,
+              }],
+            });
+            const autoName = (nameRes.content[0] as Anthropic.TextBlock)?.text?.trim();
+            if (autoName) {
+              await getAdminDb().doc(`users/${uid}/chats/${chatId}`).update({ name: autoName });
+              renamedChat = autoName;
+            }
+          } catch { /* non-critical, skip */ }
+        }
+
+        return NextResponse.json({ text, actions, renamedChat });
       }
 
       if (response.stop_reason === "tool_use") {
@@ -944,7 +986,7 @@ export async function POST(req: NextRequest) {
 
         for (const tool of toolUseBlocks) {
           const result = uid
-            ? await executeTool(uid, tool.name, tool.input as ToolInput, today)
+            ? await executeTool(uid, tool.name, tool.input as ToolInput, today, chatId)
             : "Action skipped — user not authenticated.";
           actions.push(result);
           toolResults.push({ type: "tool_result", tool_use_id: tool.id, content: result });
