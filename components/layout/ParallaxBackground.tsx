@@ -38,8 +38,6 @@ export default function ParallaxBackground() {
     backgroundSize: "177.78vh auto",
     imageRendering: "pixelated",
     backgroundPosition: "bottom",
-    // Knocks out white backgrounds so layers composite correctly
-    mixBlendMode: "multiply",
   };
 
   return (
