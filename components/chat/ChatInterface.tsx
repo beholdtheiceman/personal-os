@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   collection, addDoc, getDocs, query, orderBy, limit,
-  onSnapshot, doc, updateDoc, setDoc, serverTimestamp, Timestamp,
+  onSnapshot, doc, updateDoc, setDoc, getDoc, writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
@@ -101,9 +101,72 @@ export default function ChatInterface() {
     });
   }, [user]);
 
+  // ── Migrate old chat_history → new chats structure (runs once) ──────────
+  const migrateOldHistory = async (uid: string) => {
+    // Check if already migrated
+    const flagRef = doc(db, "users", uid, "settings", "chat_migration");
+    const flagSnap = await getDoc(flagRef);
+    if (flagSnap.exists()) return;
+
+    // Check if there's anything to migrate
+    const oldSnap = await getDocs(
+      query(collection(db, "users", uid, "chat_history"), orderBy("timestamp", "asc"))
+    );
+    if (oldSnap.empty) {
+      await setDoc(flagRef, { done: true, migratedAt: new Date().toISOString() });
+      return;
+    }
+
+    // Group messages by date
+    const byDate: Record<string, AssistantMessage[]> = {};
+    for (const d of oldSnap.docs) {
+      const msg = { id: d.id, ...d.data() } as AssistantMessage;
+      const date = msg.timestamp?.slice(0, 10) ?? "unknown";
+      if (!byDate[date]) byDate[date] = [];
+      byDate[date].push(msg);
+    }
+
+    // Create one chat per date
+    const dates = Object.keys(byDate).sort();
+    for (const date of dates) {
+      const msgs = byDate[date];
+      const label = format(new Date(date + "T12:00:00"), "MMMM d, yyyy");
+      const lastMsg = msgs[msgs.length - 1];
+      const chatRef = await addDoc(collection(db, "users", uid, "chats"), {
+        name: label,
+        lastMessage: lastMsg.content.slice(0, 80),
+        createdAt: msgs[0].timestamp,
+        updatedAt: lastMsg.timestamp,
+      });
+      // Write messages in batches of 500
+      const BATCH_SIZE = 499;
+      for (let i = 0; i < msgs.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        for (const msg of msgs.slice(i, i + BATCH_SIZE)) {
+          const msgRef = doc(collection(db, "users", uid, "chats", chatRef.id, "messages"));
+          batch.set(msgRef, {
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            ...(msg.actions ? { actions: msg.actions } : {}),
+          });
+        }
+        await batch.commit();
+      }
+    }
+
+    // Mark as done
+    await setDoc(flagRef, { done: true, migratedAt: new Date().toISOString(), chatsCreated: dates.length });
+    toast.success(`Restored ${dates.length} day${dates.length > 1 ? "s" : ""} of chat history`);
+  };
+
   // ── Live chats list ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+
+    // Run migration once before loading chats
+    migrateOldHistory(user.uid).catch(console.error);
+
     const q = query(
       collection(db, "users", user.uid, "chats"),
       orderBy("updatedAt", "desc"),
