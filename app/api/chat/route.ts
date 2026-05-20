@@ -906,6 +906,8 @@ export async function POST(req: NextRequest) {
     }
 
     const actions: string[] = [];
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     // If an image was attached, convert the last user message to a multimodal content array
     let currentMessages: Anthropic.MessageParam[] = messages;
@@ -951,6 +953,10 @@ export async function POST(req: NextRequest) {
         messages: currentMessages,
       });
 
+      // Accumulate token usage from every API round-trip
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
+
       if (response.stop_reason === "end_turn") {
         const text = response.content.find((b) => b.type === "text")?.text ?? "";
 
@@ -971,9 +977,21 @@ export async function POST(req: NextRequest) {
             if (autoName) {
               await getAdminDb().doc(`users/${uid}/chats/${chatId}`).update({ name: autoName });
               renamedChat = autoName;
+              // Count haiku naming tokens too
+              totalInputTokens += nameRes.usage.input_tokens;
+              totalOutputTokens += nameRes.usage.output_tokens;
             }
           } catch { /* non-critical, skip */ }
         }
+
+        // Persist usage — fire-and-forget, non-blocking
+        const dateKey = makeToday(localDate as string | undefined);
+        getAdminDb().doc(`users/${uid}/api_usage/${dateKey}`).set({
+          input_tokens: FieldValue.increment(totalInputTokens),
+          output_tokens: FieldValue.increment(totalOutputTokens),
+          requests: FieldValue.increment(1),
+          date: dateKey,
+        }, { merge: true }).catch(() => { /* non-critical */ });
 
         return NextResponse.json({ text, actions, renamedChat });
       }

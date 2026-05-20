@@ -140,7 +140,7 @@ export default function NutritionTracker() {
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
               activeTab === tab
-                ? "bg-white text-text-primary shadow-sm"
+                ? "bg-accent/25 text-accent shadow-sm"
                 : "text-text-secondary hover:text-text-primary"
             }`}
           >

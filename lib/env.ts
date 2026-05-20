@@ -38,3 +38,6 @@ export const GOOGLE_CALENDAR_CLIENT_ID = getEnv("GOOGLE_CALENDAR_CLIENT_ID");
 export const GOOGLE_CALENDAR_CLIENT_SECRET = getEnv("GOOGLE_CALENDAR_CLIENT_SECRET");
 export const TAVILY_API_KEY = getEnv("TAVILY_API_KEY");
 export const CRON_SECRET = getEnv("CRON_SECRET");
+export const PLAID_CLIENT_ID = getEnv("PLAID_CLIENT_ID");
+export const PLAID_SECRET = getEnv("PLAID_SECRET");
+export const PLAID_ENV = getEnv("PLAID_ENV") || "sandbox";
