@@ -1,6 +1,6 @@
 "use client";
 import { useXP } from "@/hooks/useXP";
-import { RiBoltLine } from "react-icons/ri";
+import { RiFlashlightLine } from "react-icons/ri";
 
 export default function XPWidget() {
   const { totalXP, levelInfo, recentEvents, loaded } = useXP();
@@ -22,7 +22,7 @@ export default function XPWidget() {
             <p className="text-xs text-text-muted">{totalXP.toLocaleString()} XP total</p>
           </div>
         </div>
-        <RiBoltLine className="w-5 h-5 text-accent" />
+        <RiFlashlightLine className="w-5 h-5 text-accent" />
       </div>
 
       {/* XP progress bar */}
