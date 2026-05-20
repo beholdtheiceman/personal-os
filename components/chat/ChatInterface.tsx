@@ -368,8 +368,8 @@ export default function ChatInterface() {
 
   // ── Sidebar ──────────────────────────────────────────────────────────────
   const Sidebar = (
-    <div className="flex flex-col h-full w-64 border-r border-bg-border bg-bg-secondary shrink-0">
-      <div className="p-3 border-b border-bg-border">
+    <div className="flex flex-col h-full w-64 border-r border-white/10 shrink-0" style={{ background: "rgba(20, 8, 18, 0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+      <div className="p-3 border-b border-white/10">
         <button
           onClick={() => createChat()}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
@@ -391,8 +391,8 @@ export default function ChatInterface() {
               onClick={() => { setActiveChatId(chat.id); setSidebarOpen(false); }}
               className={`group relative flex items-start gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
                 chat.id === activeChatId
-                  ? "bg-accent/15 text-accent"
-                  : "hover:bg-bg-tertiary text-text-secondary"
+                  ? "bg-accent/20 text-accent"
+                  : "hover:bg-white/10 text-text-secondary"
               }`}
             >
               <RiChat1Line className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -451,10 +451,10 @@ export default function ChatInterface() {
       {/* Chat area */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Chat header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-bg-border bg-bg-secondary shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 shrink-0" style={{ background: "rgba(20, 8, 18, 0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
           <button
             onClick={() => setSidebarOpen(true)}
-            className="md:hidden p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+            className="md:hidden p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-white/10"
           >
             <RiMenuLine className="w-5 h-5" />
           </button>
@@ -484,7 +484,7 @@ export default function ChatInterface() {
           </div>
           <button
             onClick={() => createChat()}
-            className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+            className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-white/10"
             title="New chat"
           >
             <RiAddLine className="w-5 h-5" />
@@ -515,11 +515,14 @@ export default function ChatInterface() {
           ) : (
             messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] md:max-w-[70%] min-w-0 rounded-2xl px-4 py-3 overflow-hidden ${
-                  msg.role === "user"
-                    ? "bg-accent text-white rounded-tr-sm"
-                    : "bg-bg-secondary border border-bg-border rounded-tl-sm"
-                }`}>
+                <div
+                  className={`max-w-[85%] md:max-w-[70%] min-w-0 rounded-2xl px-4 py-3 overflow-hidden ${
+                    msg.role === "user"
+                      ? "bg-accent text-white rounded-tr-sm"
+                      : "border border-white/10 rounded-tl-sm"
+                  }`}
+                  style={msg.role === "assistant" ? { background: "rgba(35, 14, 28, 0.88)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" } : undefined}
+                >
                   {msg.image && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={msg.image} alt="Attached" className="rounded-xl mb-2 max-w-full max-h-48 object-cover" />
@@ -560,7 +563,7 @@ export default function ChatInterface() {
         </div>
 
         {/* Input bar */}
-        <div className="border-t border-bg-border bg-bg-secondary px-4 py-3 shrink-0">
+        <div className="border-t border-white/10 px-4 py-3 shrink-0" style={{ background: "rgba(20, 8, 18, 0.90)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
           {capturedImage && (
             <div className="relative inline-block mb-2 ml-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -576,6 +579,7 @@ export default function ChatInterface() {
           <div className="flex items-end gap-2 max-w-4xl mx-auto">
             <textarea
               className="input-base flex-1 resize-none min-h-[44px] max-h-40 py-2.5 text-sm"
+              style={{ background: "rgba(255,255,255,0.08)", color: "white", borderColor: "rgba(255,255,255,0.15)" }}
               placeholder={capturedImage ? "Ask about this image…" : "Message your AI assistant…"}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -588,7 +592,7 @@ export default function ChatInterface() {
             <button
               onClick={() => setShowCamera(true)}
               disabled={loading}
-              className="p-2.5 rounded-lg border transition-colors bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
+              className="p-2.5 rounded-lg border transition-colors bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
             >
               <RiCameraLine className="w-5 h-5" />
             </button>
@@ -596,7 +600,7 @@ export default function ChatInterface() {
               onClick={recording ? stopRecording : startRecording}
               disabled={loading}
               className={`p-2.5 rounded-lg border transition-colors ${
-                recording ? "bg-danger/20 text-danger border-danger/30 animate-pulse" : "bg-bg-tertiary text-text-secondary hover:text-text-primary border-bg-border"
+                recording ? "bg-danger/20 text-danger border-danger/30 animate-pulse" : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
               }`}
             >
               {recording ? <RiMicOffLine className="w-5 h-5" /> : <RiMicLine className="w-5 h-5" />}

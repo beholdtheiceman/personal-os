@@ -34,6 +34,16 @@ main,
   --color-text-muted:     rgba(255, 255, 255, 0.55);
 }
 
+/* Chat input placeholder → readable on dark surface */
+main textarea::placeholder,
+main input::placeholder {
+  color: rgba(255, 255, 255, 0.40);
+}
+main .card textarea::placeholder,
+main .card input::placeholder {
+  color: #8A6070;
+}
+
 /* Inside glass cards → restore dark readable text */
 main .card,
 .card {
