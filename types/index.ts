@@ -186,6 +186,29 @@ export interface Transaction {
   source: "manual" | "google-sheets";
 }
 
+// ─── Subscriptions ────────────────────────────────────────────────────────────
+export type BillingCycle = "weekly" | "monthly" | "quarterly" | "yearly";
+export type SubscriptionStatus = "active" | "cancelled" | "paused";
+export type SubscriptionCategory =
+  | "Entertainment" | "Productivity" | "Health & Fitness"
+  | "Finance" | "Utilities" | "Food & Drink" | "Gaming"
+  | "News & Media" | "Shopping" | "Other";
+
+export interface Subscription {
+  id: string;
+  name: string;
+  category: SubscriptionCategory;
+  amount: number;
+  billing_cycle: BillingCycle;
+  next_billing_date: string;   // YYYY-MM-DD
+  start_date: string;          // YYYY-MM-DD
+  status: SubscriptionStatus;
+  url?: string;
+  notes?: string;
+  plaid_stream_id?: string;    // linked Plaid recurring stream
+  created_at: string;
+}
+
 // ─── Projects ─────────────────────────────────────────────────────────────────
 export type ProjectStatus = "active" | "on-hold" | "completed";
 export type KanbanStatus = "todo" | "in_progress" | "done";

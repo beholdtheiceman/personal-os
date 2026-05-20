@@ -443,6 +443,40 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  // ── Subscriptions ──
+  {
+    name: "add_subscription",
+    description: "Add a recurring subscription or membership. Use when the user mentions a service they pay for regularly.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:              { type: "string", description: "Service name e.g. Netflix, Spotify" },
+        category:          { type: "string", enum: ["Entertainment","Productivity","Health & Fitness","Finance","Utilities","Food & Drink","Gaming","News & Media","Shopping","Other"] },
+        amount:            { type: "number", description: "Billing amount in USD" },
+        billing_cycle:     { type: "string", enum: ["weekly","monthly","quarterly","yearly"] },
+        next_billing_date: { type: "string", description: "Next renewal date YYYY-MM-DD" },
+        url:               { type: "string", description: "Service website (optional)" },
+        notes:             { type: "string", description: "Any extra notes (optional)" },
+      },
+      required: ["name", "amount", "billing_cycle"],
+    },
+  },
+  {
+    name: "update_subscription",
+    description: "Update or cancel an existing subscription. Search by name.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name_search:       { type: "string", description: "Partial subscription name to find it" },
+        status:            { type: "string", enum: ["active","paused","cancelled"] },
+        amount:            { type: "number" },
+        billing_cycle:     { type: "string", enum: ["weekly","monthly","quarterly","yearly"] },
+        next_billing_date: { type: "string", description: "YYYY-MM-DD" },
+      },
+      required: ["name_search"],
+    },
+  },
+
   // ── Chat ──
   {
     name: "rename_chat",
@@ -775,6 +809,39 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         const msg = e instanceof Error ? e.message : "Unknown error";
         return `Could not fetch email: ${msg}`;
       }
+    }
+
+    // ── Subscriptions ─────────────────────────────────────────────────────────
+    case "add_subscription": {
+      const today = makeToday(undefined);
+      await db.collection(`users/${uid}/subscriptions`).add({
+        name:              input.name,
+        category:          input.category ?? "Other",
+        amount:            input.amount,
+        billing_cycle:     input.billing_cycle,
+        next_billing_date: input.next_billing_date ?? today,
+        start_date:        today,
+        status:            "active",
+        url:               input.url ?? null,
+        notes:             input.notes ?? null,
+        created_at:        new Date().toISOString(),
+      });
+      return `Subscription "${input.name}" added — ${input.billing_cycle} at $${input.amount}.`;
+    }
+
+    case "update_subscription": {
+      const snap = await db.collection(`users/${uid}/subscriptions`).get();
+      const lower = (input.name_search as string).toLowerCase();
+      const sdoc = snap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower));
+      if (!sdoc) return `No subscription found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = {};
+      if (input.status            !== undefined) updates.status            = input.status;
+      if (input.amount            !== undefined) updates.amount            = input.amount;
+      if (input.billing_cycle     !== undefined) updates.billing_cycle     = input.billing_cycle;
+      if (input.next_billing_date !== undefined) updates.next_billing_date = input.next_billing_date;
+      await sdoc.ref.update(updates);
+      const action = input.status === "cancelled" ? "cancelled" : "updated";
+      return `Subscription "${sdoc.data().name}" ${action}.`;
     }
 
     // ── Second Brain ───────────────────────────────────────────────────────────
