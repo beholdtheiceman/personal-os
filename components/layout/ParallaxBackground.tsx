@@ -1,17 +1,4 @@
 "use client";
-import { useState, useEffect } from "react";
-
-const SKY_FRAMES = [
-  "/cherry-blossom/00 - Sky.png",
-  "/cherry-blossom/00 - Sky1.png",
-  "/cherry-blossom/00 - Sky2.png",
-  "/cherry-blossom/00 - Sky3.png",
-  "/cherry-blossom/00 - Sky4.png",
-  "/cherry-blossom/00 - Sky5.png",
-  "/cherry-blossom/00 - Sky6.png",
-  "/cherry-blossom/00 - Sky7.png",
-  "/cherry-blossom/00 - Sky8.png",
-];
 
 const LAYERS = [
   { src: "/cherry-blossom/01 - Mountains.png",   duration: "90s" },
@@ -20,18 +7,7 @@ const LAYERS = [
   { src: "/cherry-blossom/04 - Foreground.png",  duration: "16s" },
 ];
 
-// Solid fallback matching the sky base color — no white ever shows through
-const SKY_BASE = "#3ecfb2";
-
 export default function ParallaxBackground() {
-  const [skyFrame, setSkyFrame] = useState(0);
-
-  // Slow cycle — subtle star twinkle, no jarring flash
-  useEffect(() => {
-    const id = setInterval(() => setSkyFrame((f) => (f + 1) % SKY_FRAMES.length), 600);
-    return () => clearInterval(id);
-  }, []);
-
   const tileStyle: React.CSSProperties = {
     position: "absolute",
     inset: 0,
@@ -42,24 +18,16 @@ export default function ParallaxBackground() {
   };
 
   return (
-    // Solid base color — instantly visible, eliminates any white flash
-    <div className="fixed inset-0 -z-10 overflow-hidden" style={{ background: SKY_BASE }}>
+    <div className="fixed inset-0 -z-10 overflow-hidden">
+      {/* Static sky — one frame, no animation, no flickering */}
+      <div style={{
+        ...tileStyle,
+        backgroundImage: "url('/cherry-blossom/00 - Sky.png')",
+        backgroundPosition: "top",
+        backgroundRepeat: "repeat-x",
+      }} />
 
-      {/* Sky — all frames pre-rendered, cross-fade via opacity (no background-image swap) */}
-      {SKY_FRAMES.map((src, i) => (
-        <div
-          key={src}
-          style={{
-            ...tileStyle,
-            backgroundImage: `url('${src}')`,
-            backgroundPosition: "top",
-            opacity: i === skyFrame ? 1 : 0,
-            transition: "opacity 0.4s ease-in-out",
-          }}
-        />
-      ))}
-
-      {/* Parallax scroll layers — transparent PNGs composited over sky */}
+      {/* Parallax scroll layers */}
       {LAYERS.map(({ src, duration }) => (
         <div
           key={src}
