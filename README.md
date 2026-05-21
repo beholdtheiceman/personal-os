@@ -1,13 +1,13 @@
 # Personal OS
 
-A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude AI. Manage your tasks, habits, health, finances, and more — all in one place, with a conversational AI assistant that has full context of your life.
+A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude AI. Manage your tasks, habits, health, finances, relationships, and more — all in one place, with a conversational AI assistant that has full context of your life.
 
 ## Tech Stack
 
 - **Framework:** Next.js 15 (App Router), TypeScript
 - **Auth & Database:** Firebase Auth (Google SSO), Firestore
 - **Push Notifications:** Firebase Cloud Messaging (FCM)
-- **AI:** Anthropic Claude API (claude-sonnet-4, claude-haiku)
+- **AI:** Anthropic Claude API (claude-sonnet-4-6, claude-haiku-4-5)
 - **Styling:** Tailwind CSS, custom dark glass UI
 - **Background:** Pixel art cherry blossom parallax (4-layer scroll)
 - **Deployment:** Vercel
@@ -18,7 +18,7 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - Multi-conversation chat with persistent history
 - Full context of all your data (tasks, habits, health, goals, etc.)
 - Second Brain integration — sync your local Obsidian/markdown vault
-- Tool use: create tasks, log habits, schedule events, search Gmail, and more — all via natural language
+- 30+ tools: create tasks, log habits, schedule events, search Gmail, read Drive files, manage contacts, plan meals, and more — all via natural language
 - Auto-names conversations based on content
 - Voice input via Web Speech API
 - Image attachment support
@@ -45,6 +45,48 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - Inbox view with unread indicators
 - Read and search emails via AI chat
 - Dashboard inbox preview
+
+### 🤖 Email Agent
+- Automated Gmail scanner — runs daily via Vercel cron
+- Classifies emails as receipts or subscriptions using Claude Haiku
+- Auto-writes detected transactions to Finance and subscriptions to the Subscription tracker
+- `source: "email-agent"` tag on all auto-written records for easy filtering
+- Inbox analysis: Claude summarizes your inbox and flags unsubscribe candidates
+- Manual "Run now" trigger from dashboard widget
+- Dedup logic: fuzzy name match for subscriptions, description+amount+date for transactions
+
+### 🗓️ Weekly AI Review
+- Auto-generated every Sunday at 6 PM UTC via Vercel cron
+- Pulls tasks, habits, journal entries, health, nutrition, and goals for the week
+- Claude generates a structured 4-section report: Wins, Gaps, Insight, Focus for Next Week
+- Manual "Generate" button — trigger anytime, not just Sundays
+- Collapsed preview on dashboard with full expand
+
+### 🍽️ Meal Planner
+- Weekly meal grid (Mon–Sun × Breakfast/Lunch/Dinner/Snack)
+- Recipe library with search, ingredients, macros, and tags
+- Shopping list auto-generated from week's planned meals
+- Claude tools: add recipes, plan meals, read week's plan, generate shopping list via chat
+
+### 👥 People / Relationships CRM
+- Contact management: name, relationship type, email, phone, birthday, company, location
+- Interaction logging (call, text, email, in-person, social)
+- Contact frequency targets with "Needs attention" dashboard section
+- Follow-up dates and notes
+- Gift ideas per person
+- Google Contacts one-click import (OAuth, People API)
+- Claude tools: list contacts, add/update people, log interactions
+
+### ☁️ Google Drive
+- OAuth integration with read-only Drive access
+- File browser with search across file names and content
+- Preview Google Docs, Sheets, Slides, and plain text files inline
+- Claude tools: `search_drive`, `read_drive_file` — pull any doc into chat context
+
+### 🔗 Quick Links
+- Configurable grid of frequently visited sites on the dashboard
+- Auto-fetches favicons; optional emoji override
+- Add, remove, and edit links inline — persisted to Firestore
 
 ### 🎮 XP & Gamification
 - Level system with 75+ levels and unique titles
@@ -84,6 +126,7 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - Income and expense tracking with categories
 - Monthly net summary on dashboard
 - AI can log transactions via chat
+- Subscription tracker with renewal dates and monthly cost rollup
 
 ### 📁 Projects
 - Kanban-style project management (todo / in progress / done)
@@ -99,18 +142,17 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - Push notifications via FCM (Firebase Cloud Messaging)
 - Configurable categories: Morning Briefing, Streak Alerts, Task Reminders, Journal Reminder, Health Reminder, Weekly Review
 - Per-habit reminder times (multiple per day)
-- Cron-based delivery via Vercel (Hobby: once daily; Pro: flexible schedule)
+- Cron-based delivery via Vercel
 - Configure via UI or AI chat ("remind me every morning at 7am")
 
 ### 📊 Claude API Usage
 - Real-time token usage tracking (input/output) per conversation
 - Daily and monthly rollups stored in Firestore
 - Dashboard widget with 7-day bar chart and estimated cost
-- Pricing: $3 / $15 per 1M tokens (in / out) · Sonnet 4
 
 ### 🎨 UI / Design
 - Dark cherry-blossom glass aesthetic throughout
-- Pixel art parallax background (4 scrolling layers at different speeds)
+- Pixel art parallax background (4 scrolling layers)
 - Frosted glass cards (`backdrop-filter: blur`)
 - Accent: cherry blossom rose `#C4728A`
 - Fully responsive — mobile bottom nav, desktop top nav
@@ -120,12 +162,14 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 ```
 personal-os/
 ├── app/
-│   ├── (pages)/          # App routes (dashboard, tasks, habits, etc.)
-│   ├── api/              # API routes (chat, notifications, second-brain sync)
-│   └── globals.css       # Global styles, dark glass tokens, parallax keyframes
+│   ├── (pages)/          # App routes (dashboard, tasks, habits, drive, people, etc.)
+│   ├── api/              # API routes (chat, gmail, drive, weekly-review, etc.)
+│   └── globals.css       # Global styles, dark glass tokens
 ├── components/
 │   ├── chat/             # Multi-conversation chat interface
-│   ├── dashboard/        # Dashboard widgets (XP, API usage, etc.)
+│   ├── dashboard/        # Dashboard widgets (XP, API usage, email agent, weekly review, quick links)
+│   ├── meal-planner/     # Recipe library, weekly grid, shopping list
+│   ├── people/           # Contacts CRM, person detail, interaction log
 │   ├── habits/           # Habit tracker
 │   ├── tasks/            # Task manager
 │   ├── health/           # Health logging + charts
@@ -139,8 +183,8 @@ personal-os/
 │   ├── notifications/    # Notification settings
 │   ├── layout/           # TopNav, MobileNav, ParallaxBackground
 │   └── xp/               # XP widget + level system
-├── hooks/                # useAuth, useXP, useApiUsage, useNotifications, etc.
-├── lib/                  # Firebase, memory, XP, second-brain, env helpers
+├── hooks/                # useAuth, useXP, usePeople, useMealPlanner, useQuickLinks, etc.
+├── lib/                  # Firebase, memory, XP, gmail-token, drive-token, email-classifier, etc.
 ├── contexts/             # AuthContext, PlayerContext
 ├── public/
 │   └── cherry-blossom/   # Pixel art background PNGs (5 layers)
@@ -166,7 +210,7 @@ FIREBASE_PRIVATE_KEY=
 # AI
 ANTHROPIC_API_KEY=
 
-# Google OAuth (Calendar + Gmail)
+# Google OAuth (Calendar, Gmail, Drive, Contacts — all same client)
 GOOGLE_CALENDAR_CLIENT_ID=
 GOOGLE_CALENDAR_CLIENT_SECRET=
 
@@ -176,6 +220,32 @@ TAVILY_API_KEY=
 # Cron security
 CRON_SECRET=
 ```
+
+## Google Cloud Setup
+
+All Google integrations (Calendar, Gmail, Drive, Contacts) share a single OAuth 2.0 client. Required setup:
+
+1. **APIs to enable** in Google Cloud Console → APIs & Services → Library:
+   - Google Calendar API
+   - Gmail API
+   - Google Drive API
+   - People API (for Contacts import)
+
+2. **Authorized redirect URIs** to add to your OAuth client:
+   ```
+   http://localhost:3000/api/calendar/callback
+   http://localhost:3000/api/gmail/callback
+   http://localhost:3000/api/drive/callback
+   http://localhost:3000/api/people/contacts-callback
+   http://localhost:3001/api/calendar/callback
+   http://localhost:3001/api/gmail/callback
+   http://localhost:3001/api/drive/callback
+   http://localhost:3001/api/people/contacts-callback
+   https://your-app.vercel.app/api/calendar/callback
+   https://your-app.vercel.app/api/gmail/callback
+   https://your-app.vercel.app/api/drive/callback
+   https://your-app.vercel.app/api/people/contacts-callback
+   ```
 
 ## Getting Started
 
@@ -202,25 +272,40 @@ users/{uid}/
 ├── health/{YYYY-MM-DD}
 ├── goals/{goalId}
 ├── transactions/{txId}
+├── subscriptions/{subId}
 ├── projects/{projectId}/
 │   └── cards/{cardId}
+├── recipes/{recipeId}
+├── meal_plans/{weekStart}
+├── shopping_lists/{weekStart}
+├── people/{personId}/
+│   └── interactions/{interactionId}
 ├── memory/{entryId}
 ├── second_brain/{path}
+├── weekly_reviews/latest
 ├── xp/summary
 ├── xp_events/{eventId}
 ├── api_usage/{YYYY-MM-DD}
-├── settings/notifications
-├── settings/chat_migration
+├── agent_runs/gmail
+├── settings/
+│   ├── notifications
+│   ├── quick_links
+│   └── chat_migration
 └── integrations/
     ├── gmail
-    └── google_calendar
+    ├── google_calendar
+    └── drive
 ```
+
+## Cron Jobs (`vercel.json`)
+
+| Schedule | Route | Purpose |
+|---|---|---|
+| `0 12 * * *` | `/api/notifications/daily` | Morning briefing push notification |
+| `0 13 * * *` | `/api/notifications/habits` | Habit reminder push notification |
+| `0 14 * * *` | `/api/gmail/agent` | Email agent — scan inbox, auto-write transactions/subscriptions |
+| `0 18 * * 0` | `/api/weekly-review` | Sunday weekly AI review |
 
 ## Deployment
 
 Deployed on Vercel. Push to `main` branch to trigger a production deploy.
-
-- `main` → production
-- `dev` → development / staging (merge to main manually after verification)
-
-Cron jobs are configured in `vercel.json` for notification delivery. Vercel Hobby plan supports once-daily crons; upgrade to Pro for sub-daily scheduling.
