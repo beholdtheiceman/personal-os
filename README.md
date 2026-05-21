@@ -137,9 +137,11 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - Card management via AI chat
 
 ### 🎵 Media Player
-- YouTube playlist player
-- Background playback with mini player
-- Persists across navigation
+- YouTube search and playback
+- **The Crate** — personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) from your computer, stored on Vercel Blob, streams via audio proxy
+- Tab switcher between YouTube and The Crate
+- Persistent MiniPlayer bar across all pages — dark glass aesthetic with cherry blossom accent
+- Background playback persists across navigation
 
 ### 🔔 Notifications
 - Push notifications via FCM (Firebase Cloud Messaging)
@@ -219,6 +221,11 @@ GOOGLE_CALENDAR_CLIENT_SECRET=
 
 # Web Search
 TAVILY_API_KEY=
+
+# Vercel Blob (audio file storage for The Crate)
+# Vercel Dashboard → Storage → Create Blob Store (Public access)
+# Token is auto-injected when linked to your project, or use: npx vercel env pull
+BLOB_READ_WRITE_TOKEN=
 
 # Google Health (sleep, steps, exercise, heart rate)
 # Enable "Cloud Healthcare API" in Google Cloud Console > APIs & Services > Library

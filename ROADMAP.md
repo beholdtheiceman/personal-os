@@ -32,8 +32,7 @@
 
 ## 🔄 In Progress / Partially Done
 
-- **Suno playback** — URL-based track saving works; Suno CDN requires auth so playback needs a storage solution for uploaded MP3s
-  - Options: Firebase Storage (Blaze plan upgrade), Vercel Blob (500MB free), Cloudflare R2 (10GB free)
+- **The Crate** — Personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) directly from your computer via Vercel Blob storage; files persist and stream through the audio proxy; YouTube + The Crate tab switcher on Media page; MiniPlayer redesigned to match dark glass aesthetic
 
 ---
 
