@@ -1,4 +1,4 @@
-// GET /api/health/callback — Google redirects here after Health API OAuth consent
+// GET /api/health/callback — Google Fit OAuth callback
 import { NextRequest, NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     if (tokens.error) throw new Error(tokens.error_description ?? tokens.error);
 
     const db = getAdminDb();
-    await db.doc(`users/${uid}/integrations/google_health`).set({
+    await db.doc(`users/${uid}/integrations/google_fit`).set({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expires_at: Date.now() + tokens.expires_in * 1000,
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(`${req.nextUrl.origin}/health?connected=true`);
   } catch (err) {
-    console.error("Health OAuth callback error:", err);
+    console.error("Google Fit OAuth callback error:", err);
     return NextResponse.redirect(`${req.nextUrl.origin}/health?error=token_exchange_failed`);
   }
 }

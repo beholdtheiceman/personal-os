@@ -229,8 +229,11 @@ export default function DashboardPage() {
     if (!task) return;
     const newStatus = task.status === "completed" ? "active" : "completed";
     await updateDoc(doc(db, "users", user.uid, "tasks", id), { status: newStatus });
+    const xp = taskXP(task.priority_score ?? 50);
     if (newStatus === "completed") {
-      await awardXP(user.uid, taskXP(task.priority_score ?? 50), "task_complete", `Task: ${task.title}`, totalXP);
+      await awardXP(user.uid, xp, "task_complete", `Task: ${task.title}`, totalXP);
+    } else {
+      await awardXP(user.uid, -xp, "task_complete", `Task uncompleted: ${task.title}`, totalXP);
     }
   };
 

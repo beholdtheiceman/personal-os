@@ -73,9 +73,11 @@ export default function TasksManager() {
     if (!task || !user) return;
     const newStatus: TaskStatus = task.status === "completed" ? "active" : "completed";
     await updateDoc(doc(db, "users", user.uid, "tasks", id), { status: newStatus });
+    const xp = taskXP(task.priority_score ?? 50);
     if (newStatus === "completed") {
-      const xp = taskXP(task.priority_score ?? 50);
       await awardXP(user.uid, xp, "task_complete", `Task: ${task.title}`, totalXP);
+    } else {
+      await awardXP(user.uid, -xp, "task_complete", `Task uncompleted: ${task.title}`, totalXP);
     }
   };
 

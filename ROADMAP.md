@@ -4,7 +4,7 @@
 
 - **Phase 1** — App shell, Firebase Auth, Memory System, AI Chat, QuickLog, Daily AI Report
 - **Phase 2** — Task Manager (AI priority scoring), Habit Tracker, Google Calendar integration
-- **Phase 3** — Journal (voice + AI summary), Nutrition Tracker, Health Tab + Google Health/Fitbit OAuth
+- **Phase 3** — Journal (voice + AI summary), Nutrition Tracker, Health Tab + Google Fit OAuth (sleep, steps, exercise)
 - **Phase 4** — Goals (milestones + AI check-ins), Projects (Kanban), Finance Tracker
 - **Chat Tool Use** — 30+ tools: full CRUD across tasks, calendar, habits, nutrition, health, journal, goals, finance, projects, memory, meal planner, people CRM, Drive
 - **Second Brain** — PARA vault auto-injected into chat context, search + capture tools
@@ -25,6 +25,7 @@
 - **Weekly AI Review** — Sunday cron + manual trigger: Wins / Gaps / Insight / Focus for Next Week
 - **Google Drive** — OAuth, file browser, content preview (Docs/Sheets/Slides), chat tools (search + read)
 - **People / Relationships CRM** — Contacts, interaction history, contact frequency targets, follow-ups, gift ideas, Google Contacts import, Claude tools
+- **Persistent Chat Panel** — Slide-in panel from right (400px desktop, full-screen mobile), pushes content, session-persistent state, Chat toggle in TopNav + MobileNav, full `/chat` page still available
 
 ---
 

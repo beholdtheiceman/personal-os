@@ -4,38 +4,39 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   RiDashboardLine, RiTaskLine, RiRobot2Line, RiMailLine, RiMusicLine,
-  RiLoopLeftLine, RiCalendarLine, RiDiscordLine, RiDatabase2Line,
+  RiLoopLeftLine, RiCalendarLine, RiDatabase2Line,
   RiBookLine, RiBowlLine, RiHeartPulseLine, RiLineChartLine,
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line, RiRestaurantLine,
-  RiGoogleLine, RiContactsBook2Line,
+  RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line,
 } from "react-icons/ri";
+import { useChatPanel } from "@/contexts/ChatPanelContext";
 
 const PRIMARY = [
-  { href: "/dashboard", label: "Home",  icon: RiDashboardLine },
-  { href: "/tasks",     label: "Tasks", icon: RiTaskLine },
-  { href: "/gmail",     label: "Gmail", icon: RiMailLine },
-  { href: "/chat",      label: "Chat",  icon: RiRobot2Line },
+  { href: "/dashboard", label: "Home",     icon: RiDashboardLine },
+  { href: "/tasks",     label: "Tasks",    icon: RiTaskLine },
+  { href: "/gmail",     label: "Gmail",    icon: RiMailLine },
+  { href: "/habits",    label: "Habits",   icon: RiLoopLeftLine },
 ];
 
 const MORE = [
-  { href: "/habits",    label: "Habits",    icon: RiLoopLeftLine },
-  { href: "/calendar",  label: "Calendar",  icon: RiCalendarLine },
-  { href: "/projects",  label: "Projects",  icon: RiFolderLine },
-  { href: "/media",     label: "Media",     icon: RiMusicLine },
-  { href: "/memory",    label: "Memory",    icon: RiDatabase2Line },
-  { href: "/journal",   label: "Journal",   icon: RiBookLine },
-  { href: "/nutrition",    label: "Nutrition",    icon: RiBowlLine },
-  { href: "/meal-planner", label: "Meal Planner", icon: RiRestaurantLine },
-  { href: "/health",    label: "Health",    icon: RiHeartPulseLine },
-  { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
-  { href: "/finance",   label: "Finance",   icon: RiMoneyDollarCircleLine },
-  { href: "/people",    label: "People",    icon: RiContactsBook2Line },
-  { href: "/drive",     label: "Drive",     icon: RiGoogleLine },
-  // { href: "/discord", label: "Discord",   icon: RiDiscordLine }, // hidden — re-enable when Discord integration is ready
+  { href: "/chat",         label: "Chat (Full)",   icon: RiRobot2Line },
+  { href: "/calendar",     label: "Calendar",      icon: RiCalendarLine },
+  { href: "/projects",     label: "Projects",      icon: RiFolderLine },
+  { href: "/media",        label: "Media",         icon: RiMusicLine },
+  { href: "/memory",       label: "Memory",        icon: RiDatabase2Line },
+  { href: "/journal",      label: "Journal",       icon: RiBookLine },
+  { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
+  { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
+  { href: "/health",       label: "Health",        icon: RiHeartPulseLine },
+  { href: "/goals",        label: "Goals",         icon: RiLineChartLine },
+  { href: "/finance",      label: "Finance",       icon: RiMoneyDollarCircleLine },
+  { href: "/people",       label: "People",        icon: RiContactsBook2Line },
+  { href: "/drive",        label: "Drive",         icon: RiGoogleLine },
 ];
 
 export default function MobileNav() {
   const pathname = usePathname();
+  const { isOpen: panelOpen, toggle: togglePanel } = useChatPanel();
   const [open, setOpen] = useState(false);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const moreActive = MORE.some((n) => isActive(n.href));
@@ -59,6 +60,17 @@ export default function MobileNav() {
             <span>{label}</span>
           </Link>
         ))}
+
+        {/* Chat panel toggle */}
+        <button
+          onClick={togglePanel}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs transition-colors ${
+            panelOpen ? "text-accent" : "text-text-secondary"
+          }`}
+        >
+          <RiChatSmile2Line className="w-5 h-5" />
+          <span>Chat</span>
+        </button>
 
         {/* More button */}
         <button

@@ -36,7 +36,9 @@ export async function awardXP(
       duration: 4000,
       style: { fontWeight: "600" },
     });
-  } else {
+  } else if (amount >= 0) {
     toast(`⚡ +${amount} XP`, { duration: 1500, style: { fontSize: "0.85rem" } });
+  } else {
+    toast(`−${Math.abs(amount)} XP`, { duration: 1500, style: { fontSize: "0.85rem", opacity: "0.7" } });
   }
 }

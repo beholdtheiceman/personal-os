@@ -217,6 +217,11 @@ GOOGLE_CALENDAR_CLIENT_SECRET=
 # Web Search
 TAVILY_API_KEY=
 
+# Google Fit (Health integration — sleep, steps, exercise)
+# Enable "Fitness API" in Google Cloud Console > APIs & Services > Library
+# Add /api/health/callback to your Google OAuth client redirect URIs
+# No extra credentials needed — uses existing GOOGLE_CALENDAR_CLIENT_ID/SECRET
+
 # Cron security
 CRON_SECRET=
 ```
@@ -237,14 +242,17 @@ All Google integrations (Calendar, Gmail, Drive, Contacts) share a single OAuth 
    http://localhost:3000/api/gmail/callback
    http://localhost:3000/api/drive/callback
    http://localhost:3000/api/people/contacts-callback
+   http://localhost:3000/api/health/googlefit-callback
    http://localhost:3001/api/calendar/callback
    http://localhost:3001/api/gmail/callback
    http://localhost:3001/api/drive/callback
    http://localhost:3001/api/people/contacts-callback
+   http://localhost:3001/api/health/googlefit-callback
    https://your-app.vercel.app/api/calendar/callback
    https://your-app.vercel.app/api/gmail/callback
    https://your-app.vercel.app/api/drive/callback
    https://your-app.vercel.app/api/people/contacts-callback
+   https://your-app.vercel.app/api/health/googlefit-callback
    ```
 
 ## Getting Started

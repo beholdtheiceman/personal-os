@@ -1,4 +1,4 @@
-// GET /api/health/auth?uid=... — redirects to Google OAuth for Health API access
+// GET /api/health/auth?uid=... — redirects to Google Health API OAuth
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
@@ -15,8 +15,9 @@ export async function GET(req: NextRequest) {
     redirect_uri: `${req.nextUrl.origin}/api/health/callback`,
     response_type: "code",
     scope: [
-      "https://www.googleapis.com/auth/googlehealth.sleep.readonly",
       "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+      "https://www.googleapis.com/auth/googlehealth.sleep.readonly",
+      "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
     ].join(" "),
     access_type: "offline",
     prompt: "consent",

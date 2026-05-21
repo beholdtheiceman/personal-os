@@ -1,4 +1,4 @@
-// GET /api/health/data?uid=... — fetches sleep and activity from Google Health API
+// GET /api/health/data?uid=... — fetches sleep, steps, and activity from Google Health API
 import { NextRequest, NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -22,7 +22,7 @@ function getAdminDb() {
   return getFirestore();
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<string> {
+async function refreshAccessToken(uid: string, refreshToken: string): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -35,39 +35,59 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error_description ?? data.error);
-  return data.access_token;
+
+  const db = getAdminDb();
+  await db.doc(`users/${uid}/integrations/google_fit`).update({
+    access_token: data.access_token,
+    expires_at: Date.now() + data.expires_in * 1000,
+  });
+  return data.access_token as string;
 }
 
-const BASE = "https://health.googleapis.com/v4/users/-";
+const BASE = "https://health.googleapis.com/v4/users/me";
 
-async function fetchDataPoints(
+async function fetchAllDataPoints(
   dataType: string,
-  params: URLSearchParams,
   token: string
 ): Promise<Record<string, unknown>[]> {
-  const res = await fetch(
-    `${BASE}/dataTypes/${dataType}/dataPoints?${params.toString()}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.dataPoints ?? [];
+  const allPoints: Record<string, unknown>[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const url = new URL(`${BASE}/dataTypes/${dataType}/dataPoints`);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+    const raw = await res.json();
+    if (!res.ok) {
+      console.error(`Health API error for ${dataType}:`, res.status, raw);
+      break;
+    }
+    const points = (raw.dataPoints ?? []) as Record<string, unknown>[];
+    allPoints.push(...points);
+    pageToken = raw.nextPageToken as string | undefined;
+  } while (pageToken);
+
+  return allPoints;
 }
 
-async function fetchDailyRollup(
-  dataType: string,
-  date: string,
-  token: string
-): Promise<Record<string, unknown> | null> {
-  const res = await fetch(
-    `${BASE}/dataTypes/${dataType}/dataPoints:dailyRollUp?date=${date}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!res.ok) return null;
-  const json = await res.json();
-  // dailyRollUp returns an array; grab the entry matching our date
-  const entries: Record<string, unknown>[] = json.dataPoints ?? [];
-  return entries.find((e) => e.date === date) ?? entries[0] ?? null;
+// Helper: get interval startTime from a data point (type-specific paths)
+function getPointStartTime(pt: Record<string, unknown>, dataType: string): number {
+  let startStr: string | undefined;
+  if (dataType === "sleep") {
+    startStr = (pt.sleep as Record<string, unknown> | undefined)?.interval
+      ? ((pt.sleep as Record<string, unknown>).interval as Record<string, unknown>)?.startTime as string
+      : undefined;
+  } else if (dataType === "steps") {
+    startStr = (pt.steps as Record<string, unknown> | undefined)?.interval
+      ? ((pt.steps as Record<string, unknown>).interval as Record<string, unknown>)?.startTime as string
+      : undefined;
+  } else if (dataType === "exercise") {
+    startStr = (pt.exercise as Record<string, unknown> | undefined)?.interval
+      ? ((pt.exercise as Record<string, unknown>).interval as Record<string, unknown>)?.startTime as string
+      : undefined;
+  }
+  return startStr ? new Date(startStr).getTime() : 0;
 }
 
 export async function GET(req: NextRequest) {
@@ -80,68 +100,158 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = getAdminDb();
-    const tokenDoc = await db.doc(`users/${uid}/integrations/google_health`).get();
+    const tokenDoc = await db.doc(`users/${uid}/integrations/google_fit`).get();
 
-    if (!tokenDoc.exists) {
+    if (!tokenDoc.exists || !tokenDoc.data()?.refresh_token) {
       return NextResponse.json({ connected: false });
     }
 
     const tokenData = tokenDoc.data()!;
-    let accessToken: string = tokenData.access_token;
-
+    let token: string = tokenData.access_token;
     if (Date.now() > tokenData.expires_at - 60000) {
-      accessToken = await refreshAccessToken(tokenData.refresh_token);
-      await tokenDoc.ref.update({
-        access_token: accessToken,
-        expires_at: Date.now() + 3600 * 1000,
-      });
+      token = await refreshAccessToken(uid, tokenData.refresh_token);
     }
 
-    const today = new Date().toISOString().split("T")[0];
-    // Sleep is typically from the previous night — fetch yesterday's sleep
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    const now = new Date();
+    // Use 24-hour lookback for steps/exercise — avoids UTC-midnight timezone drift
+    // while still capturing a full day's worth of data.
+    const stepsStart = now.getTime() - 24 * 3600000;
+    const todayEnd = now.getTime();
 
-    // Fetch in parallel: yesterday's sleep session, today's steps rollup, today's exercises
-    const [sleepPoints, stepsRollup, exercisePoints] = await Promise.all([
-      fetchDataPoints(
-        "sleep",
-        new URLSearchParams({ startDate: yesterday, endDate: today }),
-        accessToken
-      ),
-      fetchDailyRollup("steps", today, accessToken),
-      fetchDataPoints(
-        "exercise",
-        new URLSearchParams({ startDate: today, endDate: today }),
-        accessToken
-      ),
+    // Sleep window: yesterday 6 PM → today noon (covers overnight sleep)
+    const sleepWindowStart = now.getTime() - 30 * 3600000;
+    const sleepWindowEnd = now.getTime() + 12 * 3600000;
+
+    // Today's date parts for heart rate matching
+    const todayYear = now.getFullYear();
+    const todayMonth = now.getMonth() + 1; // 1-indexed
+    const todayDay = now.getDate();
+
+    // Fetch all in parallel
+    const [allSleep, allSteps, allExercise, allHr] = await Promise.all([
+      fetchAllDataPoints("sleep", token),
+      fetchAllDataPoints("steps", token),
+      fetchAllDataPoints("exercise", token),
+      fetchAllDataPoints("daily-resting-heart-rate", token),
     ]);
 
-    // Parse the most recent sleep session
-    const latestSleep = sleepPoints.at(-1) as Record<string, unknown> | undefined;
-    const sleepVal = latestSleep?.value as Record<string, unknown> | undefined;
-    const sleep_hours = sleepVal
-      ? Math.round(((sleepVal.durationMillis as number) / 3600000) * 10) / 10
-      : null;
-    const sleep_efficiency = (sleepVal?.efficiency as number) ?? null;
-    // Map efficiency (0-100) to quality (1-10)
-    const sleep_quality = sleep_efficiency !== null
-      ? Math.max(1, Math.min(10, Math.round(sleep_efficiency / 10)))
+    // ── SLEEP ────────────────────────────────────────────────────────────────
+    // Filter to sleep window, pick the most recent (longest) session
+    const sleepPoints = allSleep.filter((pt) => {
+      const t = getPointStartTime(pt, "sleep");
+      return t >= sleepWindowStart && t <= sleepWindowEnd;
+    });
+
+    // Pick the sleep session with the most minutesAsleep
+    let sleep_hours: number | null = null;
+    let sleep_quality: number | null = null;
+    let sleep_efficiency: number | null = null;
+
+    if (sleepPoints.length > 0) {
+      const best = sleepPoints.reduce((prev, cur) => {
+        const prevMins = parseInt(
+          ((prev.sleep as Record<string, unknown>)?.summary as Record<string, unknown>)
+            ?.minutesAsleep as string ?? "0",
+          10
+        );
+        const curMins = parseInt(
+          ((cur.sleep as Record<string, unknown>)?.summary as Record<string, unknown>)
+            ?.minutesAsleep as string ?? "0",
+          10
+        );
+        return curMins > prevMins ? cur : prev;
+      });
+
+      const sleepData = best.sleep as Record<string, unknown> | undefined;
+      const summary = sleepData?.summary as Record<string, unknown> | undefined;
+      const minutesAsleep = summary?.minutesAsleep
+        ? parseInt(summary.minutesAsleep as string, 10)
+        : null;
+
+      if (minutesAsleep !== null && minutesAsleep > 0) {
+        sleep_hours = Math.round((minutesAsleep / 60) * 10) / 10;
+
+        // Compute efficiency from stages if available
+        const stages = (summary?.stagesSummary ?? []) as Array<Record<string, unknown>>;
+        const totalMinutes = stages.reduce(
+          (sum, s) => sum + parseInt(s.minutes as string ?? "0", 10),
+          0
+        );
+        if (totalMinutes > 0) {
+          // Efficiency = non-awake minutes / total minutes
+          const awakeStage = stages.find((s) => (s.type as string)?.toLowerCase() === "awake");
+          const awakeMins = awakeStage ? parseInt(awakeStage.minutes as string ?? "0", 10) : 0;
+          const eff = Math.round(((totalMinutes - awakeMins) / totalMinutes) * 100);
+          sleep_efficiency = eff;
+          sleep_quality = Math.max(1, Math.min(10, Math.round(eff / 10)));
+        }
+      }
+    }
+
+    // ── STEPS ────────────────────────────────────────────────────────────────
+    // Sum all step counts recorded today
+    const todayStepPoints = allSteps.filter((pt) => {
+      const t = getPointStartTime(pt, "steps");
+      return t >= stepsStart && t <= todayEnd;
+    });
+
+    const steps: number | null = todayStepPoints.length > 0
+      ? todayStepPoints.reduce((sum, pt) => {
+          const stepsData = pt.steps as Record<string, unknown> | undefined;
+          const count = stepsData?.count ? parseInt(stepsData.count as string, 10) : 0;
+          return sum + (isNaN(count) ? 0 : count);
+        }, 0)
       : null;
 
-    // Parse steps
-    const stepsVal = stepsRollup?.value as Record<string, unknown> | undefined;
-    const steps = (stepsVal?.intVal as number) ?? (stepsVal?.fpVal as number) ?? null;
+    // ── HEART RATE ───────────────────────────────────────────────────────────
+    // Find today's resting heart rate record by date match
+    const todayHr = allHr.find((pt) => {
+      const hrData = pt.dailyRestingHeartRate as Record<string, unknown> | undefined;
+      const date = hrData?.date as Record<string, unknown> | undefined;
+      return (
+        date &&
+        Number(date.year) === todayYear &&
+        Number(date.month) === todayMonth &&
+        Number(date.day) === todayDay
+      );
+    });
 
-    // Parse exercises
-    const exercises = (exercisePoints as Record<string, unknown>[]).map((pt) => {
-      const v = pt.value as Record<string, unknown> | undefined;
-      return {
-        name: (v?.activityType as string) ?? "Workout",
-        duration_minutes: v?.durationMillis
-          ? Math.round((v.durationMillis as number) / 60000)
-          : null,
-        calories: (v?.calories as number) ?? null,
-      };
+    let resting_heart_rate: number | null = null;
+    if (todayHr) {
+      const hrData = todayHr.dailyRestingHeartRate as Record<string, unknown> | undefined;
+      const bpm = hrData?.beatsPerMinute;
+      if (bpm !== undefined) {
+        const parsed = parseInt(bpm as string, 10);
+        resting_heart_rate = isNaN(parsed) ? null : parsed;
+      }
+    }
+
+    // ── EXERCISE ─────────────────────────────────────────────────────────────
+    const todayExercisePoints = allExercise.filter((pt) => {
+      const t = getPointStartTime(pt, "exercise");
+      return t >= stepsStart && t <= todayEnd;
+    });
+
+    const exercises = todayExercisePoints.map((pt) => {
+      const ex = pt.exercise as Record<string, unknown> | undefined;
+      const name = (ex?.displayName as string) ?? "Workout";
+
+      // activeDuration is a string like "1793s"
+      let duration_minutes: number | null = null;
+      if (ex?.activeDuration) {
+        const durStr = ex.activeDuration as string;
+        const seconds = parseFloat(durStr.replace("s", ""));
+        if (!isNaN(seconds)) {
+          duration_minutes = Math.round(seconds / 60);
+        }
+      }
+
+      const metrics = ex?.metricsSummary as Record<string, unknown> | undefined;
+      const calories = metrics?.caloriesKcal != null
+        ? Math.round(metrics.caloriesKcal as number)
+        : null;
+
+      return { name, duration_minutes, calories };
     });
 
     return NextResponse.json({
@@ -150,11 +260,12 @@ export async function GET(req: NextRequest) {
       sleep_quality,
       sleep_efficiency,
       steps,
+      resting_heart_rate,
       exercises,
       fetched_at: new Date().toISOString(),
     });
   } catch (err) {
     console.error("Google Health data error:", err);
-    return NextResponse.json({ connected: false, error: "Failed to fetch health data" });
+    return NextResponse.json({ connected: false, error: String(err) });
   }
 }

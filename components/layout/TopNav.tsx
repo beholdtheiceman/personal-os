@@ -6,12 +6,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import Image from "next/image";
 import {
   RiDashboardLine, RiTaskLine, RiCalendarLine, RiMailLine,
-  RiDiscordLine, RiRobot2Line, RiLoopLeftLine, RiMusicLine,
+  RiRobot2Line, RiLoopLeftLine, RiMusicLine,
   RiDatabase2Line, RiBookLine, RiBowlLine, RiHeartPulseLine,
   RiLineChartLine, RiMoneyDollarCircleLine, RiFolderLine,
   RiMoreLine, RiLogoutBoxLine, RiSettings3Line, RiRestaurantLine,
-  RiGoogleLine, RiContactsBook2Line,
+  RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line,
 } from "react-icons/ri";
+import { useChatPanel } from "@/contexts/ChatPanelContext";
 
 const PRIMARY_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: RiDashboardLine },
@@ -21,25 +22,25 @@ const PRIMARY_NAV = [
   { href: "/gmail",     label: "Gmail",     icon: RiMailLine },
   { href: "/projects",  label: "Projects",  icon: RiFolderLine },
   { href: "/media",     label: "Media",     icon: RiMusicLine },
-  { href: "/chat",      label: "Chat",      icon: RiRobot2Line },
-  // { href: "/discord", label: "Discord",  icon: RiDiscordLine }, // hidden — re-enable when Discord integration is ready
 ];
 
 const MORE_NAV = [
-  { href: "/memory",    label: "Memory",    icon: RiDatabase2Line },
-  { href: "/journal",   label: "Journal",   icon: RiBookLine },
-  { href: "/nutrition",    label: "Nutrition",    icon: RiBowlLine },
-  { href: "/meal-planner", label: "Meal Planner", icon: RiRestaurantLine },
-  { href: "/health",    label: "Health",    icon: RiHeartPulseLine },
-  { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
-  { href: "/finance",   label: "Finance",   icon: RiMoneyDollarCircleLine },
-  { href: "/people",    label: "People",    icon: RiContactsBook2Line },
-  { href: "/drive",     label: "Drive",     icon: RiGoogleLine },
+  { href: "/chat",         label: "Chat (Full)",   icon: RiRobot2Line },
+  { href: "/memory",       label: "Memory",        icon: RiDatabase2Line },
+  { href: "/journal",      label: "Journal",       icon: RiBookLine },
+  { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
+  { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
+  { href: "/health",       label: "Health",        icon: RiHeartPulseLine },
+  { href: "/goals",        label: "Goals",         icon: RiLineChartLine },
+  { href: "/finance",      label: "Finance",       icon: RiMoneyDollarCircleLine },
+  { href: "/people",       label: "People",        icon: RiContactsBook2Line },
+  { href: "/drive",        label: "Drive",         icon: RiGoogleLine },
 ];
 
 export default function TopNav() {
   const pathname = usePathname();
   const { user, signOutUser } = useAuth();
+  const { isOpen: panelOpen, toggle: togglePanel } = useChatPanel();
   const [moreOpen, setMoreOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -136,6 +137,20 @@ export default function TopNav() {
           )}
         </div>
       </nav>
+
+      {/* Chat panel toggle */}
+      <button
+        onClick={togglePanel}
+        className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+          panelOpen
+            ? "bg-accent/20 text-accent"
+            : "text-text-secondary hover:text-text-primary hover:bg-white/10"
+        }`}
+        title="Toggle chat panel"
+      >
+        <RiChatSmile2Line className="w-4 h-4" />
+        <span className="hidden lg:inline">Chat</span>
+      </button>
 
       {/* User menu — visible on all screen sizes */}
       <div ref={userRef} className="relative shrink-0">
