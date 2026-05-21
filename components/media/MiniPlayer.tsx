@@ -101,8 +101,13 @@ export default function MiniPlayer() {
       {expanded && <ExpandedPlayer onCollapse={() => setExpanded(false)} />}
 
       <div
-        className="fixed bottom-[57px] md:bottom-0 left-0 right-0 z-30 px-4 py-2 flex items-center gap-3"
-        style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderTop: "1px solid rgba(255,255,255,0.6)" }}
+        className="fixed bottom-[57px] md:bottom-0 left-0 right-0 z-30 px-4 py-2.5 flex items-center gap-3"
+        style={{
+          background: "rgba(15, 6, 13, 0.92)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+          borderTop: "1px solid rgba(196, 114, 138, 0.2)",
+        }}
       >
         {/* Album art / icon — click to expand */}
         <button
@@ -118,28 +123,28 @@ export default function MiniPlayer() {
               className="w-9 h-9 rounded-md object-cover"
             />
           ) : (
-            <div className="w-9 h-9 rounded-md bg-accent/15 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-md bg-accent/20 flex items-center justify-center">
               {currentTrack.type === "youtube"
                 ? <RiYoutubeLine className="w-4 h-4 text-red-400" />
                 : <RiMusicLine className="w-4 h-4 text-accent" />}
             </div>
           )}
-          <div className="absolute inset-0 rounded-md bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+          <div className="absolute inset-0 rounded-md bg-black/0 group-hover:bg-white/10 flex items-center justify-center transition-colors">
             <RiArrowUpLine className="w-3.5 h-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
         </button>
 
         {/* Title — also clickable to expand */}
         <button onClick={() => setExpanded(true)} className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-medium text-text-primary truncate">{currentTrack.title}</p>
-          <p className="text-xs text-text-muted">{currentTrack.type === "youtube" ? "YouTube" : "The Crate"}</p>
+          <p className="text-sm font-medium text-white truncate">{currentTrack.title}</p>
+          <p className="text-xs text-accent/70">{currentTrack.type === "youtube" ? "YouTube" : "The Crate"}</p>
         </button>
 
         {/* Volume */}
         <div className="hidden sm:flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => setVolume(volume === 0 ? 80 : 0)}
-            className="text-text-muted hover:text-text-primary transition-colors"
+            className="text-white/40 hover:text-white/80 transition-colors"
             aria-label={volume === 0 ? "Unmute" : "Mute"}
           >
             {volume === 0 ? <RiVolumeMuteLine className="w-4 h-4" /> : <RiVolumeUpLine className="w-4 h-4" />}
@@ -159,14 +164,14 @@ export default function MiniPlayer() {
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={isPlaying ? pause : resume}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-bg-tertiary text-text-primary transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-accent/20 hover:bg-accent/40 text-white transition-colors"
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? <RiPauseLine className="w-4 h-4" /> : <RiPlayLine className="w-4 h-4" />}
           </button>
           <button
             onClick={stop}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-bg-tertiary text-text-muted transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors"
             aria-label="Stop"
           >
             <RiStopLine className="w-4 h-4" />

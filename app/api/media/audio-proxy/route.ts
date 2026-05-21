@@ -50,9 +50,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Host not allowed" }, { status: 403 });
   }
 
-  // Vercel Blob files are public — serve directly without spoofing Suno headers
+  // Vercel Blob — private store requires the read/write token for access
   if (isVercelBlob) {
-    const upstream = await fetch(url);
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    const headers: Record<string, string> = {};
+    if (blobToken) headers["Authorization"] = `Bearer ${blobToken}`;
+    const upstream = await fetch(url, { headers });
     if (!upstream.ok) {
       return NextResponse.json({ error: `Upstream returned ${upstream.status}` }, { status: upstream.status });
     }
