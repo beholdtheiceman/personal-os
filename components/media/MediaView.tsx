@@ -35,7 +35,7 @@ export default function MediaView() {
                 : "text-text-muted hover:text-text-primary"
             }`}
           >
-            <RiMusicLine className="w-4 h-4" /> My Music
+            <RiMusicLine className="w-4 h-4" /> The Crate
           </button>
         </div>
       </div>

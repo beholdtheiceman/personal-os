@@ -45,7 +45,7 @@ function ExpandedPlayer({ onCollapse }: { onCollapse: () => void }) {
       {/* Title */}
       <div className="text-center mb-8 px-8 max-w-sm">
         <p className="text-white font-semibold text-lg leading-snug line-clamp-2">{currentTrack.title}</p>
-        <p className="text-white/50 text-sm mt-1">{currentTrack.type === "youtube" ? "YouTube" : "Suno"}</p>
+        <p className="text-white/50 text-sm mt-1">{currentTrack.type === "youtube" ? "YouTube" : "The Crate"}</p>
       </div>
 
       {/* Controls */}
@@ -132,7 +132,7 @@ export default function MiniPlayer() {
         {/* Title — also clickable to expand */}
         <button onClick={() => setExpanded(true)} className="flex-1 min-w-0 text-left">
           <p className="text-sm font-medium text-text-primary truncate">{currentTrack.title}</p>
-          <p className="text-xs text-text-muted">{currentTrack.type === "youtube" ? "YouTube" : "Suno"}</p>
+          <p className="text-xs text-text-muted">{currentTrack.type === "youtube" ? "YouTube" : "The Crate"}</p>
         </button>
 
         {/* Volume */}

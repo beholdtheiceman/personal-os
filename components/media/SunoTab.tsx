@@ -126,7 +126,7 @@ export default function SunoTab() {
       {/* Add track form */}
       <div className="space-y-3 p-4 bg-bg-tertiary rounded-xl border border-bg-border">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Add a Suno Track</p>
+          <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Add to The Crate</p>
           {/* Mode toggle */}
           <div className="flex items-center gap-0.5 bg-bg-secondary rounded-lg p-0.5 border border-bg-border">
             <button
@@ -214,7 +214,7 @@ export default function SunoTab() {
       ) : tracks.length === 0 ? (
         <div className="flex flex-col items-center py-8 gap-2 text-text-muted">
           <RiMusicLine className="w-8 h-8 opacity-40" />
-          <p className="text-sm">No tracks yet — upload an MP3 above</p>
+          <p className="text-sm">The crate is empty — drop something in</p>
         </div>
       ) : (
         <div className="space-y-1.5">
