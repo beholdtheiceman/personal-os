@@ -157,13 +157,13 @@ export default function SubscriptionTracker() {
       {/* Controls */}
       <div className="flex items-center justify-between gap-3">
         {/* Filter tabs */}
-        <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl">
+        <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl border border-white/[0.12]">
           {(["active", "all", "cancelled"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize ${
-                filter === f ? "bg-accent/25 text-accent" : "bg-white/8 text-text-secondary hover:bg-white/12 hover:text-text-primary"
+                filter === f ? "bg-accent/40 text-white" : "bg-white/[0.12] text-text-secondary hover:bg-white/[0.20] hover:text-text-primary"
               }`}
             >
               {f}

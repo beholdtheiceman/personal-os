@@ -183,7 +183,7 @@ export interface Transaction {
   category: string;
   amount: number;
   description: string;
-  source: "manual" | "google-sheets";
+  source: "manual" | "google-sheets" | "email-agent";
 }
 
 // ─── Subscriptions ────────────────────────────────────────────────────────────
@@ -206,7 +206,33 @@ export interface Subscription {
   url?: string;
   notes?: string;
   plaid_stream_id?: string;    // linked Plaid recurring stream
+  source?: "manual" | "email-agent";
   created_at: string;
+}
+
+// ─── Email Agent ──────────────────────────────────────────────────────────────
+
+export interface AgentRunStats {
+  subscriptions_added: number;
+  transactions_added: number;
+  last_week_count: number;
+  week_start: string; // YYYY-MM-DD — reset when > 7 days old
+}
+
+export interface GmailAgentRun {
+  last_run_at: string;       // ISO timestamp
+  last_history_id: string;   // Gmail History API checkpoint; "" on first run
+  processed_ids: string[];   // rolling window of last 500 message IDs
+  stats: AgentRunStats;
+  last_error?: string;
+  last_error_at?: string;
+}
+
+export interface EmailMeta {
+  id: string;
+  subject: string;
+  from: string;
+  snippet: string;
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

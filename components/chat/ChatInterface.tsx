@@ -88,6 +88,7 @@ export default function ChatInterface() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Build system prompt once ─────────────────────────────────────────────
   useEffect(() => {
@@ -270,6 +271,8 @@ export default function ChatInterface() {
     setInput("");
     setCapturedImage(null);
     setLoading(true);
+    // Reset textarea height after clearing
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
 
@@ -331,6 +334,8 @@ export default function ChatInterface() {
       setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
     } finally {
       setLoading(false);
+      // Return focus to textarea so user can keep typing immediately
+      setTimeout(() => textareaRef.current?.focus(), 0);
     }
   };
 
@@ -578,15 +583,26 @@ export default function ChatInterface() {
           )}
           <div className="flex items-end gap-2 max-w-4xl mx-auto">
             <textarea
-              className="input-base flex-1 resize-none min-h-[44px] max-h-40 py-2.5 text-sm"
-              style={{ background: "rgba(255,255,255,0.08)", color: "white", borderColor: "rgba(255,255,255,0.15)" }}
+              ref={textareaRef}
+              className="input-base flex-1 resize-none min-h-[44px] py-2.5 text-sm overflow-y-auto"
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                color: "white",
+                borderColor: "rgba(255,255,255,0.15)",
+                maxHeight: "240px",
+              }}
               placeholder={capturedImage ? "Ask about this image…" : "Message your AI assistant…"}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-resize: reset then grow to content
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
               }}
-              disabled={loading}
               rows={1}
             />
             <button

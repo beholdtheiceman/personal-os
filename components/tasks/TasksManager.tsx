@@ -150,8 +150,8 @@ export default function TasksManager() {
               onClick={() => setFilter(f)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors capitalize ${
                 filter === f
-                  ? "bg-accent/20 border-accent/40 text-accent-text"
-                  : "bg-white/8 border-white/20 text-text-secondary hover:bg-white/12 hover:border-accent/30 hover:text-text-primary"
+                  ? "bg-accent/40 border-accent/60 text-white font-medium"
+                  : "bg-white/[0.12] border-white/30 text-text-secondary hover:bg-white/[0.20] hover:border-white/50 hover:text-text-primary"
               }`}
             >
               {f}

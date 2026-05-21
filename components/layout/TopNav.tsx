@@ -18,19 +18,19 @@ const PRIMARY_NAV = [
   { href: "/habits",    label: "Habits",    icon: RiLoopLeftLine },
   { href: "/calendar",  label: "Calendar",  icon: RiCalendarLine },
   { href: "/gmail",     label: "Gmail",     icon: RiMailLine },
-  { href: "/discord",   label: "Discord",   icon: RiDiscordLine },
+  { href: "/projects",  label: "Projects",  icon: RiFolderLine },
   { href: "/media",     label: "Media",     icon: RiMusicLine },
   { href: "/chat",      label: "Chat",      icon: RiRobot2Line },
+  // { href: "/discord", label: "Discord",  icon: RiDiscordLine }, // hidden — re-enable when Discord integration is ready
 ];
 
 const MORE_NAV = [
-  { href: "/memory",   label: "Memory",   icon: RiDatabase2Line },
-  { href: "/journal",  label: "Journal",  icon: RiBookLine },
-  { href: "/nutrition",label: "Nutrition",icon: RiBowlLine },
-  { href: "/health",   label: "Health",   icon: RiHeartPulseLine },
-  { href: "/goals",    label: "Goals",    icon: RiLineChartLine },
-  { href: "/finance",  label: "Finance",  icon: RiMoneyDollarCircleLine },
-  { href: "/projects", label: "Projects", icon: RiFolderLine },
+  { href: "/memory",    label: "Memory",    icon: RiDatabase2Line },
+  { href: "/journal",   label: "Journal",   icon: RiBookLine },
+  { href: "/nutrition", label: "Nutrition", icon: RiBowlLine },
+  { href: "/health",    label: "Health",    icon: RiHeartPulseLine },
+  { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
+  { href: "/finance",   label: "Finance",   icon: RiMoneyDollarCircleLine },
 ];
 
 export default function TopNav() {

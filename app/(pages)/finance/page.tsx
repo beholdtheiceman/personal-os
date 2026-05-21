@@ -17,7 +17,7 @@ export default function FinancePage() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit">
+      <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit border border-white/[0.12]">
         {([
           { key: "transactions",  label: "Transactions" },
           { key: "subscriptions", label: "Subscriptions" },
@@ -27,7 +27,7 @@ export default function FinancePage() {
             key={key}
             onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              tab === key ? "bg-accent/25 text-accent shadow-sm" : "bg-white/8 text-text-secondary hover:bg-white/12 hover:text-text-primary"
+              tab === key ? "bg-accent/40 text-white shadow-sm" : "bg-white/[0.12] text-text-secondary hover:bg-white/[0.20] hover:text-text-primary"
             }`}
           >
             {label}

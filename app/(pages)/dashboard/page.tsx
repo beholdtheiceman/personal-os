@@ -25,6 +25,7 @@ import { awardXP } from "@/lib/awardXP";
 import { habitXP, taskXP } from "@/lib/xp";
 import XPWidget from "@/components/xp/XPWidget";
 import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
+import EmailAgentWidget from "@/components/dashboard/EmailAgentWidget";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -693,6 +694,9 @@ export default function DashboardPage() {
 
       {/* ── API Usage ── */}
       <ApiUsageWidget />
+
+      {/* ── Email Agent ── */}
+      {gmailConnected && <EmailAgentWidget />}
 
       {/* ── Gmail ── */}
       {gmailConnected && (

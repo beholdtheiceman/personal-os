@@ -1,35 +1,6 @@
 // GET /api/gmail/messages?uid=... — fetches recent Gmail messages
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminDb } from "@/lib/firebase-admin";
-import { GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET } from "@/lib/env";
-
-async function refreshToken(uid: string): Promise<string> {
-  const db = getAdminDb();
-  const doc = await db.doc(`users/${uid}/integrations/gmail`).get();
-  if (!doc.exists) throw new Error("Gmail not connected");
-
-  const data = doc.data()!;
-  let accessToken: string = data.access_token;
-
-  if (Date.now() > data.expires_at - 60000) {
-    const res = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: GOOGLE_CALENDAR_CLIENT_ID,
-        client_secret: GOOGLE_CALENDAR_CLIENT_SECRET,
-        refresh_token: data.refresh_token,
-        grant_type: "refresh_token",
-      }),
-    });
-    const refreshed = await res.json();
-    if (refreshed.error) throw new Error(refreshed.error_description);
-    accessToken = refreshed.access_token;
-    await doc.ref.update({ access_token: accessToken, expires_at: Date.now() + 3600 * 1000 });
-  }
-
-  return accessToken;
-}
+import { refreshGmailToken } from "@/lib/gmail-token";
 
 function parseFrom(raw: string) {
   const match = raw.match(/^"?([^"<]+)"?\s*<?([^>]*)>?$/);
@@ -45,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
   try {
-    const accessToken = await refreshToken(uid);
+    const accessToken = await refreshGmailToken(uid);
     const auth = { Authorization: `Bearer ${accessToken}` };
 
     // List message IDs

@@ -5,6 +5,7 @@ import { ANTHROPIC_API_KEY, GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SE
 import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { searchSecondBrainFromDB, captureToInboxDB, getSecondBrainContextFromDB } from "@/lib/second-brain";
+import { refreshGmailToken as _refreshGmailToken } from "@/lib/gmail-token";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,12 @@ type ToolInput = Record<string, unknown>;
 
 function makeToday(localDate?: string) {
   return localDate ?? new Date().toISOString().slice(0, 10);
+}
+
+function daysAgo(todayStr: string, days: number): string {
+  const d = new Date(todayStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 // Find a doc in a collection by approximate title/name match
@@ -23,30 +30,8 @@ async function findDoc(uid: string, collection: string, searchField: string, sea
   return doc ?? null;
 }
 
-async function refreshGmailToken(uid: string): Promise<string> {
-  const db = getAdminDb();
-  const doc = await db.doc(`users/${uid}/integrations/gmail`).get();
-  if (!doc.exists) throw new Error("Gmail not connected");
-  const data = doc.data()!;
-  let accessToken: string = data.access_token;
-  if (Date.now() > data.expires_at - 60000) {
-    const res = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: GOOGLE_CALENDAR_CLIENT_ID,
-        client_secret: GOOGLE_CALENDAR_CLIENT_SECRET,
-        refresh_token: data.refresh_token,
-        grant_type: "refresh_token",
-      }),
-    });
-    const refreshed = await res.json();
-    if (refreshed.error) throw new Error(refreshed.error_description);
-    accessToken = refreshed.access_token;
-    await doc.ref.update({ access_token: accessToken, expires_at: Date.now() + 3600 * 1000 });
-  }
-  return accessToken;
-}
+// Use shared Gmail token helper
+const refreshGmailToken = _refreshGmailToken;
 
 async function refreshCalendarToken(uid: string): Promise<string> {
   const db = getAdminDb();
@@ -474,6 +459,176 @@ const TOOLS: Anthropic.Tool[] = [
         next_billing_date: { type: "string", description: "YYYY-MM-DD" },
       },
       required: ["name_search"],
+    },
+  },
+
+  // ── Read tools (review existing data) ──
+  {
+    name: "list_calendar_events",
+    description: "Read events from Google Calendar in a time window around today. Use this whenever you need to know the user's schedule before suggesting times, evaluating availability, or referencing what's coming up.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        days_back: { type: "number", description: "Days into the past to include. Default 0 (start of today)." },
+        days_ahead: { type: "number", description: "Days into the future to include. Default 7." },
+        max_results: { type: "number", description: "Max events to return, default 50." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_tasks",
+    description: "List the user's tasks. Filter by status, tag, and/or due-date range. Defaults to active tasks sorted by priority.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["active", "completed", "archived"], description: "Defaults to active." },
+        tag: { type: "string", enum: ["personal", "business", "health", "finance"], description: "Optional tag filter." },
+        due_before: { type: "string", description: "YYYY-MM-DD; only tasks due on/before." },
+        due_after: { type: "string", description: "YYYY-MM-DD; only tasks due on/after." },
+        limit: { type: "number", description: "Max tasks, default 50." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_habits",
+    description: "List the user's habits with recent completion stats.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        include_completions_days: { type: "number", description: "How many recent days of completion data to count. Default 7." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_meals",
+    description: "List meals logged over a date range, grouped by day with calorie and macro totals.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        start_date: { type: "string", description: "YYYY-MM-DD. Defaults to 7 days ago." },
+        end_date: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_health_log",
+    description: "Read sleep, energy, exercise, and step data over a date range.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        start_date: { type: "string", description: "YYYY-MM-DD. Defaults to 7 days ago." },
+        end_date: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_journal_entries",
+    description: "List recent journal entries with mood scores and AI summaries.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        start_date: { type: "string", description: "YYYY-MM-DD. Defaults to 7 days ago." },
+        end_date: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+        limit: { type: "number", description: "Max entries, default 20." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_goals",
+    description: "List the user's goals with milestone progress. Defaults to active goals.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["active", "achieved", "paused"], description: "Defaults to active." },
+        category: { type: "string", enum: ["personal", "business", "health", "financial"], description: "Optional category filter." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_transactions",
+    description: "List financial transactions over a date range. Combines manually-logged transactions and Plaid-synced bank transactions.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        start_date: { type: "string", description: "YYYY-MM-DD. Defaults to 7 days ago." },
+        end_date: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+        type: { type: "string", enum: ["income", "expense"], description: "Optional type filter." },
+        category_search: { type: "string", description: "Optional: only transactions whose category contains this string (case-insensitive)." },
+        limit: { type: "number", description: "Max transactions, default 100." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_projects",
+    description: "List projects with their Kanban cards.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        include_cards: { type: "boolean", description: "Include cards under each project. Default true." },
+        status: { type: "string", enum: ["active", "archived"], description: "Defaults to active." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_subscriptions",
+    description: "List subscriptions with upcoming renewal dates and estimated monthly total.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["active", "paused", "cancelled"], description: "Defaults to active." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_memory",
+    description: "Read the user's personal memory entries (preferences, identity, goals, etc).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category: { type: "string", description: "Optional category filter." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_notification_settings",
+    description: "Read current notification settings — which categories are enabled and at what times.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "list_media",
+    description: "Read the user's media (YouTube/music) watch and listen history to inform recommendations. Returns a note if no history is being tracked yet.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Max items, default 20." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_bible_reading",
+    description: "Read the user's bible passage reading history to inform reading-plan suggestions. Returns a note if no history is being tracked yet.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Max passages, default 20." },
+      },
+      required: [],
     },
   },
 
@@ -946,6 +1101,313 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         }
       }
       return parts.length ? parts.join("\n\n---\n\n") : "No results found.";
+    }
+
+    // ── Read tools ────────────────────────────────────────────────────────────
+    case "list_calendar_events": {
+      try {
+        const accessToken = await refreshCalendarToken(uid);
+        const daysBack = (input.days_back as number) ?? 0;
+        const daysAhead = (input.days_ahead as number) ?? 7;
+        const maxResults = (input.max_results as number) ?? 50;
+        const now = Date.now();
+        const timeMin = new Date(now - daysBack * 86400000).toISOString();
+        const timeMax = new Date(now + daysAhead * 86400000).toISOString();
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=${maxResults}&singleEvents=true&orderBy=startTime`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const data = await res.json();
+        if (!res.ok) return `Calendar error: ${data.error?.message ?? "Unknown error"}`;
+        const events = (data.items ?? []) as Array<{
+          summary?: string;
+          start: { dateTime?: string; date?: string };
+          end: { dateTime?: string; date?: string };
+          location?: string;
+        }>;
+        if (events.length === 0) return `No events from ${timeMin.slice(0, 10)} to ${timeMax.slice(0, 10)}.`;
+        return events
+          .map((e) => {
+            const start = e.start.dateTime ?? e.start.date ?? "?";
+            const end = e.end.dateTime ?? e.end.date ?? "?";
+            const loc = e.location ? ` @ ${e.location}` : "";
+            return `${start} → ${end}: ${e.summary ?? "(no title)"}${loc}`;
+          })
+          .join("\n");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Could not fetch calendar events: ${msg}`;
+      }
+    }
+
+    case "list_tasks": {
+      const status = (input.status as string) ?? "active";
+      const snap = await db.collection(`users/${uid}/tasks`).where("status", "==", status).get();
+      let tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+      if (input.tag) tasks = tasks.filter((t) => (t.tags as string[] | undefined)?.includes(input.tag as string));
+      if (input.due_before) tasks = tasks.filter((t) => (t.due_date as string) && (t.due_date as string) <= (input.due_before as string));
+      if (input.due_after) tasks = tasks.filter((t) => (t.due_date as string) && (t.due_date as string) >= (input.due_after as string));
+      tasks.sort((a, b) => ((b.priority_score as number) ?? 50) - ((a.priority_score as number) ?? 50));
+      const limit = (input.limit as number) ?? 50;
+      tasks = tasks.slice(0, limit);
+      if (tasks.length === 0) return `No ${status} tasks match.`;
+      return tasks
+        .map((t) => {
+          const tags = (t.tags as string[] | undefined)?.join(", ");
+          return `[p${t.priority_score ?? 50}] ${t.title}${t.due_date ? ` (due ${t.due_date})` : ""}${tags ? ` — ${tags}` : ""}`;
+        })
+        .join("\n");
+    }
+
+    case "list_habits": {
+      const snap = await db.collection(`users/${uid}/habits`).get();
+      if (snap.empty) return "No habits yet.";
+      const days = (input.include_completions_days as number) ?? 7;
+      const startStr = daysAgo(today(), days - 1);
+      return snap.docs
+        .map((d) => {
+          const h = d.data();
+          const completions = ((h.completions as string[]) ?? []).filter((c) => c >= startStr);
+          return `${h.name} (${h.category ?? "General"}): ${completions.length}/${days} days completed`;
+        })
+        .join("\n");
+    }
+
+    case "list_meals": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const snap = await db
+        .collection(`users/${uid}/nutrition`)
+        .where("date", ">=", start)
+        .where("date", "<=", end)
+        .get();
+      const meals = snap.docs.map((d) => d.data() as Record<string, unknown>);
+      if (meals.length === 0) return `No meals logged from ${start} to ${end}.`;
+      const byDay: Record<string, Record<string, unknown>[]> = {};
+      for (const m of meals) {
+        const date = m.date as string;
+        (byDay[date] ??= []).push(m);
+      }
+      const lines: string[] = [];
+      for (const date of Object.keys(byDay).sort().reverse()) {
+        const dayMeals = byDay[date];
+        const cal = dayMeals.reduce((s, m) => s + ((m.calories_estimated as number) ?? 0), 0);
+        const prot = dayMeals.reduce((s, m) => s + ((m.protein_g as number) ?? 0), 0);
+        lines.push(`**${date}** — ${cal} kcal, ${prot}g protein`);
+        for (const m of dayMeals) lines.push(`  ${m.meal}: ${m.description} (${m.calories_estimated} kcal)`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_health_log": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const snap = await db.collection(`users/${uid}/health`).get();
+      const logs = snap.docs
+        .map((d) => d.data())
+        .filter((h) => {
+          const dt = h.date as string;
+          return dt && dt >= start && dt <= end;
+        })
+        .sort((a, b) => (b.date as string).localeCompare(a.date as string));
+      if (logs.length === 0) return `No health data logged from ${start} to ${end}.`;
+      return logs
+        .map((h) => {
+          const bits: string[] = [`**${h.date}**`];
+          if (h.sleep_hours !== undefined) bits.push(`sleep ${h.sleep_hours}h${h.sleep_quality ? ` (q${h.sleep_quality}/10)` : ""}`);
+          if (h.energy_level !== undefined) bits.push(`energy ${h.energy_level}/10`);
+          if (h.exercise_done) bits.push(`exercise: ${h.exercise_description ?? "yes"}`);
+          if (h.steps !== undefined) bits.push(`${h.steps} steps`);
+          if (h.notes) bits.push(`notes: ${h.notes}`);
+          return bits.join(" — ");
+        })
+        .join("\n");
+    }
+
+    case "list_journal_entries": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const limit = (input.limit as number) ?? 20;
+      const snap = await db
+        .collection(`users/${uid}/journal`)
+        .where("date", ">=", start)
+        .where("date", "<=", end)
+        .get();
+      const entries = snap.docs
+        .map((d) => d.data())
+        .sort((a, b) => (b.date as string).localeCompare(a.date as string))
+        .slice(0, limit);
+      if (entries.length === 0) return `No journal entries from ${start} to ${end}.`;
+      return entries
+        .map((j) => {
+          const tags = (j.tags as string[] | undefined)?.join(", ");
+          return `**${j.date}** (mood ${j.mood_score}/10)${tags ? ` — ${tags}` : ""}\n${j.ai_summary ?? ""}`;
+        })
+        .join("\n\n");
+    }
+
+    case "list_goals": {
+      const status = (input.status as string) ?? "active";
+      const snap = await db.collection(`users/${uid}/goals`).where("status", "==", status).get();
+      let goals = snap.docs.map((d) => d.data());
+      if (input.category) goals = goals.filter((g) => g.category === input.category);
+      if (goals.length === 0) return `No ${status} goals.`;
+      return goals
+        .map((g) => {
+          const ms = (g.milestones as { title: string; completed: boolean }[]) ?? [];
+          const done = ms.filter((m) => m.completed).length;
+          const header = `**${g.title}** (${g.category}${g.target_date ? `, target ${g.target_date}` : ""}) — ${done}/${ms.length} milestones`;
+          const lines = [header];
+          for (const m of ms) lines.push(`  ${m.completed ? "[x]" : "[ ]"} ${m.title}`);
+          if (g.description) lines.push(`  ${g.description}`);
+          return lines.join("\n");
+        })
+        .join("\n\n");
+    }
+
+    case "list_transactions": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const limit = (input.limit as number) ?? 100;
+      const typeFilter = input.type as string | undefined;
+      const catSearch = (input.category_search as string | undefined)?.toLowerCase();
+
+      const manualSnap = await db
+        .collection(`users/${uid}/transactions`)
+        .where("date", ">=", start)
+        .where("date", "<=", end)
+        .get();
+      const manual = manualSnap.docs.map((d) => {
+        const t = d.data();
+        return {
+          date: t.date as string,
+          type: t.type as string,
+          amount: t.amount as number,
+          category: (t.category as string) ?? "",
+          description: (t.description as string) ?? "",
+          source: "manual",
+        };
+      });
+
+      const plaidSnap = await db.collection(`users/${uid}/plaid_transactions`).get();
+      const plaid = plaidSnap.docs
+        .map((d) => d.data())
+        .filter((p) => {
+          const dt = p.date as string;
+          return dt && dt >= start && dt <= end;
+        })
+        .map((p) => ({
+          date: p.date as string,
+          // Plaid: positive amount = debit/expense, negative = credit/income
+          type: (p.amount as number) >= 0 ? "expense" : "income",
+          amount: Math.abs(p.amount as number),
+          category: (p.category as string) ?? "",
+          description: ((p.merchant_name as string) ?? "") + (p.institution ? ` (${p.institution})` : ""),
+          source: "plaid",
+        }));
+
+      let all = [...manual, ...plaid];
+      if (typeFilter) all = all.filter((t) => t.type === typeFilter);
+      if (catSearch) all = all.filter((t) => t.category.toLowerCase().includes(catSearch));
+      all.sort((a, b) => b.date.localeCompare(a.date));
+      all = all.slice(0, limit);
+
+      if (all.length === 0) return `No transactions from ${start} to ${end}.`;
+      const totalIncome = all.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+      const totalExpense = all.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+      const lines = [`**Window ${start} → ${end}**: +$${totalIncome.toFixed(2)} income, −$${totalExpense.toFixed(2)} expense (net $${(totalIncome - totalExpense).toFixed(2)})`];
+      for (const t of all) {
+        const sign = t.type === "income" ? "+" : "−";
+        lines.push(`${t.date} ${sign}$${t.amount.toFixed(2)} ${t.category}${t.description ? ` — ${t.description}` : ""} [${t.source}]`);
+      }
+      return lines.join("\n");
+    }
+
+    case "list_projects": {
+      const includeCards = input.include_cards !== false;
+      const status = (input.status as string) ?? "active";
+      const projectsSnap = await db.collection(`users/${uid}/projects`).where("status", "==", status).get();
+      if (projectsSnap.empty) return `No ${status} projects.`;
+      const sections: string[] = [];
+      for (const projDoc of projectsSnap.docs) {
+        const p = projDoc.data();
+        let section = `**${p.name}**${p.description ? ` — ${p.description}` : ""}`;
+        if (includeCards) {
+          const cardsSnap = await db.collection(`users/${uid}/projects/${projDoc.id}/cards`).get();
+          if (!cardsSnap.empty) {
+            const byStatus: Record<string, string[]> = { todo: [], in_progress: [], done: [] };
+            for (const c of cardsSnap.docs) {
+              const card = c.data();
+              const s = (card.status as string) ?? "todo";
+              (byStatus[s] ??= []).push(`  - ${card.title}${card.priority ? ` (${card.priority})` : ""}`);
+            }
+            for (const s of ["todo", "in_progress", "done"]) {
+              if (byStatus[s]?.length) section += `\n  ${s.toUpperCase()}:\n${byStatus[s].join("\n")}`;
+            }
+          }
+        }
+        sections.push(section);
+      }
+      return sections.join("\n\n");
+    }
+
+    case "list_subscriptions": {
+      const status = (input.status as string) ?? "active";
+      const snap = await db.collection(`users/${uid}/subscriptions`).get();
+      const subs = snap.docs.map((d) => d.data()).filter((s) => (s.status ?? "active") === status);
+      if (subs.length === 0) return `No ${status} subscriptions.`;
+      const cycleMultiplier: Record<string, number> = { weekly: 4.33, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12 };
+      const monthlyTotal = subs.reduce((sum, s) => {
+        const m = cycleMultiplier[s.billing_cycle as string] ?? 1;
+        return sum + (s.amount as number) * m;
+      }, 0);
+      const lines = [`**Estimated monthly cost: $${monthlyTotal.toFixed(2)}** across ${subs.length} subscription(s)`];
+      subs.sort((a, b) => ((a.next_billing_date as string) ?? "").localeCompare((b.next_billing_date as string) ?? ""));
+      for (const s of subs) {
+        lines.push(`${s.name} — $${s.amount} ${s.billing_cycle}${s.next_billing_date ? `, next ${s.next_billing_date}` : ""} (${s.category ?? "Other"})`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_memory": {
+      const snap = await db.collection(`users/${uid}/memory`).get();
+      const entries = snap.docs.map((d) => d.data());
+      const filtered = input.category
+        ? entries.filter((e) => (e.category as string)?.toLowerCase() === (input.category as string).toLowerCase())
+        : entries;
+      const populated = filtered.filter((e) => e.value);
+      if (populated.length === 0) return input.category ? `No memory entries in category "${input.category}".` : "No memory entries with values.";
+      const byCat: Record<string, string[]> = {};
+      for (const e of populated) {
+        const cat = (e.category as string) ?? "Other";
+        (byCat[cat] ??= []).push(`  ${e.key}: ${e.value}`);
+      }
+      const lines: string[] = [];
+      for (const [cat, items] of Object.entries(byCat)) {
+        lines.push(`[${cat}]`);
+        lines.push(...items);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_notification_settings": {
+      const doc = await db.doc(`users/${uid}/settings/notifications`).get();
+      if (!doc.exists) return "No notification settings configured yet.";
+      const data = doc.data() ?? {};
+      const categories = ["morning_briefing", "streak_alert", "task_reminder", "goal_deadline", "journal_reminder", "health_reminder", "weekly_review"];
+      const lines: string[] = [];
+      for (const c of categories) {
+        const cfg = data[c] as { enabled?: boolean; time?: string } | undefined;
+        if (!cfg) continue;
+        lines.push(`${c.replace(/_/g, " ")}: ${cfg.enabled ? "enabled" : "disabled"}${cfg.time ? ` at ${cfg.time}` : ""}`);
+      }
+      return lines.length ? lines.join("\n") : "No notification categories configured.";
+    }
+
+    case "list_media": {
+      return "No media history is being tracked yet. The YouTube/audio routes are pass-through proxies — they don't persist what the user watches or listens to. To enable recommendations based on history, instrument those routes to log to a users/{uid}/media_history collection first.";
+    }
+
+    case "list_bible_reading": {
+      return "No bible reading history is being tracked yet. The /api/bible/verse route is a pass-through proxy — it doesn't persist which passages the user has read. To enable passage-history-based suggestions, instrument that route to log to a users/{uid}/bible_reading collection first.";
     }
 
     default:

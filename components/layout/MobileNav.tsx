@@ -19,7 +19,7 @@ const PRIMARY = [
 const MORE = [
   { href: "/habits",    label: "Habits",    icon: RiLoopLeftLine },
   { href: "/calendar",  label: "Calendar",  icon: RiCalendarLine },
-  { href: "/discord",   label: "Discord",   icon: RiDiscordLine },
+  { href: "/projects",  label: "Projects",  icon: RiFolderLine },
   { href: "/media",     label: "Media",     icon: RiMusicLine },
   { href: "/memory",    label: "Memory",    icon: RiDatabase2Line },
   { href: "/journal",   label: "Journal",   icon: RiBookLine },
@@ -27,7 +27,7 @@ const MORE = [
   { href: "/health",    label: "Health",    icon: RiHeartPulseLine },
   { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
   { href: "/finance",   label: "Finance",   icon: RiMoneyDollarCircleLine },
-  { href: "/projects",  label: "Projects",  icon: RiFolderLine },
+  // { href: "/discord", label: "Discord",   icon: RiDiscordLine }, // hidden — re-enable when Discord integration is ready
 ];
 
 export default function MobileNav() {

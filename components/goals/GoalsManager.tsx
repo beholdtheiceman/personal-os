@@ -72,13 +72,13 @@ export default function GoalsManager() {
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex gap-1 bg-bg-secondary rounded-lg p-1">
+        <div className="flex gap-1 bg-bg-tertiary rounded-lg p-1 border border-white/[0.12]">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setStatusTab(tab)}
               className={`text-xs px-3 py-1.5 rounded-md capitalize transition-colors ${
-                statusTab === tab ? "bg-accent text-white" : "bg-white/8 text-text-secondary hover:bg-white/12 hover:text-text-primary"
+                statusTab === tab ? "bg-accent/80 text-white font-medium" : "bg-white/[0.12] text-text-secondary hover:bg-white/[0.20] hover:text-text-primary"
               }`}
             >
               {tab}
