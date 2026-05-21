@@ -44,9 +44,26 @@ export async function GET(req: NextRequest) {
 
   const isSunoCdn = parsed.hostname !== "suno.ai" && parsed.hostname.endsWith(".suno.ai");
   const isSunoShare = parsed.hostname === "suno.com";
+  const isVercelBlob = parsed.hostname.endsWith(".public.blob.vercel-storage.com");
 
-  if (!isSunoCdn && !isSunoShare) {
+  if (!isSunoCdn && !isSunoShare && !isVercelBlob) {
     return NextResponse.json({ error: "Host not allowed" }, { status: 403 });
+  }
+
+  // Vercel Blob files are public — serve directly without spoofing Suno headers
+  if (isVercelBlob) {
+    const upstream = await fetch(url);
+    if (!upstream.ok) {
+      return NextResponse.json({ error: `Upstream returned ${upstream.status}` }, { status: upstream.status });
+    }
+    const contentType = upstream.headers.get("content-type") ?? "audio/mpeg";
+    return new NextResponse(upstream.body, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
   }
 
   // For share pages, extract the real audio URL first
