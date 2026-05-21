@@ -26,6 +26,7 @@
 - **Google Drive** — OAuth, file browser, content preview (Docs/Sheets/Slides), chat tools (search + read)
 - **People / Relationships CRM** — Contacts, interaction history, contact frequency targets, follow-ups, gift ideas, Google Contacts import, Claude tools
 - **Persistent Chat Panel** — Slide-in panel from right (400px desktop, full-screen mobile), pushes content, session-persistent state, Chat toggle in TopNav + MobileNav, full `/chat` page still available
+- **Google Health Integration** — Google Health API v4 (`health.googleapis.com`) with `googlehealth.*` scopes; syncs sleep hours/quality/efficiency, daily steps, resting heart rate, and exercise sessions from Pixel Watch via Google Health; OAuth connect/disconnect flow; auto-prefills health log form
 
 ---
 

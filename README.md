@@ -16,6 +16,7 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 
 ### 🤖 AI Chat Assistant
 - Multi-conversation chat with persistent history
+- **Persistent slide-in panel** — 400px panel fixed to the right edge of every page; pushes content on desktop, full-screen overlay on mobile; toggle from TopNav or MobileNav without leaving your current tab
 - Full context of all your data (tasks, habits, health, goals, etc.)
 - Second Brain integration — sync your local Obsidian/markdown vault
 - 30+ tools: create tasks, log habits, schedule events, search Gmail, read Drive files, manage contacts, plan meals, and more — all via natural language
@@ -114,6 +115,8 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 
 ### 💪 Health
 - Daily health logging: sleep hours/quality, energy level, exercise, steps, notes
+- **Google Health integration** — OAuth connect to Google Health API v4; auto-syncs sleep (hours, efficiency, stage breakdown), daily steps, resting heart rate, and exercise sessions from wearables (Pixel Watch, Fitbit, etc.)
+- Health log form pre-fills from Google Health data with one-click import
 - Weekly chart visualization
 - Dashboard health snapshot
 
@@ -217,9 +220,11 @@ GOOGLE_CALENDAR_CLIENT_SECRET=
 # Web Search
 TAVILY_API_KEY=
 
-# Google Fit (Health integration — sleep, steps, exercise)
-# Enable "Fitness API" in Google Cloud Console > APIs & Services > Library
+# Google Health (sleep, steps, exercise, heart rate)
+# Enable "Cloud Healthcare API" in Google Cloud Console > APIs & Services > Library
 # Add /api/health/callback to your Google OAuth client redirect URIs
+# Scopes: googlehealth.activity_and_fitness.readonly, googlehealth.sleep.readonly,
+#         googlehealth.health_metrics_and_measurements.readonly
 # No extra credentials needed — uses existing GOOGLE_CALENDAR_CLIENT_ID/SECRET
 
 # Cron security
