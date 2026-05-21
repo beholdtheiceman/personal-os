@@ -1,3 +1,45 @@
+// ─── People / Relationships CRM ──────────────────────────────────────────────
+export type RelationshipType = "friend" | "family" | "colleague" | "acquaintance" | "other";
+export type ContactFrequency = "weekly" | "monthly" | "quarterly" | "yearly";
+export type InteractionType = "call" | "text" | "email" | "in-person" | "social" | "other";
+
+export interface Person {
+  id: string;
+  name: string;
+  relationship: RelationshipType;
+  email?: string;
+  phone?: string;
+  birthday?: string;       // YYYY-MM-DD
+  location?: string;
+  company?: string;
+  notes?: string;
+  tags?: string[];
+  gift_ideas?: string[];
+  last_contacted?: string; // YYYY-MM-DD
+  contact_frequency?: ContactFrequency;
+  follow_up_date?: string; // YYYY-MM-DD
+  follow_up_note?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Interaction {
+  id: string;
+  person_id: string;
+  date: string;            // YYYY-MM-DD
+  type: InteractionType;
+  notes?: string;
+  created_at: string;
+}
+
+// ─── Quick Links ─────────────────────────────────────────────────────────────
+export interface QuickLink {
+  id: string;
+  title: string;
+  url: string;
+  emoji?: string; // optional override; otherwise auto-favicon
+}
+
 // ─── User ────────────────────────────────────────────────────────────────────
 export interface AppUser {
   uid: string;
@@ -233,6 +275,65 @@ export interface EmailMeta {
   subject: string;
   from: string;
   snippet: string;
+}
+
+// ─── Meal Planner ─────────────────────────────────────────────────────────────
+
+export interface RecipeIngredient {
+  name: string;
+  amount: string; // e.g. "2 cups", "1 lb"
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  description?: string;
+  servings: number;
+  prep_time_min?: number;
+  cook_time_min?: number;
+  ingredients: RecipeIngredient[];
+  instructions?: string;
+  tags?: string[];
+  calories_per_serving?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  created_at: string;
+}
+
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+
+export interface MealPlanEntry {
+  recipe_id: string;
+  recipe_name: string;
+  servings: number;
+}
+
+export interface MealPlanDay {
+  breakfast?: MealPlanEntry;
+  lunch?: MealPlanEntry;
+  dinner?: MealPlanEntry;
+  snack?: MealPlanEntry;
+}
+
+export interface MealPlan {
+  id: string;
+  week_start: string; // YYYY-MM-DD (Monday)
+  days: Record<string, MealPlanDay>; // keyed by YYYY-MM-DD
+  created_at: string;
+}
+
+export interface ShoppingListItem {
+  ingredient: string;
+  amount: string;
+  checked: boolean;
+}
+
+export interface ShoppingList {
+  id: string;
+  week_start: string;
+  items: ShoppingListItem[];
+  generated_at: string;
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

@@ -9,7 +9,8 @@ import {
   RiDiscordLine, RiRobot2Line, RiLoopLeftLine, RiMusicLine,
   RiDatabase2Line, RiBookLine, RiBowlLine, RiHeartPulseLine,
   RiLineChartLine, RiMoneyDollarCircleLine, RiFolderLine,
-  RiMoreLine, RiLogoutBoxLine, RiSettings3Line,
+  RiMoreLine, RiLogoutBoxLine, RiSettings3Line, RiRestaurantLine,
+  RiGoogleLine, RiContactsBook2Line,
 } from "react-icons/ri";
 
 const PRIMARY_NAV = [
@@ -27,10 +28,13 @@ const PRIMARY_NAV = [
 const MORE_NAV = [
   { href: "/memory",    label: "Memory",    icon: RiDatabase2Line },
   { href: "/journal",   label: "Journal",   icon: RiBookLine },
-  { href: "/nutrition", label: "Nutrition", icon: RiBowlLine },
+  { href: "/nutrition",    label: "Nutrition",    icon: RiBowlLine },
+  { href: "/meal-planner", label: "Meal Planner", icon: RiRestaurantLine },
   { href: "/health",    label: "Health",    icon: RiHeartPulseLine },
   { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
   { href: "/finance",   label: "Finance",   icon: RiMoneyDollarCircleLine },
+  { href: "/people",    label: "People",    icon: RiContactsBook2Line },
+  { href: "/drive",     label: "Drive",     icon: RiGoogleLine },
 ];
 
 export default function TopNav() {

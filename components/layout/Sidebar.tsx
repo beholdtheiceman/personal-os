@@ -7,7 +7,8 @@ import {
   RiDashboardLine, RiTaskLine, RiCalendarLine, RiDatabase2Line,
   RiBookLine, RiHeartPulseLine, RiBowlLine, RiLineChartLine,
   RiFolderLine, RiMoneyDollarCircleLine, RiRobot2Line, RiLogoutBoxLine,
-  RiLoopLeftLine, RiMailLine, RiDiscordLine, RiMusicLine,
+  RiLoopLeftLine, RiMailLine, RiDiscordLine, RiMusicLine, RiRestaurantLine,
+  RiGoogleLine, RiContactsBook2Line,
 } from "react-icons/ri";
 
 const NAV_ITEMS = [
@@ -20,11 +21,14 @@ const NAV_ITEMS = [
   { href: "/media",      label: "Media",      icon: RiMusicLine },
   { href: "/memory",     label: "Memory",     icon: RiDatabase2Line },
   { href: "/journal",    label: "Journal",    icon: RiBookLine },
-  { href: "/nutrition",  label: "Nutrition",  icon: RiBowlLine },
+  { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
+  { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
   { href: "/health",     label: "Health",     icon: RiHeartPulseLine },
   { href: "/goals",      label: "Goals",      icon: RiLineChartLine },
   { href: "/finance",    label: "Finance",    icon: RiMoneyDollarCircleLine },
   { href: "/chat",       label: "Chat",       icon: RiRobot2Line },
+  { href: "/people",     label: "People",     icon: RiContactsBook2Line },
+  { href: "/drive",      label: "Drive",      icon: RiGoogleLine },
   // { href: "/discord", label: "Discord",    icon: RiDiscordLine }, // hidden — re-enable when Discord integration is ready
 ];
 

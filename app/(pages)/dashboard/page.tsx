@@ -26,6 +26,8 @@ import { habitXP, taskXP } from "@/lib/xp";
 import XPWidget from "@/components/xp/XPWidget";
 import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
 import EmailAgentWidget from "@/components/dashboard/EmailAgentWidget";
+import QuickLinksWidget from "@/components/dashboard/QuickLinksWidget";
+import WeeklyReviewWidget from "@/components/dashboard/WeeklyReviewWidget";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -354,6 +356,9 @@ export default function DashboardPage() {
 
       {/* ── XP / Level ── */}
       <XPWidget />
+
+      {/* ── Quick Links ── */}
+      <QuickLinksWidget />
 
       {/* ── AI Briefing ── */}
       <div className="card">
@@ -691,6 +696,9 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── Weekly Review ── */}
+      <WeeklyReviewWidget />
 
       {/* ── API Usage ── */}
       <ApiUsageWidget />

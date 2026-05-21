@@ -95,15 +95,16 @@ ${memoryContext}
 
 TODAY'S CONTEXT:
 Date: ${ctx.date}
-Calendar: ${ctx.calendarEvents || "Not available"}
-Top Tasks: ${ctx.topTasks || "None loaded"}
-Recent Habits: ${ctx.recentHabits || "Not available"}
-Health: ${ctx.lastHealthLog || "Not logged"}
-Journal: ${ctx.lastJournal || "No recent entry"}
-Nutrition: ${ctx.nutritionToday || "Not logged"}
+Calendar: ${ctx.calendarEvents || "(not preloaded — call list_calendar_events when schedule matters)"}
+Top Tasks: ${ctx.topTasks || "(not preloaded — call list_tasks when relevant)"}
+Recent Habits: ${ctx.recentHabits || "(not preloaded — call list_habits when relevant)"}
+Health: ${ctx.lastHealthLog || "(not preloaded — call get_health_log when relevant)"}
+Journal: ${ctx.lastJournal || "(not preloaded — call list_journal_entries when relevant)"}
+Nutrition: ${ctx.nutritionToday || "(not preloaded — call list_meals when relevant)"}
 
 INSTRUCTIONS:
 - Be direct, concise, and actionable.
+- You have read-tools (list_calendar_events, list_tasks, list_habits, list_meals, get_health_log, list_journal_entries, list_goals, list_transactions, list_projects, list_subscriptions, get_memory, get_notification_settings) — use them to check real state before answering questions about the user's data. Don't say "I don't have access" if the answer would come from one of these tools; call the tool.
 - Reference the user's context naturally without being robotic about it.
 - If you don't know something about the user, say so rather than guessing.
 - Format responses with markdown when it aids readability.`;

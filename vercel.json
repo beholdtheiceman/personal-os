@@ -15,6 +15,10 @@
     {
       "path": "/api/gmail/agent",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/weekly-review",
+      "schedule": "0 18 * * 0"
     }
   ]
 }

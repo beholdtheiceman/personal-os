@@ -632,6 +632,102 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  // ── People / CRM ──
+  {
+    name: "list_people",
+    description: "List contacts from the relationships CRM. Use to answer questions about who the user knows, who they haven't talked to in a while, upcoming follow-ups, or birthdays.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        relationship: { type: "string", enum: ["friend","family","colleague","acquaintance","other"], description: "Filter by relationship type." },
+        overdue_only: { type: "boolean", description: "Only return people overdue for contact based on their target frequency." },
+        has_follow_up: { type: "boolean", description: "Only return people with a follow-up date set." },
+        search: { type: "string", description: "Filter by name, company, or tag." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "add_person",
+    description: "Add a new contact to the relationships CRM.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:              { type: "string" },
+        relationship:      { type: "string", enum: ["friend","family","colleague","acquaintance","other"] },
+        email:             { type: "string" },
+        phone:             { type: "string" },
+        birthday:          { type: "string", description: "YYYY-MM-DD" },
+        location:          { type: "string" },
+        company:           { type: "string" },
+        notes:             { type: "string" },
+        contact_frequency: { type: "string", enum: ["weekly","monthly","quarterly","yearly"] },
+        follow_up_date:    { type: "string", description: "YYYY-MM-DD" },
+        follow_up_note:    { type: "string" },
+        gift_ideas:        { type: "array", items: { type: "string" } },
+        tags:              { type: "array", items: { type: "string" } },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_person",
+    description: "Update a contact's details, notes, follow-up, or gift ideas. Search by name.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name_search:       { type: "string", description: "Partial name to find the person" },
+        notes:             { type: "string" },
+        follow_up_date:    { type: "string", description: "YYYY-MM-DD" },
+        follow_up_note:    { type: "string" },
+        contact_frequency: { type: "string", enum: ["weekly","monthly","quarterly","yearly"] },
+        add_gift_idea:     { type: "string", description: "Gift idea to append to their list" },
+        add_tag:           { type: "string", description: "Tag to append" },
+      },
+      required: ["name_search"],
+    },
+  },
+  {
+    name: "log_interaction",
+    description: "Log that the user interacted with someone (call, text, email, in-person, etc). Also updates last_contacted date.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name_search: { type: "string", description: "Partial name to find the person" },
+        type:        { type: "string", enum: ["call","text","email","in-person","social","other"] },
+        date:        { type: "string", description: "YYYY-MM-DD, defaults to today" },
+        notes:       { type: "string", description: "What was discussed or any notes" },
+      },
+      required: ["name_search", "type"],
+    },
+  },
+
+  // ── Google Drive ──
+  {
+    name: "search_drive",
+    description: "Search the user's Google Drive for files by name or content. Returns file names, types, and IDs. Use read_drive_file to get the content of a specific file.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query — file name or keywords in the content" },
+        limit: { type: "number", description: "Max files to return, default 10." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "read_drive_file",
+    description: "Read the full text content of a Google Drive file (Docs, Sheets, Slides, or plain text). Use search_drive first to find the file ID.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file_id:   { type: "string", description: "The Drive file ID from search_drive results" },
+        file_name: { type: "string", description: "File name (for confirmation in response)" },
+      },
+      required: ["file_id"],
+    },
+  },
+
   // ── Chat ──
   {
     name: "rename_chat",
@@ -642,6 +738,87 @@ const TOOLS: Anthropic.Tool[] = [
         name: { type: "string", description: "The new name for this chat conversation" },
       },
       required: ["name"],
+    },
+  },
+
+  // ── Meal Planner ──
+  {
+    name: "get_recipes",
+    description: "List the user's saved recipes. Use before planning meals or when the user asks what recipes they have.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        search: { type: "string", description: "Optional: filter recipes by name or tag (case-insensitive)." },
+        limit: { type: "number", description: "Max recipes to return. Default 50." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "add_recipe",
+    description: "Save a new recipe to the user's recipe library.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:         { type: "string", description: "Recipe name" },
+        servings:     { type: "number", description: "Number of servings" },
+        prep_time:    { type: "number", description: "Prep time in minutes" },
+        cook_time:    { type: "number", description: "Cook time in minutes" },
+        ingredients:  {
+          type: "array",
+          description: "List of ingredients",
+          items: {
+            type: "object",
+            properties: {
+              name:   { type: "string" },
+              amount: { type: "string", description: "e.g. '1 cup', '200g'" },
+            },
+            required: ["name", "amount"],
+          },
+        },
+        instructions: { type: "string", description: "Step-by-step cooking instructions" },
+        calories:     { type: "number", description: "Calories per serving (optional)" },
+        protein:      { type: "number", description: "Protein grams per serving (optional)" },
+        carbs:        { type: "number", description: "Carb grams per serving (optional)" },
+        fat:          { type: "number", description: "Fat grams per serving (optional)" },
+        tags:         { type: "array", items: { type: "string" }, description: "e.g. ['breakfast','high-protein']" },
+      },
+      required: ["name", "ingredients"],
+    },
+  },
+  {
+    name: "plan_meal",
+    description: "Add a recipe to the weekly meal plan for a specific day and meal slot. Use get_recipes first to find the recipe id.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        recipe_name_search: { type: "string", description: "Partial recipe name to find the recipe" },
+        date:               { type: "string", description: "YYYY-MM-DD — the day to plan the meal for" },
+        slot:               { type: "string", enum: ["breakfast", "lunch", "dinner", "snack"], description: "Meal slot" },
+      },
+      required: ["recipe_name_search", "date", "slot"],
+    },
+  },
+  {
+    name: "get_meal_plan",
+    description: "Read the current week's meal plan (or a specific week). Returns what's planned for each day and slot.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        week_start: { type: "string", description: "YYYY-MM-DD (Monday). Defaults to the current week." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "generate_shopping_list",
+    description: "Generate a shopping list from the current week's meal plan by aggregating all ingredients. Saves to Firestore.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        week_start: { type: "string", description: "YYYY-MM-DD (Monday). Defaults to the current week." },
+      },
+      required: [],
     },
   },
 ];
@@ -997,6 +1174,325 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       await sdoc.ref.update(updates);
       const action = input.status === "cancelled" ? "cancelled" : "updated";
       return `Subscription "${sdoc.data().name}" ${action}.`;
+    }
+
+    // ── Meal Planner ──────────────────────────────────────────────────────────
+    case "get_recipes": {
+      const snap = await db.collection(`users/${uid}/recipes`).orderBy("name").get();
+      let recipes = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Record<string, unknown>[];
+      if (input.search) {
+        const q = (input.search as string).toLowerCase();
+        recipes = recipes.filter((r) => {
+          const name = ((r.name as string) ?? "").toLowerCase();
+          const tags = ((r.tags as string[]) ?? []).join(" ").toLowerCase();
+          return name.includes(q) || tags.includes(q);
+        });
+      }
+      const limit = (input.limit as number) ?? 50;
+      recipes = recipes.slice(0, limit);
+      if (recipes.length === 0) return "No recipes found. Add some recipes via the Meal Planner page or ask me to add one.";
+      return recipes.map((r) => {
+        const macros = [
+          r.calories ? `${r.calories} cal` : null,
+          r.protein  ? `${r.protein}g protein` : null,
+        ].filter(Boolean).join(", ");
+        const tags = ((r.tags as string[]) ?? []).join(", ");
+        return `**${r.name}** (id: ${r.id})${tags ? ` [${tags}]` : ""}${macros ? ` — ${macros}` : ""}`;
+      }).join("\n");
+    }
+
+    case "add_recipe": {
+      const ref = await db.collection(`users/${uid}/recipes`).add({
+        name:         input.name,
+        servings:     input.servings ?? 1,
+        prep_time:    input.prep_time ?? 0,
+        cook_time:    input.cook_time ?? 0,
+        ingredients:  input.ingredients ?? [],
+        instructions: input.instructions ?? "",
+        calories:     input.calories ?? null,
+        protein:      input.protein ?? null,
+        carbs:        input.carbs ?? null,
+        fat:          input.fat ?? null,
+        tags:         (input.tags as string[]) ?? [],
+        created_at:   new Date().toISOString(),
+      });
+      return `Recipe "${input.name}" saved (id: ${ref.id}).`;
+    }
+
+    case "plan_meal": {
+      const search = (input.recipe_name_search as string).toLowerCase();
+      const rSnap = await db.collection(`users/${uid}/recipes`).get();
+      const match = rSnap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(search));
+      if (!match) return `No recipe found matching "${input.recipe_name_search}".`;
+
+      const date = input.date as string; // YYYY-MM-DD
+      // Derive week start (Monday)
+      const d = new Date(date + "T12:00:00Z");
+      const day = d.getUTCDay(); // 0=Sun
+      const diff = (day === 0 ? -6 : 1 - day);
+      const weekStartDate = new Date(d);
+      weekStartDate.setUTCDate(d.getUTCDate() + diff);
+      const weekStart = weekStartDate.toISOString().slice(0, 10);
+
+      const planRef = db.doc(`users/${uid}/meal_plans/${weekStart}`);
+      const planSnap = await planRef.get();
+      const existing = planSnap.exists ? (planSnap.data() as Record<string, unknown>) : {};
+      const days = (existing.days as Record<string, Record<string, unknown>>) ?? {};
+      if (!days[date]) days[date] = {};
+      days[date][input.slot as string] = { recipe_id: match.id, recipe_name: match.data().name };
+
+      await planRef.set({ week_start: weekStart, days }, { merge: true });
+      return `Planned "${match.data().name}" for ${date} (${input.slot}).`;
+    }
+
+    case "get_meal_plan": {
+      // Derive current week start if not provided
+      let weekStart = input.week_start as string | undefined;
+      if (!weekStart) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const diff = (day === 0 ? -6 : 1 - day);
+        const ws = new Date(now);
+        ws.setUTCDate(now.getUTCDate() + diff);
+        weekStart = ws.toISOString().slice(0, 10);
+      }
+      const planSnap = await db.doc(`users/${uid}/meal_plans/${weekStart}`).get();
+      if (!planSnap.exists) return `No meal plan found for the week of ${weekStart}.`;
+      const days = (planSnap.data()?.days ?? {}) as Record<string, Record<string, { recipe_name?: string }>>;
+      const lines: string[] = [`**Meal plan for week of ${weekStart}:**`];
+      for (const [date, slots] of Object.entries(days).sort()) {
+        const slotStrs = (["breakfast","lunch","dinner","snack"] as const)
+          .filter((s) => slots[s])
+          .map((s) => `${s}: ${slots[s].recipe_name ?? "?"}`)
+          .join(", ");
+        if (slotStrs) lines.push(`• ${date} — ${slotStrs}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "generate_shopping_list": {
+      let weekStart = input.week_start as string | undefined;
+      if (!weekStart) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const diff = (day === 0 ? -6 : 1 - day);
+        const ws = new Date(now);
+        ws.setUTCDate(now.getUTCDate() + diff);
+        weekStart = ws.toISOString().slice(0, 10);
+      }
+      const planSnap = await db.doc(`users/${uid}/meal_plans/${weekStart}`).get();
+      if (!planSnap.exists) return `No meal plan for week of ${weekStart}. Plan some meals first.`;
+
+      const days = (planSnap.data()?.days ?? {}) as Record<string, Record<string, { recipe_id?: string }>>;
+      const recipeIds = new Set<string>();
+      for (const slots of Object.values(days)) {
+        for (const entry of Object.values(slots)) {
+          if (entry?.recipe_id) recipeIds.add(entry.recipe_id);
+        }
+      }
+      if (recipeIds.size === 0) return "No recipes are planned yet. Add meals to the planner first.";
+
+      const aggregate = new Map<string, string[]>();
+      for (const id of recipeIds) {
+        const rSnap = await db.doc(`users/${uid}/recipes/${id}`).get();
+        if (!rSnap.exists) continue;
+        for (const ing of (rSnap.data()?.ingredients ?? []) as { name: string; amount: string }[]) {
+          const key = ing.name.toLowerCase().trim();
+          if (!aggregate.has(key)) aggregate.set(key, []);
+          aggregate.get(key)!.push(ing.amount);
+        }
+      }
+
+      const items = Array.from(aggregate.entries()).map(([name, amounts]) => ({
+        ingredient: name,
+        amount: amounts.length > 1 ? amounts.join(" + ") : amounts[0] ?? "",
+        checked: false,
+      }));
+
+      await db.doc(`users/${uid}/shopping_lists/${weekStart}`).set({
+        week_start: weekStart,
+        items,
+        generated_at: new Date().toISOString(),
+      });
+      return `Shopping list generated for week of ${weekStart} — ${items.length} items: ${items.slice(0, 8).map((i) => i.ingredient).join(", ")}${items.length > 8 ? `, +${items.length - 8} more` : ""}.`;
+    }
+
+    // ── People / CRM ──────────────────────────────────────────────────────────
+    case "list_people": {
+      const snap = await db.collection(`users/${uid}/people`).orderBy("name").get();
+      let people = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Record<string, unknown>[];
+
+      if (input.search) {
+        const q = (input.search as string).toLowerCase();
+        people = people.filter((p) =>
+          (p.name as string)?.toLowerCase().includes(q) ||
+          (p.company as string)?.toLowerCase().includes(q) ||
+          ((p.tags as string[]) ?? []).some((t) => t.toLowerCase().includes(q))
+        );
+      }
+      if (input.relationship) people = people.filter((p) => p.relationship === input.relationship);
+      if (input.has_follow_up) people = people.filter((p) => p.follow_up_date);
+
+      if (input.overdue_only) {
+        const thresholds: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+        people = people.filter((p) => {
+          if (!p.contact_frequency || !p.last_contacted) return false;
+          const days = Math.floor((Date.now() - new Date((p.last_contacted as string) + "T12:00:00Z").getTime()) / 86400000);
+          return days > thresholds[p.contact_frequency as string];
+        });
+      }
+
+      if (people.length === 0) return "No contacts found matching those criteria.";
+
+      return people.map((p) => {
+        const days = p.last_contacted
+          ? Math.floor((Date.now() - new Date((p.last_contacted as string) + "T12:00:00Z").getTime()) / 86400000)
+          : null;
+        const lines = [`**${p.name}** (${p.relationship}${p.company ? `, ${p.company}` : ""})`];
+        if (days !== null) lines.push(`  Last contact: ${days}d ago`);
+        if (p.follow_up_date) lines.push(`  Follow-up: ${p.follow_up_date}${p.follow_up_note ? ` — ${p.follow_up_note}` : ""}`);
+        if (p.notes) lines.push(`  Notes: ${(p.notes as string).slice(0, 100)}`);
+        return lines.join("\n");
+      }).join("\n\n");
+    }
+
+    case "add_person": {
+      const now = new Date().toISOString();
+      const data: Record<string, unknown> = {
+        name: input.name, relationship: input.relationship ?? "other",
+        created_at: now, updated_at: now,
+      };
+      const optional = ["email","phone","birthday","location","company","notes","contact_frequency","follow_up_date","follow_up_note","gift_ideas","tags"];
+      for (const k of optional) if (input[k] !== undefined) data[k] = input[k];
+      await db.collection(`users/${uid}/people`).add(data);
+      return `${input.name} added to your contacts.`;
+    }
+
+    case "update_person": {
+      const pSnap = await db.collection(`users/${uid}/people`).get();
+      const lower = (input.name_search as string).toLowerCase();
+      const pdoc = pSnap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower));
+      if (!pdoc) return `No contact found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (input.notes             !== undefined) updates.notes             = input.notes;
+      if (input.follow_up_date    !== undefined) updates.follow_up_date    = input.follow_up_date;
+      if (input.follow_up_note    !== undefined) updates.follow_up_note    = input.follow_up_note;
+      if (input.contact_frequency !== undefined) updates.contact_frequency = input.contact_frequency;
+      if (input.add_gift_idea) {
+        const existing = (pdoc.data().gift_ideas as string[]) ?? [];
+        updates.gift_ideas = [...existing, input.add_gift_idea as string];
+      }
+      if (input.add_tag) {
+        const existing = (pdoc.data().tags as string[]) ?? [];
+        updates.tags = [...existing, (input.add_tag as string).toLowerCase()];
+      }
+      await pdoc.ref.update(updates);
+      return `Updated ${pdoc.data().name}.`;
+    }
+
+    case "log_interaction": {
+      const pSnap2 = await db.collection(`users/${uid}/people`).get();
+      const lower2 = (input.name_search as string).toLowerCase();
+      const pdoc2 = pSnap2.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower2));
+      if (!pdoc2) return `No contact found matching "${input.name_search}".`;
+      const iDate = (input.date as string) ?? today();
+      const now2 = new Date().toISOString();
+      const iData: Record<string, unknown> = {
+        person_id: pdoc2.id, type: input.type, date: iDate, created_at: now2,
+      };
+      if (input.notes) iData.notes = input.notes;
+      await db.collection(`users/${uid}/people/${pdoc2.id}/interactions`).add(iData);
+      await pdoc2.ref.update({ last_contacted: iDate, updated_at: now2 });
+      return `Logged ${input.type} with ${pdoc2.data().name} on ${iDate}.`;
+    }
+
+    // ── Google Drive ──────────────────────────────────────────────────────────
+    case "search_drive": {
+      const { refreshDriveToken } = await import("@/lib/drive-token");
+      let accessToken: string;
+      try {
+        accessToken = await refreshDriveToken(uid);
+      } catch {
+        return "Google Drive is not connected. Go to the Drive page to connect it.";
+      }
+
+      const q = input.query as string;
+      const limit = (input.limit as number) ?? 10;
+      const driveQuery = `trashed = false and (name contains '${q.replace(/'/g, "\\'")}' or fullText contains '${q.replace(/'/g, "\\'")}')`;
+      const params = new URLSearchParams({
+        q: driveQuery,
+        fields: "files(id,name,mimeType,modifiedTime)",
+        orderBy: "relevance",
+        pageSize: String(Math.min(limit, 20)),
+      });
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json();
+      if (data.error) return `Drive search failed: ${data.error.message}`;
+
+      const files = (data.files ?? []) as { id: string; name: string; mimeType: string; modifiedTime: string }[];
+      if (files.length === 0) return `No Drive files found matching "${q}".`;
+
+      const MIME_LABELS: Record<string, string> = {
+        "application/vnd.google-apps.document":     "Google Doc",
+        "application/vnd.google-apps.spreadsheet":  "Google Sheet",
+        "application/vnd.google-apps.presentation": "Google Slides",
+      };
+
+      return files.map((f) =>
+        `**${f.name}** (${MIME_LABELS[f.mimeType] ?? f.mimeType.split("/").pop()}) — id: \`${f.id}\``
+      ).join("\n");
+    }
+
+    case "read_drive_file": {
+      const { refreshDriveToken } = await import("@/lib/drive-token");
+      let accessToken: string;
+      try {
+        accessToken = await refreshDriveToken(uid);
+      } catch {
+        return "Google Drive is not connected. Go to the Drive page to connect it.";
+      }
+
+      const fileId = input.file_id as string;
+      const GOOGLE_DOC_TYPES: Record<string, string> = {
+        "application/vnd.google-apps.document":     "text/plain",
+        "application/vnd.google-apps.spreadsheet":  "text/csv",
+        "application/vnd.google-apps.presentation": "text/plain",
+      };
+
+      const metaRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const meta = await metaRes.json();
+      if (meta.error) return `Could not access file: ${meta.error.message}`;
+
+      const exportMime = GOOGLE_DOC_TYPES[meta.mimeType];
+      let content = "";
+
+      if (exportMime) {
+        const exportRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMime)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        content = await exportRes.text();
+      } else if (meta.mimeType?.startsWith("text/") || meta.mimeType === "application/json") {
+        const dlRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        content = await dlRes.text();
+      } else {
+        return `Cannot read file type: ${meta.mimeType}. Only Google Docs, Sheets, Slides, and plain text files are supported.`;
+      }
+
+      const trimmed = content.length > 30000
+        ? content.slice(0, 30000) + "\n\n[...truncated at 30,000 characters]"
+        : content;
+
+      return `**${input.file_name ?? meta.name}**\n\n${trimmed}`;
     }
 
     // ── Second Brain ───────────────────────────────────────────────────────────

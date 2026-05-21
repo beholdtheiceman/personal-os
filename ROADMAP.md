@@ -26,7 +26,6 @@
 - **Suno playback** — URL-based track saving works; Suno CDN requires auth so playback needs a storage solution for uploaded MP3s
   - Options: Firebase Storage (Blaze plan upgrade), Vercel Blob (500MB free), Cloudflare R2 (10GB free)
 - ~~**Web Speech API — Journal**~~ — Done, swapped to Web Speech API matching chat
-- **Background photo** — Cherry blossom night photo implemented but text readability needs design work before re-enabling
 
 ---
 
@@ -34,26 +33,21 @@
 
 ### Data & Integrations
 - **Plaid Integration** — Auto-sync bank/credit card transactions into Finance tracker. No more manual entries. *(Direction confirmed)*
-- **Google Drive** — Read docs into chat context, save exports, sync with second brain
+- **Google Drive** — Read docs into chat context, save exports, sync with second brain ✅
 - **Instacart / Walmart Grocery** — Build grocery lists from meal plan and push to a cart for pickup scheduling. Instacart API covers Walmart, Target, and others.
 - **Messaging Hub** — Unified inbox for chat platforms. Discord done.
-  - **Slack** — Read channels/DMs, send messages, AI draft replies
   - Google Messages — no clean API, likely not feasible
-  - **Beeper Desktop API** — Local REST API + MCP server covering WhatsApp, Telegram, Signal, Slack, iMessage, Messenger, Instagram, LinkedIn, X, Google Messages, Google Chat, Google Voice. Local-only (requires Beeper Desktop running) so not deployable to prod — better suited as a local Claude Desktop MCP add-on. Public beta. *(Consider)*
+  - **Beeper Desktop API** — Local REST API + MCP server covering WhatsApp, Telegram, Signal, iMessage, Messenger, Instagram, LinkedIn, X, Google Messages, Google Chat, Google Voice. Local-only (requires Beeper Desktop running) so not deployable to prod — better suited as a local Claude Desktop MCP add-on. Public beta. *(Consider)*
 
 ### Media
 - **Suno MP3 uploads** — Requires storage solution (see above). Once solved: upload MP3s directly, full audio player
-- **Spotify** — OAuth + Web Playback SDK, play/pause/skip/queue, music + podcasts. Requires Spotify Premium.
 
 ### Dashboard Additions
-- **Quick Links** — Grid of frequently visited sites, configurable
+- **Quick Links** — Grid of frequently visited sites, configurable ✅
 
 ### AI & Automation
-- **Weekly AI Review** — Sunday summary: what went well, what didn't, focus for next week
+- **Weekly AI Review** — Sunday summary: what went well, what didn't, focus for next week ✅
 - **Smart Notifications** — Streak alerts, habit nudges, goal deadline reminders
-
-### UI / Design
-- **Background photo** — Re-enable cherry blossom night photo (Meguro River) once text contrast solved
 
 ### Life OS Features
 - **XP / Gamification** — Earn XP for completing tasks, habits, goals, journal entries. Level up, streaks, badges.
