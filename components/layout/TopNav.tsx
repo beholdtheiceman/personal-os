@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   RiDashboardLine, RiTaskLine, RiCalendarLine, RiMailLine,
   RiRobot2Line, RiLoopLeftLine, RiMusicLine,
-  RiDatabase2Line, RiBookLine, RiBowlLine, RiHeartPulseLine,
+  RiDatabase2Line, RiBookLine, RiBookReadLine, RiBowlLine, RiHeartPulseLine,
   RiLineChartLine, RiMoneyDollarCircleLine, RiFolderLine,
   RiMoreLine, RiLogoutBoxLine, RiSettings3Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line,
@@ -28,6 +28,7 @@ const MORE_NAV = [
   { href: "/chat",         label: "Chat (Full)",   icon: RiRobot2Line },
   { href: "/memory",       label: "Memory",        icon: RiDatabase2Line },
   { href: "/journal",      label: "Journal",       icon: RiBookLine },
+  { href: "/bible",        label: "Bible",         icon: RiBookReadLine },
   { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
   { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
   { href: "/health",       label: "Health",        icon: RiHeartPulseLine },

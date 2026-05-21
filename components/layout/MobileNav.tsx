@@ -5,7 +5,7 @@ import { useState } from "react";
 import {
   RiDashboardLine, RiTaskLine, RiRobot2Line, RiMailLine, RiMusicLine,
   RiLoopLeftLine, RiCalendarLine, RiDatabase2Line,
-  RiBookLine, RiBowlLine, RiHeartPulseLine, RiLineChartLine,
+  RiBookLine, RiBookReadLine, RiBowlLine, RiHeartPulseLine, RiLineChartLine,
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line,
 } from "react-icons/ri";
@@ -25,6 +25,7 @@ const MORE = [
   { href: "/media",        label: "Media",         icon: RiMusicLine },
   { href: "/memory",       label: "Memory",        icon: RiDatabase2Line },
   { href: "/journal",      label: "Journal",       icon: RiBookLine },
+  { href: "/bible",        label: "Bible",         icon: RiBookReadLine },
   { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
   { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
   { href: "/health",       label: "Health",        icon: RiHeartPulseLine },

@@ -87,6 +87,25 @@ export async function GET(req: NextRequest) {
     if (tokens.error) throw new Error(tokens.error_description);
 
     const accessToken = tokens.access_token as string;
+    const refreshToken = tokens.refresh_token as string | undefined;
+    const expiresIn = (tokens.expires_in as number | undefined) ?? 3600;
+
+    // Persist the integration so the chat tools (list_google_contacts, create_google_contact, etc.)
+    // can refresh and call People API later. If refresh_token isn't returned (already authorized
+    // previously without prompt:'consent'), preserve any existing one.
+    {
+      const db = getAdminDb();
+      const integRef = db.doc(`users/${uid}/integrations/google_contacts`);
+      const existing = await integRef.get();
+      const existingRefresh = existing.exists ? (existing.data()?.refresh_token as string | undefined) : undefined;
+      await integRef.set({
+        access_token: accessToken,
+        refresh_token: refreshToken ?? existingRefresh ?? null,
+        expires_at: Date.now() + expiresIn * 1000,
+        scope: "https://www.googleapis.com/auth/contacts",
+        connected_at: new Date().toISOString(),
+      }, { merge: true });
+    }
 
     // Fetch all contacts from Google People API (paginated)
     const googlePeople: GooglePerson[] = [];

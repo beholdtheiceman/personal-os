@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
     client_id: clientId,
     redirect_uri: `${req.nextUrl.origin}/api/people/contacts-callback`,
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/contacts.readonly",
+    // Full contacts scope (read + write) so the chat agent can create/update/delete
+    // contacts via the People API in addition to the one-shot import.
+    scope: "https://www.googleapis.com/auth/contacts",
     access_type: "offline",
     prompt: "consent",
     state: uid,

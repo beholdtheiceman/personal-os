@@ -12,7 +12,14 @@ export async function GET(req: NextRequest) {
     client_id: clientId,
     redirect_uri: `${req.nextUrl.origin}/api/drive/callback`,
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/drive.readonly",
+    // drive.readonly = search + read existing files; drive.file = create + edit files this app makes.
+    // Both are needed: read for the chat tools (search_drive, read_drive_file), file for uploads
+    // (e.g. save shopping list to Drive). drive.file is narrower than full drive — the app can
+    // only touch files it created, never the user's other Drive content.
+    scope: [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.file",
+    ].join(" "),
     access_type: "offline",
     prompt: "consent",
     state: uid,

@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMealPlan, useShoppingList, useRecipes } from "@/hooks/useMealPlanner";
-import { RiShoppingCart2Line, RiRefreshLine, RiCheckLine } from "react-icons/ri";
+import { RiShoppingCart2Line, RiRefreshLine, RiCheckLine, RiFileDownloadLine, RiGoogleLine } from "react-icons/ri";
 import type { ShoppingListItem, MealSlot } from "@/types";
 import toast from "react-hot-toast";
 
@@ -20,6 +20,101 @@ export default function ShoppingListView({ weekStart }: Props) {
   const { list, loading } = useShoppingList(weekStart);
   const { recipes } = useRecipes();
   const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [savingToDrive, setSavingToDrive] = useState(false);
+
+  const saveToDrive = async () => {
+    if (!user || !list) return;
+    setSavingToDrive(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/meal-planner/save-shopping-list-to-drive", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ weekStart }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        needsReconnect?: boolean;
+        webViewLink?: string;
+      };
+
+      if (!res.ok) {
+        if (data.needsReconnect) {
+          // Existing token lacks drive.file scope (or Drive isn't connected). Send them
+          // through OAuth again — the auth route now requests both scopes.
+          toast(
+            "Drive needs write access. Reconnecting…",
+            { icon: "🔑" }
+          );
+          window.location.href = `/api/drive/auth?uid=${user.uid}`;
+          return;
+        }
+        throw new Error(data.error ?? "Save failed");
+      }
+
+      if (data.webViewLink) {
+        toast.success(
+          (t) => (
+            <span>
+              Saved to Drive —{" "}
+              <a
+                href={data.webViewLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => toast.dismiss(t.id)}
+                className="underline text-accent"
+              >
+                Open
+              </a>
+            </span>
+          ),
+          { duration: 8000 }
+        );
+      } else {
+        toast.success("Saved to Drive");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save to Drive");
+      console.error(err);
+    } finally {
+      setSavingToDrive(false);
+    }
+  };
+
+  const exportToWord = async () => {
+    if (!user || !list) return;
+    setExporting(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(
+        `/api/meal-planner/export-shopping-list?weekStart=${encodeURIComponent(weekStart)}`,
+        { headers: { Authorization: `Bearer ${idToken}` } }
+      );
+      if (!res.ok) {
+        const errData = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errData.error ?? "Export failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shopping-list-${weekStart}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Downloaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export");
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const generateList = async () => {
     if (!user || !plan) return;
@@ -108,18 +203,50 @@ export default function ShoppingListView({ weekStart }: Props) {
             <p className="text-sm text-text-muted">Generate a list from this week&apos;s meal plan</p>
           )}
         </div>
-        <button
-          onClick={generateList}
-          disabled={generating || !plan}
-          className="flex items-center gap-1.5 text-sm btn-primary disabled:opacity-50"
-        >
-          {generating ? (
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <RiRefreshLine className="w-4 h-4" />
+        <div className="flex items-center gap-2">
+          {list && (
+            <>
+              <button
+                onClick={saveToDrive}
+                disabled={savingToDrive}
+                className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-bg-tertiary hover:bg-accent/25 text-accent border border-accent/40 hover:border-accent/70 shadow-sm disabled:opacity-50 transition-colors"
+                title="Save as a Google Doc in your Drive"
+              >
+                {savingToDrive ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <RiGoogleLine className="w-4 h-4" />
+                )}
+                Save to Drive
+              </button>
+              <button
+                onClick={exportToWord}
+                disabled={exporting}
+                className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-bg-tertiary hover:bg-accent/25 text-accent border border-accent/40 hover:border-accent/70 shadow-sm disabled:opacity-50 transition-colors"
+                title="Download as a Word document"
+              >
+                {exporting ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <RiFileDownloadLine className="w-4 h-4" />
+                )}
+                Download
+              </button>
+            </>
           )}
-          {list ? "Regenerate" : "Generate list"}
-        </button>
+          <button
+            onClick={generateList}
+            disabled={generating || !plan}
+            className="flex items-center gap-1.5 text-sm btn-primary disabled:opacity-50"
+          >
+            {generating ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <RiRefreshLine className="w-4 h-4" />
+            )}
+            {list ? "Regenerate" : "Generate list"}
+          </button>
+        </div>
       </div>
 
       {!list ? (

@@ -1,9 +1,27 @@
 "use client";
 import { createContext, useContext, useState, useRef, useCallback, ReactNode } from "react";
+import { useAuth } from "./AuthContext";
 
 export type PlayerTrack =
   | { type: "youtube"; videoId: string; title: string; thumbnail: string }
   | { type: "suno"; url: string; title: string };
+
+// Fire-and-forget: log a play to users/{uid}/media_history for chat/history tooling.
+async function logPlay(idToken: string, track: PlayerTrack) {
+  const body =
+    track.type === "youtube"
+      ? { type: "youtube", title: track.title, source_id: track.videoId, thumbnail: track.thumbnail }
+      : { type: "suno", title: track.title, source_id: track.url };
+  try {
+    await fetch("/api/media/log-play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // Non-critical — never block playback on a logging failure
+  }
+}
 
 interface PlayerContextType {
   currentTrack: PlayerTrack | null;
@@ -33,6 +51,7 @@ export interface YTPlayer {
 const PlayerContext = createContext<PlayerContextType | null>(null);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(100);
@@ -55,6 +74,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTrack(track);
     setIsPlaying(true);
 
+    // Fire-and-forget log to media_history; never blocks playback.
+    if (user) {
+      user.getIdToken().then((idToken) => logPlay(idToken, track)).catch(() => { /* ignore */ });
+    }
+
     if (track.type === "suno") {
       setTimeout(() => {
         if (audioRef.current) {
@@ -69,7 +93,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
       }, 50);
     }
-  }, [stopCurrent]);
+  }, [stopCurrent, user]);
 
   const pause = useCallback(() => {
     if (currentTrack?.type === "suno") audioRef.current?.pause();

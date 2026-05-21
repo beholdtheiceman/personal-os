@@ -27,12 +27,7 @@
 - **People / Relationships CRM** — Contacts, interaction history, contact frequency targets, follow-ups, gift ideas, Google Contacts import, Claude tools
 - **Persistent Chat Panel** — Slide-in panel from right (400px desktop, full-screen mobile), pushes content, session-persistent state, Chat toggle in TopNav + MobileNav, full `/chat` page still available
 - **Google Health Integration** — Google Health API v4 (`health.googleapis.com`) with `googlehealth.*` scopes; syncs sleep hours/quality/efficiency, daily steps, resting heart rate, and exercise sessions from Pixel Watch via Google Health; OAuth connect/disconnect flow; auto-prefills health log form
-
----
-
-## 🔄 In Progress / Partially Done
-
-- **The Crate** — Personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) directly from your computer via Vercel Blob storage; files persist and stream through the audio proxy; YouTube + The Crate tab switcher on Media page; MiniPlayer redesigned to match dark glass aesthetic
+- **The Crate** — Personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) directly from your computer via Vercel Blob storage; files persist and stream through the audio proxy; YouTube + The Crate tab switcher on Media page; MiniPlayer redesigned to match dark glass aesthetic. Suno MP3s can be uploaded here directly.
 
 ---
 
@@ -41,9 +36,6 @@
 ### Data & Integrations
 - **Plaid Integration** — Auto-sync bank/credit card transactions into Finance tracker. No more manual entries. *(Direction confirmed, waiting on Development environment approval)*
 - **Instacart / Walmart Grocery** — Push meal plan shopping list directly to a cart for pickup scheduling
-
-### Media
-- **Suno MP3 uploads** — Requires storage solution (see above). Once solved: upload MP3s directly, full audio player
 
 ### AI & Automation
 - **Smart Notifications** — Streak at-risk alerts, habit nudges, goal deadline reminders
