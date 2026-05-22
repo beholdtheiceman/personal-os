@@ -29,6 +29,16 @@
 - **Google Health Integration** — Google Health API v4 (`health.googleapis.com`) with `googlehealth.*` scopes; syncs sleep hours/quality/efficiency, daily steps, resting heart rate, and exercise sessions from Pixel Watch via Google Health; OAuth connect/disconnect flow; auto-prefills health log form
 - **The Crate** — Personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) directly from your computer via Vercel Blob storage; files persist and stream through the audio proxy; YouTube + The Crate tab switcher on Media page; MiniPlayer redesigned to match dark glass aesthetic. Suno MP3s can be uploaded here directly.
 - **Plaid Integration** — Auto-syncs bank/credit card transactions and recurring streams into the Finance tracker (link-token → exchange → sync to Firestore); surfaced in the Finance "Accounts" tab + chat tools. *(Sandbox-only — live bank data pending Plaid Production/Development approval)*
+- **Timezone-Aware Notifications** — Device timezone captured on every app load via `Intl.DateTimeFormat` and stored in Firestore; `lib/timezone.ts` helper used by all cron handlers; all Vercel crons switched to hourly with local-time checks; home timezone picker in Settings
+- **Recurring Tasks** — Daily/weekly/monthly recurrence on tasks with optional end date; next instance auto-spawned on completion; `lib/recurrence.ts` for date math; full chat tool support
+- **Hydration Tracking** — Daily water intake log with goal, quick +1 widget on Health page, dashboard indicator, XP on goal completion, chat tools
+- **Budget Tracking** — Per-category monthly spending limits with progress bars; Budget tab on Finance page; dashboard widget; chat tools
+- **Net Worth Dashboard** — Assets and liabilities tracking with monthly snapshots and trend chart; Net Worth tab on Finance page; chat tools
+- **Workout Planner / Strength Tracker** — Full workout logging (sets/reps/weight), PR tracking, Claude-generated training plans, workout history; dedicated /workout page; chat tools
+- **Time Tracker** — Toggl-style time logging linked to tasks and projects; weekly chart by category; dedicated /time page; injected into weekly AI review; chat tools
+- **Focus / Pomodoro Timer** — Countdown timer linked to tasks, auto-logs time on completion, persistent MiniFocusBar across all pages, break timer, TimerContext wired into app layout; chat can start sessions
+- **Morning Ritual / Daily Standup** — Daily Claude briefing via cron (calendar, tasks, habits, flagged items); dashboard widget with manual trigger; chat tool
+- **Decision Journal** — Structured decision logging with context, options, reasoning, expected outcomes, and scheduled reviews; dashboard nudge for pending reviews; dedicated /decisions page; chat tools
 
 ---
 
@@ -39,18 +49,22 @@
 
 ### AI & Automation
 - **Smart Notifications** — Streak at-risk alerts, habit nudges, goal deadline reminders
+- **Proactive AI Insights** — Claude periodically analyzes patterns across all data sources (sleep, energy, mood, habits, nutrition, workouts, time logs) and surfaces correlations unprompted; weekly or daily insight card on dashboard; unique to this app because it holds all the data in one place
+
+### Health
+- **Body Metrics Tracker** — Log weight, body fat %, and measurements over time with trend charts; fills the gap in the health module alongside sleep, steps, heart rate, and nutrition
+- **Supplement / Medication Log** — Track daily supplements and medications with dosage, timing, and notes; fits naturally alongside hydration and nutrition
+- **Mood Tracker** — Standalone daily mood check-in (1–10 with optional note, separate from journal); enables cross-domain correlation with sleep, exercise, habits, and nutrition over time; pairs with Proactive AI Insights
+
+### Finance
+- **Savings Goals** — "Save $X by Y date" goals with progress bars and projected completion dates; natural extension of the budget and net worth modules; Claude can track contributions and nudge via Smart Notifications
+
+### Creator
+- **Content Calendar / Podcast Tracker** — Episode planning and status tracking (idea → recorded → edited → published) with publish dates, notes, and links; content calendar view; fits the Be Prepared Podcast workflow
 
 ### Life OS Features
 - **Reading List / Book Tracker** — Log books, highlights, key takeaways summarized by Claude
-- **Workout Planner / Strength Tracker** — Plan and program workouts, log sets/reps/weight, track PRs, Claude-generated training plans; complements existing health logging and Google Health sync
-- **Budget Tracking** — Per-category monthly spending limits with progress bars and alerts; makes the Finance module actionable rather than just historical
-- **Net Worth Dashboard** — Track assets (savings, investments, property) and liabilities (loans, credit cards) over time with monthly snapshots; companion to Finance tracker
-- **Time Tracker** — Log what you actually worked on (Toggl-style); pairs with tasks and projects; surfaces in weekly AI review to compare planned vs. actual time spent
-- **Focus / Pomodoro Timer** — Start a timed focus session on a specific task, auto-log time on completion, integrates with task list and time tracker
-- **Morning Ritual / Daily Standup** — Structured daily planning flow: Claude pulls calendar, open tasks, habits due, and flagged items into a prioritized "here's what today looks like" briefing; cron notification or dedicated dashboard section
-- **Decision Journal** — Log important decisions with reasoning and expected outcomes; revisit months later to draw lessons; Claude prompts periodic reviews; integrates with journal and memory
-- **Recurring Tasks** — Repeating task support with configurable cadence (daily, weekly, monthly); auto-recreates on completion
-- **Hydration Tracking** — Daily water intake log with a goal and dashboard indicator; fits naturally with nutrition and health modules
+- **Birthday & Gift Reminders** — Notify when a contact's birthday is approaching (configurable lead time); pull gift ideas already stored in People CRM; small lift on top of existing Smart Notifications infrastructure
 
 ---
 

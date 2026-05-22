@@ -30,6 +30,9 @@ import BudgetDashboardWidget from "@/components/dashboard/BudgetDashboardWidget"
 import WeeklyReviewWidget from "@/components/dashboard/WeeklyReviewWidget";
 import DailyBriefingWidget from "@/components/dashboard/DailyBriefingWidget";
 import DecisionReviewWidget from "@/components/dashboard/DecisionReviewWidget";
+import MoodDashboardWidget from "@/components/dashboard/MoodDashboardWidget";
+import BirthdayWidget from "@/components/dashboard/BirthdayWidget";
+import SavingsDashboardWidget from "@/components/dashboard/SavingsDashboardWidget";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -274,6 +277,9 @@ export default function DashboardPage() {
       {/* ── Decision Reviews ── */}
       <DecisionReviewWidget />
 
+      {/* ── Upcoming Birthdays ── */}
+      <BirthdayWidget />
+
       {/* ── Verse of the Day ── */}
       {verse && (
         <div className="card border-accent/20 bg-accent/5 flex items-start gap-3">
@@ -356,8 +362,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Hydration ── */}
-      <HydrationDashboardWidget />
+      {/* ── Hydration + Mood ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <HydrationDashboardWidget />
+        <MoodDashboardWidget />
+      </div>
 
       {/* ── Calendar + Nutrition ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -591,8 +600,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Budget ── */}
-      <BudgetDashboardWidget />
+      {/* ── Budget + Savings ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <BudgetDashboardWidget />
+        <SavingsDashboardWidget />
+      </div>
 
       {/* ── Weekly Review ── */}
       <WeeklyReviewWidget />

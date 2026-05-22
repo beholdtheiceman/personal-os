@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   collection, addDoc, getDocs, query, orderBy, limit,
-  onSnapshot, doc, updateDoc, setDoc, getDoc, writeBatch,
+  onSnapshot, doc, updateDoc, setDoc, getDoc, writeBatch, deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
@@ -235,13 +235,14 @@ export default function ChatInterface() {
 
   // ── Save message to Firestore ────────────────────────────────────────────
   const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id" | "image">) => {
-    if (!user) return;
-    await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
+    if (!user) return null;
+    const ref = await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
     // Update chat metadata
     await updateDoc(doc(db, "users", user.uid, "chats", chatId), {
       lastMessage: msg.content.slice(0, 80),
       updatedAt: new Date().toISOString(),
     });
+    return ref;
   };
 
   // ── Send message ─────────────────────────────────────────────────────────
@@ -274,7 +275,7 @@ export default function ChatInterface() {
     // Reset textarea height after clearing
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
+    const savedUserRef = await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
 
     const history = [...messages.slice(-19), userMsg].map((m) => ({
       role: m.role,
@@ -329,9 +330,15 @@ export default function ChatInterface() {
         timestamp: assistantMsg.timestamp,
         ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}),
       });
-    } catch {
-      toast.error("Failed to get response");
-      setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to get response");
+      // Roll back the user message we optimistically saved — otherwise the chat is
+      // left ending on a user turn, and the next send produces two consecutive user
+      // messages, which the Anthropic API rejects (permanently breaking the chat).
+      setMessages((prev) => prev.filter((m) => m.id !== placeholderId && m.id !== userMsg.id));
+      if (savedUserRef) await deleteDoc(savedUserRef).catch(() => { /* best-effort */ });
+      // Put the text back so a failed send doesn't lose what the user typed
+      setInput(displayText);
     } finally {
       setLoading(false);
       // Return focus to textarea so user can keep typing immediately

@@ -7,6 +7,7 @@ import { getEnv } from "@/lib/env";
 import {
   morningBriefingHandler, streakAlertHandler, taskReminderHandler,
   goalDeadlineHandler, journalReminderHandler, healthReminderHandler, weeklyReviewHandler,
+  birthdayReminderHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import type { NotificationSettings } from "@/types";
@@ -80,6 +81,12 @@ export async function GET(req: NextRequest) {
     ) {
       const n = await weeklyReviewHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "weekly-review");
+    }
+
+    // Birthday reminder — fires once per day (morning hour) regardless of time setting
+    if (settings.birthday_reminder?.enabled && isHour(timeInfo, settings.morning_briefing.time ?? "08:00")) {
+      const n = await birthdayReminderHandler(uid, settings.birthday_reminder.days_before ?? 7);
+      if (n) await send(n.title, n.body, n.tag ?? "birthday-reminder");
     }
 
     if (fired.length > 0) results[uid] = fired;

@@ -9,6 +9,7 @@ import type { NotificationSettings, NotificationCategory } from "@/types";
 import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
+  RiCake2Line,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -69,6 +70,13 @@ const CATEGORIES: {
     icon: <RiBarChartLine className="w-4 h-4" />,
     hasTime: true,
     hasDays: true,
+  },
+  {
+    key: "birthday_reminder",
+    label: "Birthday Reminders",
+    description: "Notifies you when a contact's birthday is approaching (based on days_before setting)",
+    icon: <RiCake2Line className="w-4 h-4" />,
+    hasTime: false,
   },
 ];
 

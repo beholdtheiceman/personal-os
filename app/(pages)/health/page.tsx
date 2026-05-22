@@ -1,16 +1,22 @@
 "use client";
 import HealthTracker from "@/components/health/HealthTracker";
 import HydrationWidget from "@/components/health/HydrationWidget";
+import MoodWidget from "@/components/health/MoodWidget";
+import BodyMetricsWidget from "@/components/health/BodyMetricsWidget";
 
 export default function HealthPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-text-primary mb-1">Health</h1>
-        <p className="text-text-secondary text-sm">Track sleep, energy, exercise, and hydration.</p>
+        <p className="text-text-secondary text-sm">Track sleep, energy, exercise, hydration, mood, and body metrics.</p>
       </div>
       <HealthTracker />
-      <HydrationWidget />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <HydrationWidget />
+        <MoodWidget />
+      </div>
+      <BodyMetricsWidget />
     </div>
   );
 }

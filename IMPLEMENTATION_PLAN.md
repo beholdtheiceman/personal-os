@@ -1,4 +1,5 @@
 # Personal OS — New Features Implementation Plan
+> ✅ **Phases 0–5 complete** as of May 2026. Phases 6–8 below are the next build cycle.
 
 ## Overview
 
@@ -424,3 +425,324 @@ users/{uid}/decisions/{decisionId}
 - **TopNav / MobileNav** — plan nav slots for Workout, Time, Focus, Decisions upfront so you're not reorganizing nav repeatedly
 - **Weekly Review prompt (`app/api/weekly-review/route.ts`)** — after each phase, add that module's data to the review context (time summary, workout sessions, hydration average, decisions pending)
 - **XP events** — extend `XPEventType` to cover `workout_complete`, `hydration_goal`, `focus_session`, `decision_logged`
+
+---
+
+---
+
+## Phase 6 — High Value, Low Effort
+
+### 6A. Mood Tracker
+
+**What it is:** Daily 1–10 mood check-in with optional note. Standalone from journal. Enables cross-domain correlation with sleep, habits, nutrition, and workouts over time.
+
+**Firestore:**
+```
+users/{uid}/mood/{YYYY-MM-DD}
+  score: number          // 1–10
+  note?: string
+  logged_at: string
+```
+
+**Types (`types/index.ts`):**
+- Add `MoodEntry` interface
+
+**Files to create/modify:**
+- `hooks/useMood.ts` — real-time hook, today's entry + recent history
+- `components/health/MoodWidget.tsx` — 1–10 selector buttons + optional note input; shows today's score if already logged
+- `components/dashboard/MoodDashboardWidget.tsx` — compact "Mood: 7/10" with 7-day sparkline
+- `app/(pages)/health/page.tsx` — add Mood section (alongside hydration, sleep, steps)
+- `app/(pages)/dashboard/page.tsx` — wire in `MoodDashboardWidget`
+- `app/api/chat/route.ts` — add `log_mood` (score + note), `get_mood_history` (last N days) tools
+
+**XP:** 5 XP for logging mood each day.
+
+---
+
+### 6B. Body Metrics Tracker
+
+**What it is:** Log weight, body fat %, and key measurements over time with trend charts. Fills the last gap in the health module.
+
+**Firestore:**
+```
+users/{uid}/body_metrics/{YYYY-MM-DD}
+  weight_lbs?: number
+  body_fat_pct?: number
+  chest_in?: number
+  waist_in?: number
+  hips_in?: number
+  arms_in?: number
+  notes?: string
+  logged_at: string
+```
+
+**Types (`types/index.ts`):**
+- Add `BodyMetricsEntry` interface
+
+**Files to create/modify:**
+- `hooks/useBodyMetrics.ts` — real-time hook with history
+- `components/health/BodyMetricsWidget.tsx` — log form (all fields optional) + trend charts for weight and body fat % (reuse chart pattern from health page)
+- `app/(pages)/health/page.tsx` — add Body Metrics tab or section
+- `app/api/chat/route.ts` — add `log_body_metrics`, `get_body_metrics_history` tools
+
+---
+
+### 6C. Birthday & Gift Reminders
+
+**What it is:** Notify when a contact's birthday is approaching. Pull gift ideas already stored in People CRM. Dashboard widget for upcoming birthdays this month.
+
+**No new Firestore collection** — extends existing `users/{uid}/people/{personId}` which already has `birthday` and `gift_ideas` fields.
+
+**Files to create/modify:**
+- `components/dashboard/BirthdayWidget.tsx` — "Upcoming birthdays" card: lists contacts with birthdays in the next 30 days, shows days until + gift ideas if stored
+- `app/(pages)/dashboard/page.tsx` — wire in `BirthdayWidget`
+- `components/notifications/NotificationSettings.tsx` — add `birthday_reminder` category with lead-time selector (7 / 14 / 30 days before)
+- `types/index.ts` — add `birthday_reminder` to `NotificationSettings` interface and `DEFAULT_NOTIFICATION_SETTINGS`
+- `app/api/notifications/daily/route.ts` — add birthday check: query people, find upcoming birthdays within lead time, send push if not already sent today
+
+---
+
+### 6D. Savings Goals
+
+**What it is:** "Save $X by Y date" goals with progress bars, contribution logging, and projected completion dates. Natural extension of Finance.
+
+**Firestore:**
+```
+users/{uid}/savings_goals/{goalId}
+  name: string                    // e.g. "Emergency Fund"
+  target_amount: number
+  current_amount: number
+  target_date: string             // YYYY-MM-DD
+  contributions: [
+    { amount: number, date: string, note?: string }
+  ]
+  color?: string                  // for visual differentiation
+  status: "active" | "completed" | "paused"
+  created_at: string
+  updated_at: string
+```
+
+**Types (`types/index.ts`):**
+- Add `SavingsGoal`, `SavingsContribution` interfaces
+
+**Files to create/modify:**
+- `hooks/useSavingsGoals.ts` — real-time hook, computed: `percent_complete`, `projected_completion_date`, `monthly_needed`
+- `components/finance/SavingsGoals.tsx` — goal cards with progress bars, add/edit modal, contribution history, projected completion date
+- `app/(pages)/finance/page.tsx` — add "Savings" tab
+- `components/dashboard/SavingsDashboardWidget.tsx` — compact summary: X goals, total saved vs. target
+- `app/(pages)/dashboard/page.tsx` — wire in widget
+- `app/api/chat/route.ts` — add `add_savings_goal`, `log_savings_contribution`, `get_savings_progress` tools
+
+**Typecheck after Phase 6:** `npx tsc --noEmit`
+
+---
+
+## Phase 7 — Medium Effort, High Payoff
+
+### 7A. Smart Notifications
+
+**What it is:** Proactive alerts for streak-at-risk habits, approaching goal deadlines, and upcoming birthdays. Uses the existing hourly cron + timezone infrastructure.
+
+**New notification categories (add to `NotificationSettings`):**
+- `streak_alert` — already exists; extend to check tonight's uncompleted habits
+- `goal_deadline` — already exists; extend with actual deadline-proximity logic
+- `savings_milestone` — notify when a savings goal hits 25%, 50%, 75%, 100%
+
+**Files to create/modify:**
+- `app/api/notifications/daily/route.ts` — extend with:
+  - **Streak at-risk:** at a configurable evening hour, check habits due today that aren't yet completed; send "⚠️ Your [habit] streak is at risk — complete it before midnight"
+  - **Goal deadline:** check goals where `target_date` is within 7 days; send once per goal per day
+  - **Savings milestone:** check if any savings goal crossed a 25/50/75/100% threshold since last notification
+- `types/index.ts` — add `savings_milestone` to `NotificationSettings`
+- `components/notifications/NotificationSettings.tsx` — add savings milestone toggle
+
+**Note:** Streak-at-risk logic requires knowing if today's habit has been completed. Query `users/{uid}/habit_logs/{today}` to check.
+
+---
+
+### 7B. Content Calendar / Podcast Tracker
+
+**What it is:** Episode planning and status tracking for Be Prepared Podcast. Lifecycle: idea → recorded → edited → published. Calendar view + list view.
+
+**Firestore:**
+```
+users/{uid}/podcast_episodes/{episodeId}
+  title: string
+  episode_number?: number
+  status: "idea" | "outlined" | "recorded" | "edited" | "published"
+  record_date?: string          // YYYY-MM-DD
+  publish_date?: string         // YYYY-MM-DD
+  description?: string
+  notes?: string
+  tags?: string[]
+  links?: { label: string, url: string }[]
+  created_at: string
+  updated_at: string
+```
+
+**Types (`types/index.ts`):**
+- Add `PodcastEpisode` interface
+
+**Files to create/modify:**
+- `hooks/usePodcast.ts` — real-time hook
+- `components/content/EpisodeCard.tsx` — status badge, quick status-advance button, expand for full detail
+- `components/content/EpisodeForm.tsx` — create/edit modal
+- `components/content/ContentCalendar.tsx` — monthly calendar view showing record/publish dates
+- `app/(pages)/content/page.tsx` — tabs: Pipeline (kanban by status) / Calendar / All Episodes
+- `app/api/chat/route.ts` — add `add_episode`, `update_episode_status`, `list_episodes` tools
+- TopNav / MobileNav — add Content entry (under More)
+
+---
+
+### 7C. Reading List / Book Tracker
+
+**What it is:** Log books with reading status, highlights, and key takeaways Claude can summarize.
+
+**Firestore:**
+```
+users/{uid}/books/{bookId}
+  title: string
+  author: string
+  status: "want_to_read" | "reading" | "finished" | "abandoned"
+  start_date?: string
+  finish_date?: string
+  rating?: number               // 1–5
+  highlights: string[]          // quoted passages
+  takeaways?: string            // Claude-generated or manual summary
+  cover_url?: string            // optional
+  tags?: string[]
+  created_at: string
+  updated_at: string
+```
+
+**Types (`types/index.ts`):**
+- Add `Book` interface
+
+**Files to create/modify:**
+- `hooks/useBooks.ts` — real-time hook
+- `components/reading/BookCard.tsx` — cover, title, author, status badge, rating, highlights count
+- `components/reading/BookForm.tsx` — add/edit modal
+- `components/reading/BookHighlights.tsx` — highlight list with add/delete; "Summarize takeaways" button calls Claude
+- `app/(pages)/reading/page.tsx` — tabs: Currently Reading / Want to Read / Finished
+- `app/api/chat/route.ts` — add `add_book`, `update_book_status`, `log_highlight`, `get_reading_list` tools
+- TopNav / MobileNav — add Reading entry (under More)
+
+**Typecheck after Phase 7:** `npx tsc --noEmit`
+
+---
+
+## Phase 8 — Heavier Lifts
+
+### 8A. Proactive AI Insights
+
+**What it is:** Claude periodically analyzes patterns across all data sources and surfaces correlations unprompted. Weekly or daily insight card on dashboard. The unique value prop: Personal OS holds everything in one place.
+
+**Firestore:**
+```
+users/{uid}/insights/{YYYY-MM-DD}
+  generated_at: string
+  insights: [
+    { type: string, headline: string, detail: string, confidence: "low" | "medium" | "high" }
+  ]
+  data_sources: string[]        // which modules were queried
+```
+
+**Files to create/modify:**
+- `app/api/insights/route.ts` — POST: assembles last 30 days of mood, sleep, steps, habits, workouts, nutrition, time entries, journal summaries → sends to Claude with a correlation-finding prompt → stores structured insight array
+- `vercel.json` — add weekly cron (Sunday evening, after weekly review): `0 20 * * 0` → `/api/insights`
+- `components/dashboard/InsightsWidget.tsx` — expandable card showing this week's insights; each insight has a headline + detail; "Refresh" button for manual trigger
+- `app/(pages)/dashboard/page.tsx` — wire in widget
+- `app/api/chat/route.ts` — add `get_insights` tool
+
+**Prompt design:** Focus prompt on asking Claude to find non-obvious correlations ("when sleep < 6h, mood tends to be X", "habit completion drops after Y workouts in a week"). Avoid generic observations.
+
+---
+
+### 8B. Supplement / Medication Log
+
+**What it is:** Track daily supplements and medications with dosage, timing, and notes. Fits naturally alongside hydration and nutrition.
+
+**Firestore:**
+```
+users/{uid}/supplements/{supplementId}    // supplement library
+  name: string
+  type: "supplement" | "medication" | "vitamin"
+  dosage: string                           // e.g. "500mg", "1 capsule"
+  timing: "morning" | "evening" | "with_meal" | "as_needed"
+  active: boolean
+
+users/{uid}/supplement_logs/{YYYY-MM-DD}  // daily log
+  taken: { [supplementId]: boolean }
+  notes?: string
+  logged_at: string
+```
+
+**Types (`types/index.ts`):**
+- Add `Supplement`, `SupplementLog` interfaces
+
+**Files to create/modify:**
+- `hooks/useSupplements.ts`
+- `components/health/SupplementTracker.tsx` — checklist of today's supplements with checkboxes; manage library button
+- `components/health/SupplementLibrary.tsx` — add/edit/deactivate supplements
+- `app/(pages)/health/page.tsx` — add Supplements section
+- `app/api/chat/route.ts` — add `log_supplements`, `get_supplement_adherence` tools
+
+---
+
+### 8C. Instacart / Walmart Grocery
+
+**What it is:** Push the meal plan shopping list directly to a grocery cart for pickup scheduling.
+
+**API landscape:**
+- Walmart has a public Affiliate/Partner API (requires approval): items search, cart add
+- Instacart has no public API — browser automation or unofficial endpoints only; not advisable
+- **Recommended approach:** Walmart integration via official API; Instacart as a stretch goal using deep-link URL format (`instacart.com/store/...`) to pre-populate a cart (limited but works without API keys)
+
+**Files to create/modify:**
+- `app/api/grocery/walmart/route.ts` — search items, add to cart
+- `app/api/grocery/instacart/route.ts` — generate deep-link URL from shopping list
+- `components/meal-planner/GroceryPushButton.tsx` — "Send to Walmart" / "Send to Instacart" buttons on shopping list view
+- `app/api/chat/route.ts` — add `push_grocery_list` tool
+
+**Note:** Walmart API requires partner registration. Build the architecture now, wire credentials when approved.
+
+**Typecheck after Phase 8:** `npx tsc --noEmit`
+
+---
+
+## Phase 6–8 Build Order
+
+| # | Feature | Phase | Effort | Notes |
+|---|---|---|---|---|
+| 50 | Mood Tracker types + hook | 6 | S | Foundation for cross-domain correlation |
+| 51 | MoodWidget + health page | 6 | S | |
+| 52 | MoodDashboardWidget | 6 | S | |
+| 53 | Mood chat tools | 6 | S | |
+| 54 | Body Metrics types + hook | 6 | S | |
+| 55 | BodyMetricsWidget + health page | 6 | S | |
+| 56 | Body Metrics chat tools | 6 | S | |
+| 57 | BirthdayWidget (dashboard) | 6 | S | No new Firestore collection |
+| 58 | Birthday notification category | 6 | S | Extends existing daily cron |
+| 59 | Savings Goals types + hook | 6 | S | |
+| 60 | SavingsGoals component + Finance tab | 6 | M | |
+| 61 | SavingsDashboardWidget | 6 | S | |
+| 62 | Savings chat tools | 6 | S | |
+| 63 | Typecheck Phase 6 | 6 | — | |
+| 64 | Smart Notifications — streak at-risk | 7 | M | Extends daily cron |
+| 65 | Smart Notifications — goal deadlines | 7 | S | |
+| 66 | Smart Notifications — savings milestones | 7 | S | |
+| 67 | Podcast types + hook | 7 | S | |
+| 68 | Podcast components + page | 7 | M | |
+| 69 | Podcast chat tools + nav | 7 | S | |
+| 70 | Book types + hook | 7 | S | |
+| 71 | Book components + page | 7 | M | |
+| 72 | Book chat tools + nav | 7 | S | |
+| 73 | Typecheck Phase 7 | 7 | — | |
+| 74 | Insights API route + cron | 8 | L | Prompt engineering required |
+| 75 | InsightsWidget (dashboard) | 8 | M | |
+| 76 | Insights chat tool | 8 | S | |
+| 77 | Supplement types + hook | 8 | S | |
+| 78 | Supplement components + health page | 8 | M | |
+| 79 | Supplement chat tools | 8 | S | |
+| 80 | Grocery push architecture | 8 | L | Walmart API approval needed |
+| 81 | Typecheck Phase 8 | 8 | — | |

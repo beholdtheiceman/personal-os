@@ -189,3 +189,58 @@ export async function weeklyReviewHandler(uid: string, tz: string): Promise<Noti
     tag: "weekly-review",
   };
 }
+
+// ─── Birthday Reminder ────────────────────────────────────────────────────────
+export async function birthdayReminderHandler(
+  uid: string,
+  daysBefore: number
+): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toLocaleDateString("en-CA");
+
+  const peopleSnap = await db.collection(`users/${uid}/people`).get();
+  const upcoming: { name: string; daysUntil: number; giftIdeas: string[] }[] = [];
+
+  for (const doc of peopleSnap.docs) {
+    const data = doc.data();
+    if (!data.birthday) continue;
+    const [, month, day] = (data.birthday as string).split("-").map(Number);
+    for (const yearOffset of [0, 1]) {
+      const next = new Date(today.getFullYear() + yearOffset, month - 1, day);
+      const diff = Math.round((next.getTime() - today.getTime()) / 86_400_000);
+      if (diff >= 0 && diff <= daysBefore) {
+        upcoming.push({
+          name: data.name as string,
+          daysUntil: diff,
+          giftIdeas: (data.gift_ideas as string[] | undefined) ?? [],
+        });
+        break;
+      }
+    }
+  }
+
+  if (upcoming.length === 0) return null;
+
+  // Deduplicate: only fire once per day per person
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/birthday_${todayStr}`).get();
+  const alreadySent: string[] = sentDoc.exists ? (sentDoc.data()?.names as string[]) ?? [] : [];
+  const newOnes = upcoming.filter((u) => !alreadySent.includes(u.name));
+  if (newOnes.length === 0) return null;
+
+  await db.doc(`users/${uid}/notification_sent/birthday_${todayStr}`).set(
+    { names: [...alreadySent, ...newOnes.map((u) => u.name)] },
+    { merge: true }
+  );
+
+  if (newOnes.length === 1) {
+    const p = newOnes[0];
+    const when = p.daysUntil === 0 ? "today" : p.daysUntil === 1 ? "tomorrow" : `in ${p.daysUntil} days`;
+    const giftHint = p.giftIdeas.length > 0 ? ` Gift idea: ${p.giftIdeas[0]}` : "";
+    return { title: "🎂 Birthday Reminder", body: `${p.name}'s birthday is ${when}.${giftHint}`, tag: "birthday-reminder" };
+  }
+
+  const names = newOnes.map((u) => `${u.name} (${u.daysUntil === 0 ? "today" : `${u.daysUntil}d`})`).join(", ");
+  return { title: "🎂 Upcoming Birthdays", body: names, tag: "birthday-reminder" };
+}

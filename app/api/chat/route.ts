@@ -23,6 +23,57 @@ function daysAgo(todayStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// The Anthropic API requires the first message to be 'user' and roles to alternate.
+// A failed turn (or any bad client state) can leave consecutive same-role messages in
+// the history; sending those throws a 400, which surfaces as a generic 500 and can
+// permanently wedge a chat. Coalesce same-role turns and drop empty/leading-assistant
+// messages so a poisoned history degrades gracefully instead of hard-failing.
+function sanitizeMessages(raw: unknown): Anthropic.MessageParam[] {
+  if (!Array.isArray(raw)) return [];
+  const cleaned: Anthropic.MessageParam[] = [];
+  for (const m of raw) {
+    if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
+    // Empty string content is invalid for the API — skip it.
+    if (typeof m.content === "string" && m.content.trim() === "") continue;
+    const prev = cleaned[cleaned.length - 1];
+    if (prev && prev.role === m.role) {
+      // Merge consecutive same-role turns rather than emitting an illegal sequence.
+      if (typeof prev.content === "string" && typeof m.content === "string") {
+        prev.content = `${prev.content}\n\n${m.content}`;
+      } else {
+        const toBlocks = (c: string | Anthropic.ContentBlockParam[]): Anthropic.ContentBlockParam[] =>
+          typeof c === "string" ? [{ type: "text", text: c }] : c;
+        prev.content = [...toBlocks(prev.content), ...toBlocks(m.content)];
+      }
+    } else {
+      cleaned.push({ role: m.role, content: m.content });
+    }
+  }
+  // The conversation must begin with a user message.
+  while (cleaned.length && cleaned[0].role !== "user") cleaned.shift();
+  return cleaned;
+}
+
+// Returns a copy of the messages with a cache_control breakpoint on the last block of
+// the final message. In the tool-use loop this caches the conversation prefix so each
+// round-trip re-reads prior turns from cache. On Sonnet, cache_read tokens don't count
+// toward the ITPM rate limit, which is what keeps long tool chains under the limit.
+// The original array is left untouched so breakpoints don't accumulate across iterations.
+function withMessageCache(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  if (!messages.length) return messages;
+  const last = messages[messages.length - 1];
+  const blocks: Anthropic.ContentBlockParam[] =
+    typeof last.content === "string"
+      ? [{ type: "text", text: last.content }]
+      : [...last.content];
+  if (!blocks.length) return messages;
+  blocks[blocks.length - 1] = {
+    ...blocks[blocks.length - 1],
+    cache_control: { type: "ephemeral" },
+  } as Anthropic.ContentBlockParam;
+  return [...messages.slice(0, -1), { ...last, content: blocks }];
+}
+
 // Find a doc in a collection by approximate title/name match
 async function findDoc(uid: string, collection: string, searchField: string, searchValue: string) {
   const db = getAdminDb();
@@ -560,6 +611,57 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "log_mood",
+    description: "Log the user's mood for today on a 1–10 scale with an optional note. Awards 5 XP. Can only be called once per day (subsequent calls update the score).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        score: { type: "number", description: "Mood score from 1 (very low) to 10 (excellent)." },
+        note: { type: "string", description: "Optional note describing how they feel or why." },
+      },
+      required: ["score"],
+    },
+  },
+  {
+    name: "get_mood_history",
+    description: "Get the user's recent mood entries. Returns date, score, and optional note for each entry.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        days: { type: "number", description: "Number of recent days to return (default 7, max 30)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "log_body_metrics",
+    description: "Log body metrics for today. All fields are optional — log only what's available. Merges with any existing entry for today.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        weight_lbs:   { type: "number", description: "Body weight in pounds." },
+        body_fat_pct: { type: "number", description: "Body fat percentage." },
+        chest_in:     { type: "number", description: "Chest measurement in inches." },
+        waist_in:     { type: "number", description: "Waist measurement in inches." },
+        hips_in:      { type: "number", description: "Hip measurement in inches." },
+        arms_in:      { type: "number", description: "Arm measurement in inches." },
+        notes:        { type: "string", description: "Optional notes." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_body_metrics_history",
+    description: "Get the user's recent body metrics entries, most recent first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Number of entries to return (default 10, max 30)." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "log_workout",
     description: "Log a completed workout session with exercises and sets. Awards XP (50 base + 10 per exercise). Detects and saves new PRs automatically.",
     input_schema: {
@@ -782,6 +884,42 @@ const TOOLS: Anthropic.Tool[] = [
       properties: {
         months: { type: "number", description: "How many recent months to return. Default 6." },
       },
+      required: [],
+    },
+  },
+  {
+    name: "add_savings_goal",
+    description: "Create a new savings goal with a target amount and target date.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:          { type: "string", description: "Name of the goal, e.g. 'Emergency Fund'." },
+        target_amount: { type: "number", description: "Total amount to save." },
+        target_date:   { type: "string", description: "YYYY-MM-DD deadline." },
+        color:         { type: "string", description: "Optional hex color." },
+      },
+      required: ["name", "target_amount", "target_date"],
+    },
+  },
+  {
+    name: "log_savings_contribution",
+    description: "Add a contribution to an existing savings goal.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        goal_name: { type: "string", description: "Partial name of the goal (case-insensitive match)." },
+        amount:    { type: "number", description: "Amount contributed." },
+        note:      { type: "string", description: "Optional note about the contribution." },
+      },
+      required: ["goal_name", "amount"],
+    },
+  },
+  {
+    name: "get_savings_progress",
+    description: "Get a summary of the user's active savings goals with progress and projections.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
       required: [],
     },
   },
@@ -2171,6 +2309,7 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: "List-Unsubscribe=One-Click",
+            signal: AbortSignal.timeout(10000),
           });
           if (postRes.ok) {
             return `✓ Successfully unsubscribed from "${subject}" (${from}) via one-click unsubscribe.`;
@@ -2185,6 +2324,7 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
             method: "GET",
             headers: { "User-Agent": "Mozilla/5.0" },
             redirect: "follow",
+            signal: AbortSignal.timeout(10000),
           });
           if (getRes.ok) {
             return `✓ Unsubscribe request sent for "${subject}" (${from}). The page responded with status ${getRes.status} — you should be unsubscribed. If you keep receiving emails, visit: ${unsubUrl}`;
@@ -2851,6 +2991,79 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       return `Hydration today: ${glasses}/${goal} glasses. ${status}\nTimes: ${timestamps.join(", ") || "none"}`;
     }
 
+    case "log_mood": {
+      const score = Math.min(10, Math.max(1, Math.round(Number(input.score))));
+      const note = (input.note as string | undefined) ?? "";
+      const todayStr = today();
+      const existingSnap = await db.doc(`users/${uid}/mood/${todayStr}`).get();
+      const isFirst = !existingSnap.exists;
+      await db.doc(`users/${uid}/mood/${todayStr}`).set({
+        date: todayStr,
+        score,
+        note,
+        logged_at: new Date().toISOString(),
+      });
+      if (isFirst) {
+        const xpRef = db.doc(`users/${uid}/xp/summary`);
+        const xpSnap = await xpRef.get();
+        const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+        await xpRef.set({ total: currentXP + 5 }, { merge: true });
+        await db.collection(`users/${uid}/xp_events`).add({ type: "mood_logged", xp: 5, description: "Mood logged", timestamp: new Date().toISOString() });
+      }
+      const label = score <= 3 ? "rough" : score <= 5 ? "low" : score <= 7 ? "okay" : score <= 8 ? "good" : "great";
+      return `Mood logged: ${score}/10 (${label})${note ? ` — "${note}"` : ""}${isFirst ? " +5 XP" : " (updated)"}`;
+    }
+
+    case "get_mood_history": {
+      const days = Math.min(30, Number(input.days) || 7);
+      const snap = await db.collection(`users/${uid}/mood`)
+        .orderBy("date", "desc")
+        .limit(days)
+        .get();
+      if (snap.empty) return "No mood entries found.";
+      const entries = snap.docs.map((d) => {
+        const data = d.data();
+        return `${data.date}: ${data.score}/10${data.note ? ` — "${data.note}"` : ""}`;
+      });
+      const scores = snap.docs.map((d) => d.data().score as number);
+      const avg = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+      return `Mood history (last ${entries.length} days, avg ${avg}/10):\n${entries.join("\n")}`;
+    }
+
+    case "log_body_metrics": {
+      const todayStr = today();
+      const data: Record<string, unknown> = { date: todayStr, logged_at: new Date().toISOString() };
+      const fields = ["weight_lbs", "body_fat_pct", "chest_in", "waist_in", "hips_in", "arms_in", "notes"];
+      for (const f of fields) {
+        if (input[f] != null) data[f] = f === "notes" ? String(input[f]) : Number(input[f]);
+      }
+      await db.doc(`users/${uid}/body_metrics/${todayStr}`).set(data, { merge: true });
+      const logged = fields.filter((f) => input[f] != null).map((f) => {
+        const unit = f === "body_fat_pct" ? "%" : f === "notes" ? "" : f.endsWith("_lbs") ? " lbs" : " in";
+        return `${f.replace(/_/g, " ")}: ${input[f]}${unit}`;
+      });
+      return `Body metrics logged for ${todayStr}:\n${logged.join("\n")}`;
+    }
+
+    case "get_body_metrics_history": {
+      const lim = Math.min(30, Number(input.limit) || 10);
+      const snap = await db.collection(`users/${uid}/body_metrics`)
+        .orderBy("date", "desc")
+        .limit(lim)
+        .get();
+      if (snap.empty) return "No body metrics entries found.";
+      const lines = snap.docs.map((d) => {
+        const e = d.data();
+        const parts: string[] = [`Date: ${e.date}`];
+        if (e.weight_lbs)   parts.push(`Weight: ${e.weight_lbs} lbs`);
+        if (e.body_fat_pct) parts.push(`Body fat: ${e.body_fat_pct}%`);
+        if (e.waist_in)     parts.push(`Waist: ${e.waist_in}"`);
+        if (e.notes)        parts.push(`Notes: ${e.notes}`);
+        return parts.join(" | ");
+      });
+      return `Body metrics (${lines.length} entries):\n${lines.join("\n")}`;
+    }
+
     case "log_workout": {
       const sessionName = (input.name as string) || "Workout";
       const rawExercises = input.exercises as { exercise_name: string; category?: string; sets?: { reps: number; weight: number; unit?: string }[] }[];
@@ -3197,6 +3410,62 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       for (const d of snap.docs) {
         const s = d.data();
         lines.push(`${s.snapshot_date}: assets $${(s.total_assets as number).toFixed(2)}, liabilities $${(s.total_liabilities as number).toFixed(2)}, net worth $${(s.net_worth as number).toFixed(2)}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "add_savings_goal": {
+      const now = new Date().toISOString();
+      await db.collection(`users/${uid}/savings_goals`).add({
+        name: input.name as string,
+        target_amount: Number(input.target_amount),
+        current_amount: 0,
+        target_date: input.target_date as string,
+        color: (input.color as string | undefined) ?? "#C4728A",
+        status: "active",
+        contributions: [],
+        created_at: now,
+        updated_at: now,
+      });
+      return `Savings goal created: "${input.name}" — $${(input.target_amount as number).toLocaleString()} by ${input.target_date}.`;
+    }
+
+    case "log_savings_contribution": {
+      const goalName = (input.goal_name as string).toLowerCase();
+      const amount = Number(input.amount);
+      const note = (input.note as string | undefined) ?? "";
+      const snap = await db.collection(`users/${uid}/savings_goals`)
+        .where("status", "==", "active").get();
+      const goalDoc = snap.docs.find((d) =>
+        (d.data().name as string).toLowerCase().includes(goalName)
+      );
+      if (!goalDoc) return `No active savings goal found matching "${input.goal_name}".`;
+      const data = goalDoc.data();
+      const newAmount = (data.current_amount as number) + amount;
+      const newStatus = newAmount >= (data.target_amount as number) ? "completed" : "active";
+      const contribution = { amount, note, date: today() };
+      await goalDoc.ref.update({
+        current_amount: newAmount,
+        contributions: [...(data.contributions as object[]), contribution],
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      });
+      const pct = Math.min(100, (newAmount / (data.target_amount as number)) * 100).toFixed(0);
+      const msg = newStatus === "completed" ? " 🎉 Goal reached!" : "";
+      return `Added $${amount.toLocaleString()} to "${data.name as string}". Now at $${newAmount.toLocaleString()} (${pct}%).${msg}`;
+    }
+
+    case "get_savings_progress": {
+      const snap = await db.collection(`users/${uid}/savings_goals`)
+        .where("status", "==", "active").get();
+      if (snap.empty) return "No active savings goals.";
+      const lines = ["**Savings Goals**"];
+      for (const d of snap.docs) {
+        const g = d.data();
+        const pct = g.target_amount > 0
+          ? Math.min(100, (g.current_amount as number / (g.target_amount as number)) * 100).toFixed(0)
+          : "0";
+        lines.push(`• ${g.name}: $${(g.current_amount as number).toLocaleString()} / $${(g.target_amount as number).toLocaleString()} (${pct}%) — target ${g.target_date}`);
       }
       return lines.join("\n");
     }
@@ -4521,7 +4790,10 @@ export async function POST(req: NextRequest) {
     let totalOutputTokens = 0;
 
     // If an image was attached, convert the last user message to a multimodal content array
-    let currentMessages: Anthropic.MessageParam[] = messages;
+    let currentMessages: Anthropic.MessageParam[] = sanitizeMessages(messages);
+    if (!currentMessages.length) {
+      return NextResponse.json({ error: "No valid messages provided" }, { status: 400 });
+    }
     if (imageBase64) {
       const lastIdx = currentMessages.length - 1;
       const lastMsg = currentMessages[lastIdx];
@@ -4555,15 +4827,27 @@ export async function POST(req: NextRequest) {
       ? `${basePrompt}${webSearchGuard}\n\n${secondBrainCtx}`
       : `${basePrompt}${webSearchGuard}`;
 
+    // Prompt caching: the tool schema and system prompt are large and identical across
+    // every round-trip of the tool-use loop. A breakpoint on the last tool caches the
+    // whole tool block; a breakpoint on the system block caches it too. On Sonnet,
+    // cache_read tokens don't count toward the 30k/min ITPM limit, so this is what keeps
+    // multi-step tool chains from tripping a 429. See the per-message breakpoint below.
+    const cachedTools: Anthropic.Tool[] = TOOLS.map((t, idx) =>
+      idx === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t
+    );
+    const cachedSystem: Anthropic.TextBlockParam[] = [
+      { type: "text", text: fullSystemPrompt, cache_control: { type: "ephemeral" } },
+    ];
+
     for (let i = 0; i < 16; i++) {
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
         // 8192 leaves headroom for multi-step tool-use chains (e.g. building a full week meal plan
         // requires ~25 add_recipe + ~25 plan_meal calls). Sonnet 4.6 supports much larger outputs.
         max_tokens: 8192,
-        system: fullSystemPrompt,
-        tools: TOOLS,
-        messages: currentMessages,
+        system: cachedSystem,
+        tools: cachedTools,
+        messages: withMessageCache(currentMessages),
       });
 
       // Accumulate token usage from every API round-trip
@@ -4642,6 +4926,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ text: fallbackText, actions });
   } catch (err) {
     console.error("Chat API error:", err);
-    return NextResponse.json({ error: "Failed to get response from Claude" }, { status: 500 });
+
+    // Rate limit (429): give the user an actionable message instead of a generic failure.
+    if (err instanceof Anthropic.APIError && err.status === 429) {
+      const retryAfter = Number(err.headers?.["retry-after"]) || null;
+      const wait = retryAfter ? ` Try again in about ${retryAfter}s.` : " Try again in a minute.";
+      return NextResponse.json(
+        {
+          error: `Hit the Anthropic rate limit (too many tokens this minute).${wait} For heavy use, raise your tier at console.anthropic.com/settings/limits.`,
+        },
+        { status: 429, headers: retryAfter ? { "retry-after": String(retryAfter) } : undefined }
+      );
+    }
+
+    const detail = err instanceof Error ? err.message : String(err);
+    // Surface the real error in non-production so failures are diagnosable instead of
+    // hidden behind a generic message. Keep it generic in production.
+    const error = process.env.NODE_ENV === "production"
+      ? "Failed to get response from Claude"
+      : `Failed to get response from Claude: ${detail}`;
+    return NextResponse.json({ error }, { status: 500 });
   }
 }

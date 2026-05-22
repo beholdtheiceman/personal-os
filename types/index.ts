@@ -114,6 +114,7 @@ export interface NotificationSettings {
   journal_reminder: NotificationCategory;
   health_reminder: NotificationCategory;
   weekly_review: NotificationCategory;
+  birthday_reminder: NotificationCategory; // lead_days_before used instead of time
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -124,6 +125,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   journal_reminder:  { enabled: false, time: "21:00" },
   health_reminder:   { enabled: false, time: "20:00" },
   weekly_review:     { enabled: false, time: "09:00", day_of_week: 0 },
+  birthday_reminder: { enabled: false, days_before: 7 },
 };
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────
@@ -136,7 +138,8 @@ export type XPEventType =
   | "goal_complete"
   | "streak_bonus"
   | "hydration_goal"
-  | "workout_complete";
+  | "workout_complete"
+  | "mood_logged";
 
 export interface XPEvent {
   id: string;
@@ -513,4 +516,49 @@ export interface KanbanCard {
   status: KanbanStatus;
   priority: "low" | "medium" | "high";
   created_at: string;
+}
+
+// ─── Mood Tracker ─────────────────────────────────────────────────────────────
+export interface MoodEntry {
+  id: string;
+  date: string;       // YYYY-MM-DD (also doc ID)
+  score: number;      // 1–10
+  note?: string;
+  logged_at: string;
+}
+
+// ─── Body Metrics ─────────────────────────────────────────────────────────────
+export interface BodyMetricsEntry {
+  id: string;
+  date: string;       // YYYY-MM-DD (also doc ID)
+  weight_lbs?: number;
+  body_fat_pct?: number;
+  chest_in?: number;
+  waist_in?: number;
+  hips_in?: number;
+  arms_in?: number;
+  notes?: string;
+  logged_at: string;
+}
+
+// ─── Savings Goals ────────────────────────────────────────────────────────────
+export interface SavingsContribution {
+  amount: number;
+  date: string;       // YYYY-MM-DD
+  note?: string;
+}
+
+export type SavingsGoalStatus = "active" | "completed" | "paused";
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  target_date: string;    // YYYY-MM-DD
+  contributions: SavingsContribution[];
+  color?: string;
+  status: SavingsGoalStatus;
+  created_at: string;
+  updated_at: string;
 }
