@@ -110,19 +110,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, results });
-}ings.birthday_reminder?.enabled && isHour(timeInfo, settings.morning_briefing.time ?? "08:00")) {
-      const n = await birthdayReminderHandler(uid, settings.birthday_reminder.days_before ?? 7);
-      if (n) await send(n.title, n.body, n.tag ?? "birthday-reminder");
-    }
-
-    // Savings milestone — fires any hour, deduped per milestone per goal
-    if (settings.savings_milestone?.enabled) {
-      const n = await savingsMilestoneHandler(uid);
-      if (n) await send(n.title, n.body, n.tag ?? "savings-milestone");
-    }
-
-    if (fired.length > 0) results[uid] = fired;
-  }
-
-  return NextResponse.json({ checked: usersSnap.size, fired: results });
 }

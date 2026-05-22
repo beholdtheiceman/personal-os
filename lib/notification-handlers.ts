@@ -320,8 +320,8 @@ export async function progressReminderHandler(uid: string, tz: string): Promise<
   // ── 1. Hydration ─────────────────────────────────────────────────────────
   try {
     const hydDoc = await db.doc(`users/${uid}/hydration/${today}`).get();
-    const glasses: number = hydDoc.exists() ? (hydDoc.data()?.glasses ?? 0) : 0;
-    const goal: number    = hydDoc.exists() ? (hydDoc.data()?.goal    ?? 8) : 8;
+    const glasses: number = hydDoc.exists ? (hydDoc.data()?.glasses ?? 0) : 0;
+    const goal: number    = hydDoc.exists ? (hydDoc.data()?.goal    ?? 8) : 8;
     // Fire if below 50% of goal
     if (glasses < goal * 0.5) {
       behind.push(`💧 ${glasses}/${goal} glasses`);
@@ -331,7 +331,7 @@ export async function progressReminderHandler(uid: string, tz: string): Promise<
   // ── 2. Steps (from health log if synced) ─────────────────────────────────
   try {
     const healthDoc = await db.doc(`users/${uid}/health/${today}`).get();
-    if (healthDoc.exists()) {
+    if (healthDoc.exists) {
       const data = healthDoc.data()!;
       const steps: number | undefined    = data.steps as number | undefined;
       const stepsGoal: number            = (data.steps_goal as number | undefined) ?? 10000;
@@ -397,5 +397,4 @@ export async function progressReminderHandler(uid: string, tz: string): Promise<
     body: `${body}${more}`,
     tag: "progress-reminder",
   };
-}
 }
