@@ -3,15 +3,12 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   collection, onSnapshot, query, orderBy, limit,
-  doc, getDoc, setDoc, updateDoc,
+  doc, updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
-import ReactMarkdown from "react-markdown";
-import LoadingDots from "@/components/ui/LoadingDots";
 import TaskCard from "@/components/tasks/TaskCard";
 import {
-  RiRefreshLine, RiLoopLeftLine, RiTaskLine, RiCheckLine,
+  RiLoopLeftLine, RiTaskLine, RiCheckLine,
   RiMoonLine, RiFlashlightLine, RiBookLine, RiHeartPulseLine,
   RiCalendarLine, RiBowlLine, RiMailLine, RiLineChartLine,
   RiFolderLine, RiMoneyDollarCircleLine, RiArrowUpLine, RiArrowDownLine,
@@ -28,7 +25,11 @@ import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
 import EmailAgentWidget from "@/components/dashboard/EmailAgentWidget";
 import UnsubscribeWidget from "@/components/dashboard/UnsubscribeWidget";
 import QuickLinksWidget from "@/components/dashboard/QuickLinksWidget";
+import HydrationDashboardWidget from "@/components/dashboard/HydrationDashboardWidget";
+import BudgetDashboardWidget from "@/components/dashboard/BudgetDashboardWidget";
 import WeeklyReviewWidget from "@/components/dashboard/WeeklyReviewWidget";
+import DailyBriefingWidget from "@/components/dashboard/DailyBriefingWidget";
+import DecisionReviewWidget from "@/components/dashboard/DecisionReviewWidget";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -51,8 +52,6 @@ function eventDayLabel(dateStr: string) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { totalXP } = useXP();
-  const [report, setReport] = useState("");
-  const [loadingReport, setLoadingReport] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [todayHealth, setTodayHealth] = useState<HealthLog | null>(null);
@@ -68,14 +67,6 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const today = useToday();
   const thisMonth = today.slice(0, 7);
-
-  // Load cached report
-  useEffect(() => {
-    if (!user) return;
-    getDoc(doc(db, "users", user.uid, "daily_reports", today)).then((snap) => {
-      if (snap.exists()) setReport(snap.data().content);
-    });
-  }, [user, today]);
 
   // Live tasks (top 5 active by priority)
   useEffect(() => {
@@ -238,86 +229,6 @@ export default function DashboardPage() {
     }
   };
 
-  const generateReport = async () => {
-    if (!user) return;
-    setLoadingReport(true);
-    try {
-      const memory = await fetchMemoryEntries(user.uid);
-
-      const topTasksText = tasks
-        .slice(0, 5)
-        .map((t, i) => `${i + 1}. ${t.title} (score: ${t.priority_score})`)
-        .join("\n");
-
-      const habitsText = habits
-        .map((h) => `${h.name}: ${h.completions.includes(today) ? "done" : "not done"}`)
-        .join(", ");
-
-      const calendarText = calendarEvents.length
-        ? calendarEvents
-            .slice(0, 5)
-            .map((e) => {
-              const time = e.allDay
-                ? "all day"
-                : format(parseISO(e.start), "h:mm a");
-              return `- ${e.title} (${eventDayLabel(e.start)}, ${time})`;
-            })
-            .join("\n")
-        : "No upcoming events";
-
-      const healthText = todayHealth
-        ? `Sleep: ${todayHealth.sleep_hours}h, Quality: ${todayHealth.sleep_quality}/10, Energy: ${todayHealth.energy_level}/10${todayHealth.exercise_done ? ", Exercised" : ""}`
-        : "Not logged today";
-
-      const journalText = latestJournal
-        ? `Mood ${latestJournal.mood_score}/10 on ${format(parseISO(latestJournal.created_at), "MMM d")}: ${latestJournal.ai_summary}`
-        : "No recent entry";
-
-      const nutritionTotals = todayNutrition.reduce(
-        (acc, l) => ({
-          cal: acc.cal + l.calories_estimated,
-          protein: acc.protein + l.protein_g,
-        }),
-        { cal: 0, protein: 0 }
-      );
-      const nutritionText = todayNutrition.length
-        ? `${nutritionTotals.cal} kcal, ${nutritionTotals.protein}g protein logged today (${todayNutrition.length} meal${todayNutrition.length > 1 ? "s" : ""})`
-        : "Nothing logged today";
-
-      const systemPrompt = buildSystemPrompt(
-        buildMemoryContext(memory),
-        user.displayName ?? "User",
-        {
-          date: new Date().toDateString(),
-          calendarEvents: calendarText,
-          topTasks: topTasksText || "No tasks",
-          recentHabits: habitsText || "No habits",
-          lastHealthLog: healthText,
-          lastJournal: journalText,
-          nutritionToday: nutritionText,
-        }
-      );
-
-      const res = await fetch("/api/daily-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ systemPrompt }),
-      });
-      const data = await res.json();
-      if (data.report) {
-        setReport(data.report);
-        await setDoc(doc(db, "users", user.uid, "daily_reports", today), {
-          content: data.report,
-          generatedAt: new Date().toISOString(),
-        });
-      }
-    } catch {
-      toast.error("Failed to generate report");
-    } finally {
-      setLoadingReport(false);
-    }
-  };
-
   const completedToday = habits.filter((h) => h.completions.includes(today)).length;
   const nutritionTotals = todayNutrition.reduce(
     (acc, l) => ({ cal: acc.cal + l.calories_estimated, protein: acc.protein + l.protein_g }),
@@ -349,13 +260,6 @@ export default function DashboardPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Dashboard</h1>
-        <button
-          onClick={generateReport}
-          disabled={loadingReport}
-          className="btn-ghost flex items-center gap-2 text-sm"
-        >
-          {loadingReport ? <LoadingDots /> : <><RiRefreshLine className="w-4 h-4" /> Generate Report</>}
-        </button>
       </div>
 
       {/* ── XP / Level ── */}
@@ -365,27 +269,10 @@ export default function DashboardPage() {
       <QuickLinksWidget />
 
       {/* ── AI Briefing ── */}
-      <div className="card">
-        <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">
-          Today's Briefing
-        </h2>
-        {loadingReport ? (
-          <div className="py-6 flex justify-center"><LoadingDots /></div>
-        ) : report ? (
-          <div className="prose-dark text-sm">
-            <ReactMarkdown>{report}</ReactMarkdown>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <p className="text-text-secondary text-sm mb-4">
-              No report yet. Generate one to get your morning briefing.
-            </p>
-            <button onClick={generateReport} className="btn-primary text-sm">
-              Generate Morning Briefing
-            </button>
-          </div>
-        )}
-      </div>
+      <DailyBriefingWidget />
+
+      {/* ── Decision Reviews ── */}
+      <DecisionReviewWidget />
 
       {/* ── Verse of the Day ── */}
       {verse && (
@@ -468,6 +355,9 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Hydration ── */}
+      <HydrationDashboardWidget />
 
       {/* ── Calendar + Nutrition ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -700,6 +590,9 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── Budget ── */}
+      <BudgetDashboardWidget />
 
       {/* ── Weekly Review ── */}
       <WeeklyReviewWidget />

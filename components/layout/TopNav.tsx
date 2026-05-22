@@ -10,7 +10,8 @@ import {
   RiDatabase2Line, RiBookLine, RiBookReadLine, RiBowlLine, RiHeartPulseLine,
   RiLineChartLine, RiMoneyDollarCircleLine, RiFolderLine,
   RiMoreLine, RiLogoutBoxLine, RiSettings3Line, RiRestaurantLine,
-  RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line,
+  RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
+  RiTimeLine, RiFocusLine, RiLightbulbLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -36,6 +37,10 @@ const MORE_NAV = [
   { href: "/finance",      label: "Finance",       icon: RiMoneyDollarCircleLine },
   { href: "/people",       label: "People",        icon: RiContactsBook2Line },
   { href: "/drive",        label: "Drive",         icon: RiGoogleLine },
+  { href: "/workout",      label: "Workout",       icon: RiRunLine },
+  { href: "/time",         label: "Time Tracker",  icon: RiTimeLine },
+  { href: "/focus",        label: "Focus",         icon: RiFocusLine },
+  { href: "/decisions",    label: "Decisions",     icon: RiLightbulbLine },
 ];
 
 export default function TopNav() {
@@ -175,11 +180,11 @@ export default function TopNav() {
           <div
             className="absolute top-full mt-2 right-0 min-w-[180px] rounded-xl py-1 z-50"
             style={{
-              background: "rgba(255,255,255,0.92)",
+              background: "rgba(18, 7, 15, 0.95)",
               backdropFilter: "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
-              border: "1px solid rgba(255,255,255,0.7)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.50)",
             }}
           >
             <div className="px-4 py-2.5 border-b border-white/10">

@@ -8,6 +8,9 @@ import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 import { format, startOfWeek, subDays } from "date-fns";
+import { getLocalTimeInfo, isHour } from "@/lib/timezone";
+import type { NotificationSettings } from "@/types";
+import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -203,18 +206,35 @@ ${context}`,
 
 // ─── Per-user runner ──────────────────────────────────────────────────────────
 
-async function runForUser(uid: string): Promise<{ uid: string; status: string }> {
+async function runForUser(uid: string, fromCron = false): Promise<{ uid: string; status: string }> {
   const db = getAdminDb();
   const reviewRef = db.doc(`users/${uid}/weekly_reviews/latest`);
 
   try {
-    // Derive last completed week start (most recent Monday at or before today)
-    const now = new Date();
-    const day = now.getUTCDay(); // 0=Sun
-    const diff = day === 0 ? -6 : 1 - day;
-    const monday = new Date(now);
-    monday.setUTCDate(now.getUTCDate() + diff);
-    const weekStart = monday.toISOString().slice(0, 10);
+    // When called from the hourly cron, check that it's Sunday at the right local hour
+    if (fromCron) {
+      const timeInfo = await getLocalTimeInfo(uid);
+      if (timeInfo.localDayOfWeek !== 0) {
+        return { uid, status: "skipped (not Sunday)" };
+      }
+      const settingsDoc = await db.doc(`users/${uid}/settings/notifications`).get();
+      const settings: NotificationSettings = {
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        ...(settingsDoc.data() as Partial<NotificationSettings> ?? {}),
+      };
+      const preferredTime = settings.weekly_review.time ?? "09:00";
+      if (!isHour(timeInfo, preferredTime)) {
+        return { uid, status: `skipped (not ${preferredTime} local)` };
+      }
+    }
+
+    // Derive last completed week start (most recent Monday in local time)
+    const timeInfo = await getLocalTimeInfo(uid);
+    const localDay = timeInfo.localDayOfWeek; // 0=Sun
+    const localDate = new Date(timeInfo.localDate + "T12:00:00");
+    const diff = localDay === 0 ? -6 : 1 - localDay;
+    localDate.setDate(localDate.getDate() + diff);
+    const weekStart = localDate.toISOString().slice(0, 10);
 
     // Skip if already generated for this week
     const existing = await reviewRef.get();
@@ -240,7 +260,7 @@ async function runForUser(uid: string): Promise<{ uid: string; status: string }>
 
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
-// GET — Vercel cron (Sunday 6 PM UTC)
+// GET — Vercel cron (hourly); handler checks local Sunday + preferred time per user
 export async function GET(req: NextRequest) {
   if (!isCronAuthed(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -251,15 +271,15 @@ export async function GET(req: NextRequest) {
   const usersSnap = await db.collectionGroup("memory").get();
   const uids = [...new Set(usersSnap.docs.map((d) => d.ref.path.split("/")[1]))];
 
-  const results = await Promise.all(uids.map(runForUser));
+  const results = await Promise.all(uids.map((uid) => runForUser(uid, true)));
   return NextResponse.json({ processed: results.length, results });
 }
 
-// POST — manual trigger from dashboard
+// POST — manual trigger from dashboard (no day/hour check)
 export async function POST(req: NextRequest) {
   const uid = await getUidFromIdToken(req);
   if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const result = await runForUser(uid);
+  const result = await runForUser(uid, false);
   return NextResponse.json(result);
 }

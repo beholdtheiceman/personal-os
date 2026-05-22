@@ -3,7 +3,7 @@ import { useState } from "react";
 import { format, isToday, isTomorrow, isPast } from "date-fns";
 import {
   RiCheckLine, RiDeleteBinLine, RiEditLine, RiCalendarLine,
-  RiArrowUpLine, RiArrowDownLine,
+  RiArrowUpLine, RiArrowDownLine, RiRepeatLine,
 } from "react-icons/ri";
 import type { Task, TaskTag } from "@/types";
 
@@ -87,6 +87,12 @@ export default function TaskCard({ task, onComplete, onDelete, onEdit, compact }
             <span className={`text-[10px] flex items-center gap-1 ${due.urgent ? "text-danger" : "text-text-muted"}`}>
               <RiCalendarLine className="w-3 h-3" />
               {due.label}
+            </span>
+          )}
+          {task.recurrence && (
+            <span className="text-[10px] flex items-center gap-1 text-text-muted capitalize">
+              <RiRepeatLine className="w-3 h-3" />
+              {task.recurrence}
             </span>
           )}
         </div>

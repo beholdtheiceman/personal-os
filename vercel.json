@@ -6,19 +6,23 @@
   "crons": [
     {
       "path": "/api/notifications/daily",
-      "schedule": "0 12 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/notifications/habits",
-      "schedule": "0 13 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/gmail/agent",
-      "schedule": "0 14 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/weekly-review",
-      "schedule": "0 18 * * 0"
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/daily-briefing",
+      "schedule": "0 * * * *"
     }
   ]
 }

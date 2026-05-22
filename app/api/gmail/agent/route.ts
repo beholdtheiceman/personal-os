@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { CRON_SECRET } from "@/lib/env";
+import { isLocalTime } from "@/lib/timezone";
 import { refreshGmailToken, extractEmailBody } from "@/lib/gmail-token";
 import { classifyEmails, extractSubscription, extractTransaction } from "@/lib/email-classifier";
 import type { GmailAgentRun, EmailMeta } from "@/types";
@@ -361,7 +362,7 @@ async function runAgent(uids: string[]) {
   return NextResponse.json({ ok: true, results });
 }
 
-// GET — Vercel cron: process all Gmail-connected users
+// GET — Vercel cron (hourly): process Gmail-connected users whose local time is 2pm
 export async function GET(req: NextRequest) {
   if (!isCronAuthed(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -372,7 +373,10 @@ export async function GET(req: NextRequest) {
   const gmailChecks = await Promise.all(
     usersSnap.docs.map(async (d) => {
       const gmailDoc = await db.doc(`users/${d.id}/integrations/gmail`).get();
-      return gmailDoc.exists ? d.id : null;
+      if (!gmailDoc.exists) return null;
+      // Only process at 2pm local time
+      const due = await isLocalTime(d.id, "14:00");
+      return due ? d.id : null;
     })
   );
   const uids = gmailChecks.filter((id): id is string => id !== null);

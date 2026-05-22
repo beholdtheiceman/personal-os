@@ -79,6 +79,7 @@ export interface ChatMessage {
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 export type TaskStatus = "active" | "completed" | "archived";
 export type TaskTag = "personal" | "business" | "health" | "finance";
+export type RecurrenceCadence = "daily" | "weekly" | "monthly";
 
 export interface Task {
   id: string;
@@ -90,6 +91,10 @@ export interface Task {
   due_date: string | null;
   created_at: string;
   source: "manual" | "voice" | "ai";
+  recurrence?: RecurrenceCadence | null;
+  recurrence_end?: string | null; // YYYY-MM-DD; stop recurring after this date
+  parent_task_id?: string | null; // links recurring instances back to the first task
+  recurrence_spawned?: boolean;   // guards against spawning the successor twice on re-completion
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -129,7 +134,9 @@ export type XPEventType =
   | "health_log"
   | "goal_milestone"
   | "goal_complete"
-  | "streak_bonus";
+  | "streak_bonus"
+  | "hydration_goal"
+  | "workout_complete";
 
 export interface XPEvent {
   id: string;
@@ -180,6 +187,15 @@ export interface NutritionLog {
   carbs_g: number;
   fat_g: number;
   logged_at: string;
+}
+
+// ─── Hydration ───────────────────────────────────────────────────────────────
+export interface HydrationLog {
+  date: string;        // YYYY-MM-DD (also the Firestore doc ID)
+  glasses: number;
+  goal: number;        // default 8
+  logs: string[];      // ISO timestamps of each glass logged
+  updated_at: string;
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -334,6 +350,147 @@ export interface ShoppingList {
   week_start: string;
   items: ShoppingListItem[];
   generated_at: string;
+}
+
+// ─── Timezone ─────────────────────────────────────────────────────────────────
+export interface TimezoneSettings {
+  current_timezone: string; // auto-updated from device on each visit
+  home_timezone: string;    // user-chosen fixed timezone (ignores travel)
+  updated_at: string;
+}
+
+// ─── Daily Briefing ───────────────────────────────────────────────────────────
+export interface DailyBriefing {
+  date: string;           // YYYY-MM-DD (also the doc ID)
+  content: string;        // Claude's markdown briefing
+  generated_at: string;   // ISO timestamp
+  calendar_events: number;
+  tasks_flagged: number;
+  habits_due: number;
+}
+
+// ─── Decision Journal ─────────────────────────────────────────────────────────
+export type DecisionStatus = "pending_review" | "reviewed";
+
+export interface Decision {
+  id: string;
+  title: string;
+  date: string;                   // YYYY-MM-DD — when decision was made
+  context: string;
+  options_considered: string[];
+  chosen_option: string;
+  reasoning: string;
+  expected_outcome: string;
+  review_date: string;            // YYYY-MM-DD — when to revisit
+  review_notes?: string;
+  outcome_rating?: number;        // 1–5
+  status: DecisionStatus;
+  tags?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Time Tracker ─────────────────────────────────────────────────────────────
+export type TimeCategory = "work" | "personal" | "health" | "learning" | "other";
+export type TimeSource = "manual" | "timer";
+
+export interface TimeEntry {
+  id: string;
+  date: string;            // YYYY-MM-DD
+  start_time: string;      // ISO timestamp
+  end_time: string;        // ISO timestamp
+  duration_min: number;
+  description: string;
+  task_id?: string;
+  project_id?: string;
+  category: TimeCategory;
+  source: TimeSource;
+  created_at: string;
+}
+
+// ─── Workout ──────────────────────────────────────────────────────────────────
+export type ExerciseCategory = "push" | "pull" | "legs" | "core" | "cardio" | "other";
+export type WeightUnit = "lbs" | "kg";
+
+export interface Exercise {
+  id: string;
+  name: string;
+  category: ExerciseCategory;
+  pr_weight?: number;
+  pr_reps?: number;
+  pr_date?: string;
+  created_at: string;
+}
+
+export interface WorkoutSet {
+  reps: number;
+  weight: number;
+  unit: WeightUnit;
+}
+
+export interface WorkoutExercise {
+  exercise_id: string;
+  exercise_name: string;
+  sets: WorkoutSet[];
+  notes?: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  date: string;         // YYYY-MM-DD
+  name: string;
+  exercises: WorkoutExercise[];
+  duration_min?: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface WorkoutPlanDay {
+  day: string;          // e.g. "Monday"
+  focus: string;        // e.g. "Push Day"
+  exercises: string[];  // exercise names
+}
+
+export interface WorkoutPlan {
+  id: string;
+  name: string;
+  days: WorkoutPlanDay[];
+  created_at: string;
+}
+
+// ─── Budget ───────────────────────────────────────────────────────────────────
+export interface BudgetCategory {
+  limit: number;
+  alert_threshold: number; // 0–1, default 0.8
+}
+
+export interface BudgetMonth {
+  categories: Record<string, BudgetCategory>;
+  created_at: string;
+}
+
+// ─── Net Worth ────────────────────────────────────────────────────────────────
+export type AssetCategory = "cash" | "investment" | "property" | "other";
+export type LiabilityCategory = "loan" | "credit_card" | "mortgage" | "other";
+
+export interface AssetEntry {
+  value: number;
+  category: AssetCategory;
+}
+
+export interface LiabilityEntry {
+  value: number;
+  category: LiabilityCategory;
+}
+
+export interface NetWorthSnapshot {
+  assets: Record<string, AssetEntry>;
+  liabilities: Record<string, LiabilityEntry>;
+  total_assets: number;
+  total_liabilities: number;
+  net_worth: number;
+  snapshot_date: string; // YYYY-MM (also doc ID)
+  created_at: string;
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

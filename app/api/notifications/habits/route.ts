@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
+import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 
 export async function GET(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
@@ -10,61 +11,44 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminDb();
-  const now = new Date();
-
-  // Get all users
   const usersSnap = await db.collection("users").get();
   const notified: string[] = [];
 
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
     const habitsSnap = await db.collection(`users/${uid}/habits`).get();
+    if (habitsSnap.empty) continue;
+
+    // One timezone read per user — reused across all habit checks
+    const timeInfo = await getLocalTimeInfo(uid);
+    const { localDayOfWeek, localDate } = timeInfo;
+
+    const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
+    if (tokensSnap.empty) continue;
+
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
 
     for (const habitDoc of habitsSnap.docs) {
       const habit = habitDoc.data();
       if (!habit.reminder_enabled) continue;
 
-      // Support both new reminder_times array and legacy reminder_time string
       const reminderTimes: string[] = habit.reminder_times?.length
         ? (habit.reminder_times as string[])
         : habit.reminder_time ? [habit.reminder_time as string] : [];
       if (reminderTimes.length === 0) continue;
 
-      // Convert current UTC time to the habit's stored timezone
-      const tz = (habit.reminder_timezone as string | undefined) ?? "America/New_York";
-      const localTimeStr = now.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
-      const [localH, localM] = localTimeStr.split(":").map(Number);
-      const localMinutes = localH * 60 + localM;
-
-      // Check if any reminder time falls within a 15-min window of now
-      const isDue = reminderTimes.some((t) => {
-        const [rh, rm] = t.split(":").map(Number);
-        return Math.abs(localMinutes - (rh * 60 + rm)) <= 15;
-      });
+      // Check if any reminder time matches the current local hour
+      const isDue = reminderTimes.some((t) => isHour(timeInfo, t));
       if (!isDue) continue;
 
-      // Today's date in the user's timezone
-      const todayLocal = now.toLocaleDateString("en-CA", { timeZone: tz });
+      // Check target days (local day of week)
+      const targetDays: number[] = habit.target_days ?? [0, 1, 2, 3, 4, 5, 6];
+      if (!targetDays.includes(localDayOfWeek)) continue;
 
-      // Check target days (use local day-of-week)
-      const localDay = new Date(now.toLocaleString("en-US", { timeZone: tz })).getDay();
-      const targetDays: number[] = habit.target_days ?? [0,1,2,3,4,5,6];
-      if (!targetDays.includes(localDay)) continue;
-
-      // For non-completion habits (like water), skip the completion check
-      // For regular habits, skip if already done today
-      const skipIfDone = habit.skip_if_done !== false; // default true
+      // Skip if already completed today (in user's local timezone)
+      const skipIfDone = habit.skip_if_done !== false;
       const completions: string[] = habit.completions ?? [];
-      if (skipIfDone && completions.includes(todayLocal)) continue;
-
-      // Check user has tokens
-      const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
-      if (tokensSnap.empty) continue;
-
-      // Send via internal send endpoint
-      const baseUrl = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "http://localhost:3000";
+      if (skipIfDone && completions.includes(localDate)) continue;
 
       await fetch(`${baseUrl}/api/notifications/send`, {
         method: "POST",
@@ -74,7 +58,7 @@ export async function GET(req: NextRequest) {
         },
         body: JSON.stringify({
           uid,
-          title: `⏰ Habit Reminder`,
+          title: "⏰ Habit Reminder",
           body: `Don't forget: ${habit.name}`,
           tag: `habit-${habitDoc.id}`,
         }),

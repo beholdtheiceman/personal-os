@@ -14,6 +14,8 @@ import {
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
 import { taskXP } from "@/lib/xp";
+import { computeNextDue, isWithinRecurrence } from "@/lib/recurrence";
+import { format } from "date-fns";
 import toast from "react-hot-toast";
 import type { Task, TaskStatus, TaskTag } from "@/types";
 
@@ -68,6 +70,28 @@ export default function TasksManager() {
     toast.success("Task updated");
   };
 
+  // When a recurring task is completed, schedule its next occurrence — once.
+  const spawnNextOccurrence = async (task: Task) => {
+    if (!user || !task.recurrence || task.recurrence_spawned) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    const nextDue = computeNextDue(task.recurrence, task.due_date, today);
+    if (!isWithinRecurrence(nextDue, task.recurrence_end)) return;
+    await addUserDoc(user.uid, "tasks", {
+      title: task.title,
+      description: task.description ?? "",
+      tags: task.tags ?? ["personal"],
+      due_date: nextDue,
+      priority_score: task.priority_score ?? 50,
+      status: "active",
+      source: task.source ?? "manual",
+      recurrence: task.recurrence,
+      recurrence_end: task.recurrence_end ?? null,
+      parent_task_id: task.parent_task_id ?? task.id,
+    });
+    await updateDoc(doc(db, "users", user.uid, "tasks", task.id), { recurrence_spawned: true });
+    toast.success(`Next "${task.title}" scheduled for ${nextDue}`);
+  };
+
   const completeTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id);
     if (!task || !user) return;
@@ -76,6 +100,7 @@ export default function TasksManager() {
     const xp = taskXP(task.priority_score ?? 50);
     if (newStatus === "completed") {
       await awardXP(user.uid, xp, "task_complete", `Task: ${task.title}`, totalXP);
+      await spawnNextOccurrence(task);
     } else {
       await awardXP(user.uid, -xp, "task_complete", `Task uncompleted: ${task.title}`, totalXP);
     }

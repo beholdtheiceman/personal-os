@@ -6,6 +6,8 @@ import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { searchSecondBrainFromDB, captureToInboxDB, getSecondBrainContextFromDB } from "@/lib/second-brain";
 import { refreshGmailToken as _refreshGmailToken } from "@/lib/gmail-token";
+import { computeNextDue, isWithinRecurrence } from "@/lib/recurrence";
+import type { RecurrenceCadence } from "@/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,7 +66,7 @@ const TOOLS: Anthropic.Tool[] = [
   // ── Tasks ──
   {
     name: "add_task",
-    description: "Add a new task or to-do item.",
+    description: "Add a new task or to-do item. Set recurrence for repeating tasks (e.g. 'water the plants every week').",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -72,6 +74,8 @@ const TOOLS: Anthropic.Tool[] = [
         description: { type: "string" },
         tags: { type: "array", items: { type: "string", enum: ["personal", "business", "health", "finance"] } },
         due_date: { type: "string", description: "YYYY-MM-DD, only if mentioned" },
+        recurrence: { type: "string", enum: ["daily", "weekly", "monthly"], description: "Only if the task repeats. A new instance is auto-created on completion." },
+        recurrence_end: { type: "string", description: "YYYY-MM-DD, optional last date to keep repeating" },
       },
       required: ["title"],
     },
@@ -538,6 +542,115 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "log_water",
+    description: "Log a glass of water for today (increments the user's hydration count by 1). Awards XP if the daily goal is reached.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_hydration",
+    description: "Get today's hydration status: glasses logged, daily goal, and timestamps of each glass.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "log_workout",
+    description: "Log a completed workout session with exercises and sets. Awards XP (50 base + 10 per exercise). Detects and saves new PRs automatically.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Session name, e.g. 'Push Day A' or 'Leg Day'." },
+        exercises: {
+          type: "array",
+          description: "List of exercises performed.",
+          items: {
+            type: "object",
+            properties: {
+              exercise_name: { type: "string" },
+              category: { type: "string", enum: ["push", "pull", "legs", "core", "cardio", "other"] },
+              sets: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    reps: { type: "number" },
+                    weight: { type: "number" },
+                    unit: { type: "string", enum: ["lbs", "kg"] },
+                  },
+                },
+              },
+            },
+          },
+        },
+        duration_min: { type: "number", description: "Duration in minutes (optional)." },
+        notes: { type: "string", description: "Session notes (optional)." },
+      },
+      required: ["name", "exercises"],
+    },
+  },
+  {
+    name: "get_workout_history",
+    description: "Get recent workout sessions with exercises and sets.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        limit: { type: "number", description: "Max sessions to return. Default 10." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_prs",
+    description: "Get the user's personal records (PRs) for all exercises — max weight and reps per exercise.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category: { type: "string", enum: ["push", "pull", "legs", "core", "cardio", "other"], description: "Optional category filter." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "list_exercises",
+    description: "List all exercises in the user's exercise library.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category: { type: "string", enum: ["push", "pull", "legs", "core", "cardio", "other"], description: "Optional category filter." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "generate_workout_plan",
+    description: "Generate and save a structured workout plan. Claude should provide the plan content; this tool saves it to the user's Plans tab.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Plan name, e.g. 'PPL 3-Day Split'." },
+        days: {
+          type: "array",
+          description: "Array of training days.",
+          items: {
+            type: "object",
+            properties: {
+              day: { type: "string", description: "Day name, e.g. 'Monday' or 'Day 1'." },
+              focus: { type: "string", description: "Focus, e.g. 'Push', 'Pull', 'Legs'." },
+              exercises: { type: "array", items: { type: "string" }, description: "Exercise names for this day." },
+            },
+          },
+        },
+      },
+      required: ["name", "days"],
+    },
+  },
+  {
     name: "list_journal_entries",
     description: "List recent journal entries with mood scores and AI summaries.",
     input_schema: {
@@ -575,6 +688,158 @@ const TOOLS: Anthropic.Tool[] = [
         limit: { type: "number", description: "Max transactions, default 100." },
       },
       required: [],
+    },
+  },
+  {
+    name: "log_time",
+    description: "Manually log a time entry. Use when the user says things like 'log 2 hours of work on the landing page' or 'I spent 45 min on email'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        description: { type: "string", description: "What was worked on." },
+        duration_min: { type: "number", description: "Duration in minutes." },
+        category: { type: "string", enum: ["work", "personal", "health", "learning", "other"], description: "Time category. Default: work." },
+        date: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+      },
+      required: ["description", "duration_min"],
+    },
+  },
+  {
+    name: "get_time_summary",
+    description: "Get a summary of logged time — total hours by category and by day for the past week.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        days: { type: "number", description: "How many days back to summarize. Default 7." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "start_focus_session",
+    description: "Start a focus/Pomodoro session for the user on a named task. This sets the countdown timer running in the app. The user will see the MiniFocusBar immediately.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        task_name: { type: "string", description: "What to focus on." },
+        duration_min: { type: "number", description: "Session length in minutes. Default 25." },
+        category: { type: "string", enum: ["work", "personal", "health", "learning", "other"], description: "Category for the logged time entry. Default: work." },
+      },
+      required: ["task_name"],
+    },
+  },
+  {
+    name: "set_budget",
+    description: "Set or update a monthly spending limit for a category. Use this when the user says things like 'set my grocery budget to $400' or 'limit dining to $200 this month'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category: { type: "string", description: "Spending category name (e.g. 'groceries', 'dining', 'entertainment')." },
+        limit: { type: "number", description: "Monthly spending limit in dollars." },
+        alert_threshold: { type: "number", description: "Fraction (0–1) at which to show a warning. Default 0.8 (80%)." },
+        month: { type: "string", description: "YYYY-MM format. Defaults to current month." },
+      },
+      required: ["category", "limit"],
+    },
+  },
+  {
+    name: "get_budget_status",
+    description: "Get budget vs. actual spending for the current (or specified) month across all categories.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        month: { type: "string", description: "YYYY-MM format. Defaults to current month." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "update_net_worth",
+    description: "Save or update the user's net worth snapshot for the current month. Provide assets and liabilities as key-value pairs.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        assets: {
+          type: "object",
+          description: "Map of asset name → { value: number, category: 'cash'|'investment'|'property'|'other' }.",
+          additionalProperties: true,
+        },
+        liabilities: {
+          type: "object",
+          description: "Map of liability name → { value: number, category: 'loan'|'credit_card'|'mortgage'|'other' }.",
+          additionalProperties: true,
+        },
+        month: { type: "string", description: "YYYY-MM. Defaults to current month." },
+      },
+      required: ["assets", "liabilities"],
+    },
+  },
+  {
+    name: "get_net_worth",
+    description: "Get the user's net worth history — assets, liabilities, and net worth per month.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        months: { type: "number", description: "How many recent months to return. Default 6." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_daily_briefing",
+    description: "Retrieve today's morning briefing (or a recent one). Returns the AI-generated briefing content and stats.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "log_decision",
+    description: "Log a decision the user made in their decision journal. Use when the user describes a significant choice or tradeoff they are making or made.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Short name for the decision." },
+        date: { type: "string", description: "YYYY-MM-DD. Defaults to today." },
+        context: { type: "string", description: "Background / situation." },
+        options_considered: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of options that were considered.",
+        },
+        chosen_option: { type: "string", description: "The option that was chosen." },
+        reasoning: { type: "string", description: "Why this option was chosen." },
+        expected_outcome: { type: "string", description: "What the user expects to happen." },
+        review_date: { type: "string", description: "YYYY-MM-DD to revisit this decision. Defaults to 30 days from now." },
+        tags: { type: "array", items: { type: "string" }, description: "Optional tags." },
+      },
+      required: ["title", "chosen_option"],
+    },
+  },
+  {
+    name: "list_decisions",
+    description: "List the user's logged decisions, optionally filtered by status.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["all", "pending_review", "reviewed"], description: "Filter by status. Default 'all'." },
+        limit: { type: "number", description: "Max decisions to return. Default 10." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "review_decision",
+    description: "Mark a decision as reviewed with an outcome rating and notes.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        decision_id: { type: "string", description: "The decision ID to review." },
+        outcome_rating: { type: "number", description: "1–5 rating of how well the outcome matched expectations." },
+        review_notes: { type: "string", description: "Notes on what actually happened." },
+      },
+      required: ["decision_id", "outcome_rating"],
     },
   },
   {
@@ -1532,9 +1797,13 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         priority_score: 50,
         status: "active",
         source: "ai",
+        recurrence: (input.recurrence as RecurrenceCadence) ?? null,
+        recurrence_end: input.recurrence_end ?? null,
+        parent_task_id: null,
         created_at: FieldValue.serverTimestamp(),
       });
-      return `Task "${input.title}" added.`;
+      const repeat = input.recurrence ? ` (repeats ${input.recurrence})` : "";
+      return `Task "${input.title}" added${repeat}.`;
     }
 
     case "update_task": {
@@ -1548,9 +1817,42 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       if (input.status !== undefined) updates.status = input.status;
       if (input.due_date !== undefined) updates.due_date = input.due_date;
       if (input.priority_score !== undefined) updates.priority_score = input.priority_score;
+
+      // Spawn the next occurrence when a recurring task is completed (once).
+      const data = doc.data();
+      let recurNote = "";
+      if (
+        input.status === "completed" &&
+        data.recurrence &&
+        !data.recurrence_spawned
+      ) {
+        const nextDue = computeNextDue(
+          data.recurrence as RecurrenceCadence,
+          (data.due_date as string | null) ?? null,
+          today()
+        );
+        if (isWithinRecurrence(nextDue, data.recurrence_end as string | null)) {
+          await db.collection(`users/${uid}/tasks`).add({
+            title: data.title,
+            description: data.description ?? "",
+            tags: data.tags ?? ["personal"],
+            due_date: nextDue,
+            priority_score: data.priority_score ?? 50,
+            status: "active",
+            source: data.source ?? "ai",
+            recurrence: data.recurrence,
+            recurrence_end: data.recurrence_end ?? null,
+            parent_task_id: data.parent_task_id ?? doc.id,
+            created_at: FieldValue.serverTimestamp(),
+          });
+          updates.recurrence_spawned = true;
+          recurNote = ` Next one scheduled for ${nextDue}.`;
+        }
+      }
+
       await doc.ref.update(updates);
       const action = input.status === "completed" ? "marked complete" : "updated";
-      return `Task "${doc.data().title}" ${action}.`;
+      return `Task "${doc.data().title}" ${action}.${recurNote}`;
     }
 
     // ── Calendar ───────────────────────────────────────────────────────────────
@@ -2501,6 +2803,163 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         .join("\n");
     }
 
+    case "log_water": {
+      const todayStr = today();
+      const ref = db.doc(`users/${uid}/hydration/${todayStr}`);
+      const snap = await ref.get();
+      const now = new Date().toISOString();
+      const DEFAULT_GOAL = 8;
+      if (!snap.exists) {
+        await ref.set({ date: todayStr, glasses: 1, goal: DEFAULT_GOAL, logs: [now], updated_at: now });
+        return `Logged 1 glass of water today. You're at 1/${DEFAULT_GOAL} glasses.`;
+      }
+      const data = snap.data()!;
+      const current: number = data.glasses ?? 0;
+      const goal: number = data.goal ?? DEFAULT_GOAL;
+      const newCount = current + 1;
+      await ref.update({ glasses: newCount, logs: FieldValue.arrayUnion(now), updated_at: now });
+      if (newCount === goal) {
+        // Award 10 XP for hitting the daily hydration goal
+        const xpRef = db.doc(`users/${uid}/xp/summary`);
+        const eventRef = db.collection(`users/${uid}/xp_events`).doc();
+        const xpSnap = await xpRef.get();
+        const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+        await Promise.all([
+          xpSnap.exists
+            ? xpRef.update({ total: FieldValue.increment(10) })
+            : xpRef.set({ total: 10 }),
+          eventRef.set({ id: eventRef.id, type: "hydration_goal", xp: 10, description: `Hydration goal hit: ${goal} glasses`, timestamp: now, totalAfter: currentXP + 10 }),
+        ]);
+        return `Logged glass #${newCount} — you hit your hydration goal of ${goal} glasses today! +10 XP awarded.`;
+      }
+      return `Logged glass #${newCount}. You're at ${newCount}/${goal} glasses today.`;
+    }
+
+    case "get_hydration": {
+      const todayStr = today();
+      const snap = await db.doc(`users/${uid}/hydration/${todayStr}`).get();
+      if (!snap.exists) return `No water logged yet today. Daily goal: 8 glasses.`;
+      const data = snap.data()!;
+      const glasses: number = data.glasses ?? 0;
+      const goal: number = data.goal ?? 8;
+      const logs: string[] = data.logs ?? [];
+      const timestamps = logs.map((ts: string) => {
+        const d = new Date(ts);
+        return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      });
+      const status = glasses >= goal ? "Goal reached!" : `${goal - glasses} more to go`;
+      return `Hydration today: ${glasses}/${goal} glasses. ${status}\nTimes: ${timestamps.join(", ") || "none"}`;
+    }
+
+    case "log_workout": {
+      const sessionName = (input.name as string) || "Workout";
+      const rawExercises = input.exercises as { exercise_name: string; category?: string; sets?: { reps: number; weight: number; unit?: string }[] }[];
+      const todayStr = today();
+      const now = new Date().toISOString();
+
+      // Ensure each exercise exists in the library, detect PRs
+      const newPRs: string[] = [];
+      const workoutExercises = [];
+      for (const raw of rawExercises) {
+        const exName = raw.exercise_name;
+        const category = (raw.category ?? "other") as string;
+        // Find or create exercise
+        const exSnap = await db.collection(`users/${uid}/exercises`).get();
+        let exDoc = exSnap.docs.find((d) => (d.data().name as string).toLowerCase() === exName.toLowerCase());
+        let exId: string;
+        if (!exDoc) {
+          const ref = await db.collection(`users/${uid}/exercises`).add({ name: exName, category, created_at: now });
+          exId = ref.id;
+        } else {
+          exId = exDoc.id;
+        }
+        const sets = (raw.sets ?? []).map((s) => ({ reps: s.reps ?? 0, weight: s.weight ?? 0, unit: s.unit ?? "lbs" }));
+        workoutExercises.push({ exercise_id: exId, exercise_name: exName, sets });
+        // PR check
+        if (sets.length > 0) {
+          const maxSet = sets.reduce((best, s) => (s.weight > best.weight ? s : best), sets[0]);
+          const oldPR: number = exDoc ? ((exDoc.data().pr_weight as number) ?? 0) : 0;
+          if (maxSet.weight > oldPR) {
+            newPRs.push(`${exName}: ${maxSet.weight}${maxSet.unit}`);
+            await db.doc(`users/${uid}/exercises/${exId}`).update({ pr_weight: maxSet.weight, pr_reps: maxSet.reps, pr_date: todayStr });
+          }
+        }
+      }
+      await db.collection(`users/${uid}/workouts`).add({
+        date: todayStr, name: sessionName, exercises: workoutExercises,
+        duration_min: (input.duration_min as number) ?? null,
+        notes: (input.notes as string) ?? "", created_at: now,
+      });
+      const xp = 50 + workoutExercises.length * 10;
+      const xpRef = db.doc(`users/${uid}/xp/summary`);
+      const xpSnap = await xpRef.get();
+      const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+      const eventRef = db.collection(`users/${uid}/xp_events`).doc();
+      await Promise.all([
+        xpSnap.exists ? xpRef.update({ total: FieldValue.increment(xp) }) : xpRef.set({ total: xp }),
+        eventRef.set({ id: eventRef.id, type: "workout_complete", xp, description: `Workout: ${sessionName}`, timestamp: now, totalAfter: currentXP + xp }),
+      ]);
+      const prMsg = newPRs.length > 0 ? ` New PRs: ${newPRs.join(", ")}.` : "";
+      return `Workout "${sessionName}" logged with ${workoutExercises.length} exercises. +${xp} XP awarded.${prMsg}`;
+    }
+
+    case "get_workout_history": {
+      const maxSessions = (input.limit as number) ?? 10;
+      const snap = await db.collection(`users/${uid}/workouts`).orderBy("date", "desc").limit(maxSessions).get();
+      if (snap.empty) return "No workouts logged yet.";
+      const lines = ["**Recent Workouts**"];
+      for (const d of snap.docs) {
+        const s = d.data();
+        const exList = (s.exercises as { exercise_name: string; sets: { reps: number; weight: number; unit: string }[] }[]) ?? [];
+        const summary = exList.map((e) => `${e.exercise_name} (${e.sets.length} sets)`).join(", ");
+        lines.push(`**${s.date}** — ${s.name}: ${summary}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_prs": {
+      const categoryFilter = input.category as string | undefined;
+      const snap = await db.collection(`users/${uid}/exercises`).get();
+      type ExRow = { id: string; name: string; category: string; pr_weight?: number; pr_reps?: number; pr_date?: string };
+      const exercises = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<ExRow, "id">) }))
+        .filter((e) => e.pr_weight && e.pr_weight > 0)
+        .filter((e) => !categoryFilter || e.category === categoryFilter)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      if (exercises.length === 0) return "No PRs recorded yet.";
+      const lines = ["**Personal Records**"];
+      for (const e of exercises) {
+        lines.push(`${e.name} (${e.category}): ${e.pr_weight} lbs × ${e.pr_reps ?? "?"} reps${e.pr_date ? ` on ${e.pr_date}` : ""}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "list_exercises": {
+      const categoryFilter = input.category as string | undefined;
+      const snap = await db.collection(`users/${uid}/exercises`).get();
+      type ExRow2 = { id: string; name: string; category: string };
+      let exercises = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ExRow2, "id">) }));
+      if (categoryFilter) exercises = exercises.filter((e) => e.category === categoryFilter);
+      exercises.sort((a, b) => a.name.localeCompare(b.name));
+      if (exercises.length === 0) return "No exercises in library yet.";
+      const grouped: Record<string, string[]> = {};
+      for (const e of exercises) {
+        const cat = e.category ?? "other";
+        (grouped[cat] ??= []).push(e.name);
+      }
+      return Object.entries(grouped).map(([cat, names]) => `**${cat}**: ${names.join(", ")}`).join("\n");
+    }
+
+    case "generate_workout_plan": {
+      const planName = (input.name as string) || "Workout Plan";
+      const days = input.days as { day: string; focus: string; exercises: string[] }[];
+      await db.collection(`users/${uid}/workout_plans`).add({
+        name: planName, days, created_at: new Date().toISOString(),
+      });
+      const summary = days.map((d) => `${d.day} (${d.focus}): ${d.exercises.join(", ")}`).join("\n");
+      return `Workout plan "${planName}" saved with ${days.length} days:\n${summary}`;
+    }
+
     case "list_journal_entries": {
       const end = (input.end_date as string) ?? today();
       const start = (input.start_date as string) ?? daysAgo(end, 6);
@@ -2598,6 +3057,214 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         lines.push(`${t.date} ${sign}$${t.amount.toFixed(2)} ${t.category}${t.description ? ` — ${t.description}` : ""} [${t.source}]`);
       }
       return lines.join("\n");
+    }
+
+    case "log_time": {
+      const description = (input.description as string) || "Focus session";
+      const duration_min = input.duration_min as number;
+      const category = (input.category as string) ?? "work";
+      const entryDate = (input.date as string) ?? today();
+      const now = new Date().toISOString();
+      const start = new Date(new Date(now).getTime() - duration_min * 60000).toISOString();
+      await db.collection(`users/${uid}/time_entries`).add({
+        date: entryDate,
+        start_time: start,
+        end_time: now,
+        duration_min,
+        description,
+        task_id: null,
+        project_id: null,
+        category,
+        source: "manual",
+        created_at: now,
+      });
+      const h = Math.floor(duration_min / 60);
+      const m = duration_min % 60;
+      const durStr = h > 0 ? `${h}h ${m > 0 ? `${m}m` : ""}`.trim() : `${m}m`;
+      return `Logged ${durStr} of ${category} time: "${description}" on ${entryDate}.`;
+    }
+
+    case "get_time_summary": {
+      const daysBack = (input.days as number) ?? 7;
+      const endDate = today();
+      const startDate = daysAgo(endDate, daysBack - 1);
+      const snap = await db
+        .collection(`users/${uid}/time_entries`)
+        .where("date", ">=", startDate)
+        .where("date", "<=", endDate)
+        .get();
+      if (snap.empty) return `No time entries in the last ${daysBack} days.`;
+      const entries = snap.docs.map((d) => d.data());
+      const byCategory: Record<string, number> = {};
+      const byDate: Record<string, number> = {};
+      for (const e of entries) {
+        byCategory[e.category] = (byCategory[e.category] ?? 0) + (e.duration_min as number);
+        byDate[e.date] = (byDate[e.date] ?? 0) + (e.duration_min as number);
+      }
+      const total = entries.reduce((s, e) => s + (e.duration_min as number), 0);
+      const lines = [`**Time Summary — last ${daysBack} days** (${Math.round(total / 60 * 10) / 10}h total)`];
+      const catLines = Object.entries(byCategory).sort(([, a], [, b]) => b - a)
+        .map(([cat, min]) => `  ${cat}: ${Math.round(min / 60 * 10) / 10}h`);
+      lines.push("By category:", ...catLines);
+      const dateLines = Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a))
+        .map(([date, min]) => `  ${date}: ${Math.round(min / 60 * 10) / 10}h`);
+      lines.push("By day:", ...dateLines);
+      return lines.join("\n");
+    }
+
+    case "start_focus_session": {
+      // This tool can't directly control the client-side timer, but we can inform the user
+      // and provide a deep link. The actual timer start happens in the UI.
+      const taskName = (input.task_name as string) || "Focus session";
+      const duration = (input.duration_min as number) ?? 25;
+      const category = (input.category as string) ?? "work";
+      return `Ready to start a ${duration}-minute focus session on "${taskName}" (${category}). Open the [Focus page](/focus) — the timer will be pre-filled. Or click the Focus link in the nav to start your session now.`;
+    }
+
+    case "set_budget": {
+      const category = (input.category as string).trim();
+      const limit = input.limit as number;
+      const alert_threshold = (input.alert_threshold as number) ?? 0.8;
+      const month = (input.month as string) ?? today().slice(0, 7);
+      if (!category || limit < 0) return "Invalid category or limit.";
+      const ref = db.doc(`users/${uid}/budgets/${month}`);
+      const snap = await ref.get();
+      const existing = snap.exists ? (snap.data()?.categories ?? {}) : {};
+      await ref.set(
+        { categories: { ...existing, [category]: { limit, alert_threshold } }, created_at: snap.exists ? snap.data()?.created_at : new Date().toISOString() },
+        { merge: true }
+      );
+      return `Budget set: ${category} → $${limit.toFixed(2)}/month (${month}). Alert at ${Math.round(alert_threshold * 100)}%.`;
+    }
+
+    case "get_budget_status": {
+      const month = (input.month as string) ?? today().slice(0, 7);
+      const start = `${month}-01`;
+      const end = `${month}-31`;
+      const [budgetSnap, txSnap] = await Promise.all([
+        db.doc(`users/${uid}/budgets/${month}`).get(),
+        db.collection(`users/${uid}/transactions`).where("date", ">=", start).where("date", "<=", end).get(),
+      ]);
+      const budgetCategories: Record<string, { limit: number; alert_threshold: number }> = budgetSnap.exists
+        ? (budgetSnap.data()?.categories ?? {})
+        : {};
+      const actuals: Record<string, number> = {};
+      for (const d of txSnap.docs) {
+        const t = d.data();
+        if (t.type === "expense") actuals[t.category] = (actuals[t.category] ?? 0) + (t.amount as number);
+      }
+      if (Object.keys(budgetCategories).length === 0) return `No budget set for ${month}.`;
+      const lines = [`**Budget Status — ${month}**`];
+      let totalBudgeted = 0;
+      let totalSpent = 0;
+      for (const [cat, entry] of Object.entries(budgetCategories)) {
+        const spent = actuals[cat] ?? 0;
+        totalBudgeted += entry.limit;
+        totalSpent += spent;
+        const pct = entry.limit > 0 ? spent / entry.limit : 0;
+        const status = spent > entry.limit ? "OVER" : pct >= entry.alert_threshold ? "near limit" : "on track";
+        lines.push(`${cat}: $${spent.toFixed(2)} / $${entry.limit.toFixed(2)} (${Math.round(pct * 100)}%) — ${status}`);
+      }
+      lines.push(`\nTotal: $${totalSpent.toFixed(2)} / $${totalBudgeted.toFixed(2)} budgeted`);
+      return lines.join("\n");
+    }
+
+    case "update_net_worth": {
+      const month = (input.month as string) ?? today().slice(0, 7);
+      const rawAssets = input.assets as Record<string, { value: number; category: string }>;
+      const rawLiabilities = input.liabilities as Record<string, { value: number; category: string }>;
+      const assets = Object.fromEntries(
+        Object.entries(rawAssets).map(([k, v]) => [k, { value: Number(v.value) || 0, category: v.category ?? "other" }])
+      );
+      const liabilities = Object.fromEntries(
+        Object.entries(rawLiabilities).map(([k, v]) => [k, { value: Number(v.value) || 0, category: v.category ?? "other" }])
+      );
+      const total_assets = Object.values(assets).reduce((s, a) => s + a.value, 0);
+      const total_liabilities = Object.values(liabilities).reduce((s, l) => s + l.value, 0);
+      const net_worth = total_assets - total_liabilities;
+      await db.doc(`users/${uid}/net_worth/${month}`).set({
+        assets, liabilities, total_assets, total_liabilities, net_worth,
+        snapshot_date: month, created_at: new Date().toISOString(),
+      });
+      return `Net worth snapshot saved for ${month}: assets $${total_assets.toFixed(2)}, liabilities $${total_liabilities.toFixed(2)}, net worth $${net_worth.toFixed(2)}.`;
+    }
+
+    case "get_net_worth": {
+      const monthsBack = (input.months as number) ?? 6;
+      const snap = await db.collection(`users/${uid}/net_worth`).orderBy("snapshot_date", "desc").limit(monthsBack).get();
+      if (snap.empty) return "No net worth snapshots recorded yet.";
+      const lines = ["**Net Worth History**"];
+      for (const d of snap.docs) {
+        const s = d.data();
+        lines.push(`${s.snapshot_date}: assets $${(s.total_assets as number).toFixed(2)}, liabilities $${(s.total_liabilities as number).toFixed(2)}, net worth $${(s.net_worth as number).toFixed(2)}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_daily_briefing": {
+      const todayStr = today();
+      const briefDoc = await db.doc(`users/${uid}/daily_briefings/${todayStr}`).get();
+      if (!briefDoc.exists) return `No briefing generated yet for today (${todayStr}). Ask the user to open the dashboard and click "Generate morning briefing", or trigger it via the /api/daily-briefing endpoint.`;
+      const b = briefDoc.data()!;
+      return `**Morning Briefing — ${b.date}** (generated ${b.generated_at})\n\n${b.content}`;
+    }
+
+    case "log_decision": {
+      const todayStr = today();
+      const reviewDate = (input.review_date as string) || (() => {
+        const d = new Date(todayStr);
+        d.setDate(d.getDate() + 30);
+        return d.toISOString().slice(0, 10);
+      })();
+      const now = new Date().toISOString();
+      await db.collection(`users/${uid}/decisions`).add({
+        title: input.title as string,
+        date: (input.date as string) || todayStr,
+        context: (input.context as string) ?? "",
+        options_considered: (input.options_considered as string[]) ?? [],
+        chosen_option: input.chosen_option as string,
+        reasoning: (input.reasoning as string) ?? "",
+        expected_outcome: (input.expected_outcome as string) ?? "",
+        review_date: reviewDate,
+        tags: (input.tags as string[]) ?? [],
+        status: "pending_review",
+        created_at: now,
+        updated_at: now,
+      });
+      return `Decision logged: "${input.title}". Review scheduled for ${reviewDate}.`;
+    }
+
+    case "list_decisions": {
+      const statusFilter = (input.status as string) ?? "all";
+      const limitN = (input.limit as number) ?? 10;
+      let q = db.collection(`users/${uid}/decisions`).orderBy("date", "desc").limit(limitN);
+      if (statusFilter !== "all") q = q.where("status", "==", statusFilter) as typeof q;
+      const snap = await db.collection(`users/${uid}/decisions`)
+        .orderBy("date", "desc")
+        .limit(limitN)
+        .get();
+      if (snap.empty) return "No decisions logged yet.";
+      const lines = snap.docs
+        .filter((d) => statusFilter === "all" || d.data().status === statusFilter)
+        .map((d) => {
+          const dec = d.data();
+          return `- [${d.id}] **${dec.title}** (${dec.date}) — chose: ${dec.chosen_option} | review: ${dec.review_date} | status: ${dec.status}`;
+        });
+      return lines.length ? lines.join("\n") : `No decisions with status "${statusFilter}".`;
+    }
+
+    case "review_decision": {
+      const decId = input.decision_id as string;
+      const rating = Number(input.outcome_rating);
+      if (!decId) return "decision_id is required.";
+      if (rating < 1 || rating > 5) return "outcome_rating must be 1–5.";
+      await db.doc(`users/${uid}/decisions/${decId}`).update({
+        outcome_rating: rating,
+        review_notes: (input.review_notes as string) ?? "",
+        status: "reviewed",
+        updated_at: new Date().toISOString(),
+      });
+      return `Decision ${decId} marked as reviewed with rating ${rating}/5.`;
     }
 
     case "list_projects": {

@@ -1,5 +1,6 @@
-// Daily notification dispatcher — called by Vercel cron
+// Daily notification dispatcher — called by Vercel cron (hourly)
 // Checks each user's notification_settings and fires enabled categories
+// whose configured time matches the user's current local hour.
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
@@ -7,7 +8,8 @@ import {
   morningBriefingHandler, streakAlertHandler, taskReminderHandler,
   goalDeadlineHandler, journalReminderHandler, healthReminderHandler, weeklyReviewHandler,
 } from "@/lib/notification-handlers";
-import type { NotificationSettings, NotificationCategory } from "@/types";
+import { getLocalTimeInfo, isHour } from "@/lib/timezone";
+import type { NotificationSettings } from "@/types";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 
 export async function GET(req: NextRequest) {
@@ -18,7 +20,6 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminDb();
-  const now = new Date();
   const results: Record<string, string[]> = {};
   const usersSnap = await db.collection("users").get();
 
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest) {
     const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
     if (tokensSnap.empty) continue;
 
-    const tz = getTimezone(settings);
+    // One Firestore read for timezone info; reuse for all category checks
+    const timeInfo = await getLocalTimeInfo(uid);
     const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
 
     const send = async (title: string, body: string, tag: string) => {
@@ -47,52 +49,41 @@ export async function GET(req: NextRequest) {
       fired.push(tag);
     };
 
-    if (isDue(settings.morning_briefing, now, tz)) {
-      const n = await morningBriefingHandler(uid, tz);
+    if (settings.morning_briefing.enabled && settings.morning_briefing.time && isHour(timeInfo, settings.morning_briefing.time)) {
+      const n = await morningBriefingHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "morning-briefing");
     }
-    if (isDue(settings.streak_alert, now, tz)) {
-      const n = await streakAlertHandler(uid, tz);
+    if (settings.streak_alert.enabled && settings.streak_alert.time && isHour(timeInfo, settings.streak_alert.time)) {
+      const n = await streakAlertHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "streak-alert");
     }
-    if (isDue(settings.task_reminder, now, tz)) {
-      const n = await taskReminderHandler(uid, tz);
+    if (settings.task_reminder.enabled && settings.task_reminder.time && isHour(timeInfo, settings.task_reminder.time)) {
+      const n = await taskReminderHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "task-reminder");
     }
-    if (isDue(settings.goal_deadline, now, tz)) {
-      const n = await goalDeadlineHandler(uid, tz, settings.goal_deadline.days_before ?? 3);
+    if (settings.goal_deadline.enabled && settings.goal_deadline.time && isHour(timeInfo, settings.goal_deadline.time)) {
+      const n = await goalDeadlineHandler(uid, timeInfo.tz, settings.goal_deadline.days_before ?? 3);
       if (n) await send(n.title, n.body, n.tag ?? "goal-deadline");
     }
-    if (isDue(settings.journal_reminder, now, tz)) {
-      const n = await journalReminderHandler(uid, tz);
+    if (settings.journal_reminder.enabled && settings.journal_reminder.time && isHour(timeInfo, settings.journal_reminder.time)) {
+      const n = await journalReminderHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "journal-reminder");
     }
-    if (isDue(settings.health_reminder, now, tz)) {
-      const n = await healthReminderHandler(uid, tz);
+    if (settings.health_reminder.enabled && settings.health_reminder.time && isHour(timeInfo, settings.health_reminder.time)) {
+      const n = await healthReminderHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "health-reminder");
     }
-    if (isDue(settings.weekly_review, now, tz)) {
-      const localDay = new Date(now.toLocaleString("en-US", { timeZone: tz })).getDay();
-      if (localDay === (settings.weekly_review.day_of_week ?? 0)) {
-        const n = await weeklyReviewHandler(uid, tz);
-        if (n) await send(n.title, n.body, n.tag ?? "weekly-review");
-      }
+    if (
+      settings.weekly_review.enabled && settings.weekly_review.time &&
+      isHour(timeInfo, settings.weekly_review.time) &&
+      timeInfo.localDayOfWeek === (settings.weekly_review.day_of_week ?? 0)
+    ) {
+      const n = await weeklyReviewHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "weekly-review");
     }
 
     if (fired.length > 0) results[uid] = fired;
   }
 
   return NextResponse.json({ checked: usersSnap.size, fired: results });
-}
-
-function isDue(cat: NotificationCategory, now: Date, tz: string): boolean {
-  if (!cat.enabled || !cat.time) return false;
-  const localStr = now.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
-  const [lh, lm] = localStr.split(":").map(Number);
-  const [rh, rm] = cat.time.split(":").map(Number);
-  return Math.abs(lh * 60 + lm - (rh * 60 + rm)) <= 15;
-}
-
-function getTimezone(settings: NotificationSettings): string {
-  return (Object.values(settings) as NotificationCategory[]).find((c) => c.timezone)?.timezone ?? "America/New_York";
 }

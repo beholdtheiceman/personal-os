@@ -3,9 +3,15 @@
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import LoadingDots from "@/components/ui/LoadingDots";
-import type { Task, TaskTag } from "@/types";
+import type { Task, TaskTag, RecurrenceCadence } from "@/types";
 
 const ALL_TAGS: TaskTag[] = ["personal", "business", "health", "finance"];
+const RECURRENCE_OPTIONS: { value: RecurrenceCadence | "none"; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
 
 interface TaskFormProps {
   initial?: Task;
@@ -18,6 +24,8 @@ export default function TaskForm({ initial, onSave, onClose }: TaskFormProps) {
   const [description, setDescription] = useState(initial?.description ?? "");
   const [tags, setTags] = useState<TaskTag[]>(initial?.tags ?? ["personal"]);
   const [dueDate, setDueDate] = useState(initial?.due_date ?? "");
+  const [recurrence, setRecurrence] = useState<RecurrenceCadence | "none">(initial?.recurrence ?? "none");
+  const [recurrenceEnd, setRecurrenceEnd] = useState(initial?.recurrence_end ?? "");
   const [saving, setSaving] = useState(false);
 
   const toggleTag = (tag: TaskTag) => {
@@ -45,6 +53,8 @@ export default function TaskForm({ initial, onSave, onClose }: TaskFormProps) {
         due_date: dueDate || null,
         priority_score: score ?? 50,
         source: "manual",
+        recurrence: recurrence === "none" ? null : recurrence,
+        recurrence_end: recurrence === "none" ? null : (recurrenceEnd || null),
       });
       onClose();
     } finally {
@@ -85,6 +95,39 @@ export default function TaskForm({ initial, onSave, onClose }: TaskFormProps) {
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="text-xs text-text-secondary mb-1.5 block">Repeat</label>
+          <div className="flex gap-2 flex-wrap">
+            {RECURRENCE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setRecurrence(opt.value)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  recurrence === opt.value
+                    ? "bg-accent/20 border-accent/40 text-accent-text"
+                    : "border-bg-border text-text-secondary hover:border-accent/30"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {recurrence !== "none" && (
+            <div className="mt-2">
+              <label className="text-xs text-text-secondary mb-1.5 block">Repeat until (optional)</label>
+              <input
+                type="date"
+                className="input-base"
+                value={recurrenceEnd}
+                onChange={(e) => setRecurrenceEnd(e.target.value)}
+              />
+              <p className="text-[11px] text-text-muted mt-1">
+                A new task is created automatically each time you complete this one.
+              </p>
+            </div>
+          )}
         </div>
 
         <div>

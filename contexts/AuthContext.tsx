@@ -2,7 +2,8 @@
 // Provides the currently signed-in Firebase user to the whole app
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut, User } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth, googleProvider, db } from "@/lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 interface AuthContextType {
   user: User | null;
@@ -26,6 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
+      if (u) {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        setDoc(doc(db, `users/${u.uid}/settings/timezone`), {
+          current_timezone: tz,
+          updated_at: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+      }
     });
     return unsub;
   }, []);

@@ -106,7 +106,8 @@ body {
 }
 
 /* ─── Input ───────────────────────────────────────────────────────────────── */
-.input-base {
+.input-base,
+.input {
   @apply border rounded-lg px-3 py-2 w-full focus:border-accent outline-none transition-colors;
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.15);
@@ -114,6 +115,24 @@ body {
   backdrop-filter: blur(8px);
 }
 
-.input-base::placeholder {
+.input-base::placeholder,
+.input::placeholder {
   color: rgba(255, 255, 255, 0.38);
+}
+
+/* Force dark native popup for <select> elements */
+select.input-base,
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.5)' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  color-scheme: dark;
+}
+
+select.input-base option,
+select.input option {
+  background: rgb(20, 8, 18);
+  color: white;
 }

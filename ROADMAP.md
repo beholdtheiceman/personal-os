@@ -28,13 +28,13 @@
 - **Persistent Chat Panel** — Slide-in panel from right (400px desktop, full-screen mobile), pushes content, session-persistent state, Chat toggle in TopNav + MobileNav, full `/chat` page still available
 - **Google Health Integration** — Google Health API v4 (`health.googleapis.com`) with `googlehealth.*` scopes; syncs sleep hours/quality/efficiency, daily steps, resting heart rate, and exercise sessions from Pixel Watch via Google Health; OAuth connect/disconnect flow; auto-prefills health log form
 - **The Crate** — Personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) directly from your computer via Vercel Blob storage; files persist and stream through the audio proxy; YouTube + The Crate tab switcher on Media page; MiniPlayer redesigned to match dark glass aesthetic. Suno MP3s can be uploaded here directly.
+- **Plaid Integration** — Auto-syncs bank/credit card transactions and recurring streams into the Finance tracker (link-token → exchange → sync to Firestore); surfaced in the Finance "Accounts" tab + chat tools. *(Sandbox-only — live bank data pending Plaid Production/Development approval)*
 
 ---
 
 ## 📋 Roadmap
 
 ### Data & Integrations
-- **Plaid Integration** — Auto-sync bank/credit card transactions into Finance tracker. No more manual entries. *(Direction confirmed, waiting on Development environment approval)*
 - **Instacart / Walmart Grocery** — Push meal plan shopping list directly to a cart for pickup scheduling
 
 ### AI & Automation
@@ -42,6 +42,15 @@
 
 ### Life OS Features
 - **Reading List / Book Tracker** — Log books, highlights, key takeaways summarized by Claude
+- **Workout Planner / Strength Tracker** — Plan and program workouts, log sets/reps/weight, track PRs, Claude-generated training plans; complements existing health logging and Google Health sync
+- **Budget Tracking** — Per-category monthly spending limits with progress bars and alerts; makes the Finance module actionable rather than just historical
+- **Net Worth Dashboard** — Track assets (savings, investments, property) and liabilities (loans, credit cards) over time with monthly snapshots; companion to Finance tracker
+- **Time Tracker** — Log what you actually worked on (Toggl-style); pairs with tasks and projects; surfaces in weekly AI review to compare planned vs. actual time spent
+- **Focus / Pomodoro Timer** — Start a timed focus session on a specific task, auto-log time on completion, integrates with task list and time tracker
+- **Morning Ritual / Daily Standup** — Structured daily planning flow: Claude pulls calendar, open tasks, habits due, and flagged items into a prioritized "here's what today looks like" briefing; cron notification or dedicated dashboard section
+- **Decision Journal** — Log important decisions with reasoning and expected outcomes; revisit months later to draw lessons; Claude prompts periodic reviews; integrates with journal and memory
+- **Recurring Tasks** — Repeating task support with configurable cadence (daily, weekly, monthly); auto-recreates on completion
+- **Hydration Tracking** — Daily water intake log with a goal and dashboard indicator; fits naturally with nutrition and health modules
 
 ---
 

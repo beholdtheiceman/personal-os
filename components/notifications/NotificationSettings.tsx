@@ -46,7 +46,7 @@ const CATEGORIES: {
     label: "Goal Deadlines",
     description: "Alerts when a goal's target date is approaching",
     icon: <RiFlag2Line className="w-4 h-4" />,
-    hasTime: false,
+    hasTime: true,
   },
   {
     key: "journal_reminder",
@@ -102,12 +102,7 @@ export default function NotificationSettings() {
     if (!user) return;
     setSaving(true);
     try {
-      // Store timezone with every enabled category
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const withTz: NotificationSettings = Object.fromEntries(
-        Object.entries(settings).map(([k, v]) => [k, v.enabled ? { ...v, timezone: tz } : v])
-      ) as NotificationSettings;
-      await setDoc(doc(db, `users/${user.uid}/settings/notifications`), withTz);
+      await setDoc(doc(db, `users/${user.uid}/settings/notifications`), settings);
       toast.success("Notification settings saved");
     } catch {
       toast.error("Failed to save settings");
@@ -151,7 +146,15 @@ export default function NotificationSettings() {
 
       {/* Categories */}
       <div className="card space-y-1">
-        <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-3">Notification Types</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Notification Types</p>
+          <p className="text-xs text-text-muted">
+            Times are in{" "}
+            <span className="text-text-secondary font-mono">
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}
+            </span>
+          </p>
+        </div>
         {CATEGORIES.map(({ key, label, description, icon, hasTime }) => {
           const cat = settings[key];
           return (

@@ -7,7 +7,8 @@ import {
   RiLoopLeftLine, RiCalendarLine, RiDatabase2Line,
   RiBookLine, RiBookReadLine, RiBowlLine, RiHeartPulseLine, RiLineChartLine,
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line, RiRestaurantLine,
-  RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line,
+  RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
+  RiTimeLine, RiFocusLine, RiLightbulbLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -33,6 +34,10 @@ const MORE = [
   { href: "/finance",      label: "Finance",       icon: RiMoneyDollarCircleLine },
   { href: "/people",       label: "People",        icon: RiContactsBook2Line },
   { href: "/drive",        label: "Drive",         icon: RiGoogleLine },
+  { href: "/workout",      label: "Workout",       icon: RiRunLine },
+  { href: "/time",         label: "Time Tracker",  icon: RiTimeLine },
+  { href: "/focus",        label: "Focus",         icon: RiFocusLine },
+  { href: "/decisions",    label: "Decisions",     icon: RiLightbulbLine },
 ];
 
 export default function MobileNav() {

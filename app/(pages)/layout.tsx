@@ -12,21 +12,32 @@ import dynamic from "next/dynamic";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ChatPanelProvider, useChatPanel } from "@/contexts/ChatPanelContext";
 import ChatPanel from "@/components/chat/ChatPanel";
+import { TimerProvider, useTimer } from "@/contexts/TimerContext";
+import MiniFocusBar from "@/components/focus/MiniFocusBar";
 
 const YouTubePlayer = dynamic(() => import("@/components/media/YouTubePlayer"), { ssr: false });
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { currentTrack } = usePlayer();
   const { isOpen } = useChatPanel();
+  const { status: timerStatus } = useTimer();
   useNotifications();
   const hasPlayer = !!currentTrack;
+  const hasTimer = timerStatus !== "idle";
+
+  // Stack: MobileNav(57px) → MiniFocusBar(44px) → MiniPlayer(56px)
+  let pbMobile = "pb-20";
+  let pbDesktop = "md:pb-6";
+  if (hasTimer && hasPlayer) { pbMobile = "pb-[160px]"; pbDesktop = "md:pb-[112px]"; }
+  else if (hasTimer)          { pbMobile = "pb-[104px]"; pbDesktop = "md:pb-[56px]"; }
+  else if (hasPlayer)         { pbMobile = "pb-36";      pbDesktop = "md:pb-24"; }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <TopNav />
       <div className="flex flex-1 min-h-0">
         <main
-          className={`flex-1 overflow-y-auto p-4 md:p-6 transition-all duration-300 ${hasPlayer ? "pb-36 md:pb-24" : "pb-20 md:pb-6"} ${isOpen ? "md:mr-[400px]" : ""}`}
+          className={`flex-1 overflow-y-auto p-4 md:p-6 transition-all duration-300 ${pbMobile} ${pbDesktop} ${isOpen ? "md:mr-[400px]" : ""}`}
         >
           {children}
         </main>
@@ -34,6 +45,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <MobileNav />
       <QuickLogButton />
+      <MiniFocusBar />
       <MiniPlayer />
       <YouTubePlayer />
     </div>
@@ -59,8 +71,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <PlayerProvider>
       <ChatPanelProvider>
-        <ParallaxBackground />
-        <AppShell>{children}</AppShell>
+        <TimerProvider>
+          <ParallaxBackground />
+          <AppShell>{children}</AppShell>
+        </TimerProvider>
       </ChatPanelProvider>
     </PlayerProvider>
   );
