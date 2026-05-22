@@ -46,16 +46,21 @@ async function refreshAccessToken(uid: string, refreshToken: string): Promise<st
 
 const BASE = "https://health.googleapis.com/v4/users/me";
 
-async function fetchAllDataPoints(
+async function fetchDataPoints(
   dataType: string,
-  token: string
+  token: string,
+  startTimeMs?: number,
+  endTimeMs?: number,
 ): Promise<Record<string, unknown>[]> {
   const allPoints: Record<string, unknown>[] = [];
   let pageToken: string | undefined;
 
   do {
     const url = new URL(`${BASE}/dataTypes/${dataType}/dataPoints`);
-    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    // Server-side time filtering — avoids paginating through all historical data
+    if (startTimeMs) url.searchParams.set("startTime", new Date(startTimeMs).toISOString());
+    if (endTimeMs)   url.searchParams.set("endTime",   new Date(endTimeMs).toISOString());
+    if (pageToken)   url.searchParams.set("pageToken", pageToken);
 
     const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
     const raw = await res.json();
@@ -122,17 +127,29 @@ export async function GET(req: NextRequest) {
     const sleepWindowStart = now.getTime() - 30 * 3600000;
     const sleepWindowEnd = now.getTime() + 12 * 3600000;
 
+    // Heart rate: last 48h to ensure today's daily record is included
+    const hrStart = now.getTime() - 48 * 3600000;
+
     // Today's date parts for heart rate matching
     const todayYear = now.getFullYear();
     const todayMonth = now.getMonth() + 1; // 1-indexed
     const todayDay = now.getDate();
 
-    // Fetch all in parallel
+    // Check Firestore cache — skip API if fetched within the last 15 minutes
+    const cacheRef = db.doc(`users/${uid}/integrations/google_fit_cache`);
+    const cacheSnap = await cacheRef.get();
+    const cacheData = cacheSnap.exists ? cacheSnap.data()! : null;
+    const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+    if (cacheData && cacheData.fetched_at && (now.getTime() - new Date(cacheData.fetched_at as string).getTime()) < CACHE_TTL_MS) {
+      return NextResponse.json({ ...cacheData, connected: true, from_cache: true });
+    }
+
+    // Fetch all in parallel with server-side time filters — no more full history scan
     const [allSleep, allSteps, allExercise, allHr] = await Promise.all([
-      fetchAllDataPoints("sleep", token),
-      fetchAllDataPoints("steps", token),
-      fetchAllDataPoints("exercise", token),
-      fetchAllDataPoints("daily-resting-heart-rate", token),
+      fetchDataPoints("sleep",                     token, sleepWindowStart, sleepWindowEnd),
+      fetchDataPoints("steps",                     token, stepsStart,       todayEnd),
+      fetchDataPoints("exercise",                  token, stepsStart,       todayEnd),
+      fetchDataPoints("daily-resting-heart-rate",  token, hrStart,          todayEnd),
     ]);
 
     // ── SLEEP ────────────────────────────────────────────────────────────────
@@ -254,7 +271,7 @@ export async function GET(req: NextRequest) {
       return { name, duration_minutes, calories };
     });
 
-    return NextResponse.json({
+    const result = {
       connected: true,
       sleep_hours,
       sleep_quality,
@@ -263,7 +280,12 @@ export async function GET(req: NextRequest) {
       resting_heart_rate,
       exercises,
       fetched_at: new Date().toISOString(),
-    });
+    };
+
+    // Write cache (fire-and-forget — don't block the response)
+    cacheRef.set(result).catch(() => {});
+
+    return NextResponse.json(result);
   } catch (err) {
     console.error("Google Health data error:", err);
     return NextResponse.json({ connected: false, error: String(err) });

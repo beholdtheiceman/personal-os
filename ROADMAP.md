@@ -45,15 +45,23 @@
 ## 📋 Roadmap
 
 ### Data & Integrations
-- **Instacart / Walmart Grocery** — Push meal plan shopping list directly to a cart for pickup scheduling
+- **Grocery Price Checker** — When generating a shopping list from the meal planner, Claude searches for current prices at a store of your choice (via web search) and annotates the list with per-item estimates and a total; can compare across two or three stores
+- **Google Health Auto-Sync** — Nightly cron pulls sleep, steps, heart rate, and exercise from Google Health API and writes to Firestore automatically; no manual refresh needed; pre-populates health log form when you open it
+- **Plaid Auto-Sync** — Daily cron keeps bank and credit card transactions current without requiring a manual "Sync now" tap; mirrors the Gmail agent pattern
+- **Google Contacts Auto-Sync** — Weekly cron re-syncs contacts using the stored OAuth token; catches new additions and updated info without a manual import
 
 ### AI & Automation
 - **Smart Notifications** — Streak at-risk alerts, habit nudges, goal deadline reminders
 - **Proactive AI Insights** — Claude periodically analyzes patterns across all data sources (sleep, energy, mood, habits, nutrition, workouts, time logs) and surfaces correlations unprompted; weekly or daily insight card on dashboard; unique to this app because it holds all the data in one place
+- **Gentle Progress Reminders** — Mid-day and evening nudges that check actual progress against daily targets: water intake vs. goal, steps vs. target, habits not yet completed, nutrition not logged, workout not done on a scheduled training day, time not tracked; reminders are contextual — only fires if you're actually behind, not on days where you've already hit the target; configurable thresholds and quiet hours
+- **Decision Review Notifications** — Push notification when a logged decision hits its review date; uses the same dedup pattern as birthday and goal deadline handlers
+- **Net Worth Monthly Reminder** — First-of-month prompt to update your net worth snapshot; carries forward previous month's entries as a starting point
+- **Goals Check-in Cron** — Weekly automated review of goal milestone progress; nudges via notification if a goal has had no activity in 14+ days
+- **End-of-Day Time Summary** — Evening notification summarizing hours logged, top category, and any tasks with time logged vs. estimated; only fires on days where at least one time entry exists
 
 ### Health
 - **Body Metrics Tracker** — Log weight, body fat %, and measurements over time with trend charts; fills the gap in the health module alongside sleep, steps, heart rate, and nutrition
-- **Supplement / Medication Log** — Track daily supplements and medications with dosage, timing, and notes; fits naturally alongside hydration and nutrition
+- **Supplement / Medication Log** — Track daily supplements and medications with dosage, timing, and notes; fits naturally alongside hydration and nutrition; reminder notification if not logged by a set time
 - **Mood Tracker** — Standalone daily mood check-in (1–10 with optional note, separate from journal); enables cross-domain correlation with sleep, exercise, habits, and nutrition over time; pairs with Proactive AI Insights
 
 ### Finance

@@ -305,3 +305,97 @@ export async function birthdayReminderHandler(
   const names = newOnes.map((u) => `${u.name} (${u.daysUntil === 0 ? "today" : `${u.daysUntil}d`})`).join(", ");
   return { title: "🎂 Upcoming Birthdays", body: names, tag: "birthday-reminder" };
 }
+
+// ─── Progress Reminder (mid-day + evening) ────────────────────────────────────
+// Checks actual progress against daily targets and only fires if behind.
+// Used for both the midday (13:00) and evening (18:00) checks — same logic,
+// same handler; the cron fires it at whichever times the user configures.
+export async function progressReminderHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const today = todayLocal(tz);
+  const todayDay = localNow(tz).getDay();
+
+  const behind: string[] = [];
+
+  // ── 1. Hydration ─────────────────────────────────────────────────────────
+  try {
+    const hydDoc = await db.doc(`users/${uid}/hydration/${today}`).get();
+    const glasses: number = hydDoc.exists() ? (hydDoc.data()?.glasses ?? 0) : 0;
+    const goal: number    = hydDoc.exists() ? (hydDoc.data()?.goal    ?? 8) : 8;
+    // Fire if below 50% of goal
+    if (glasses < goal * 0.5) {
+      behind.push(`💧 ${glasses}/${goal} glasses`);
+    }
+  } catch { /* no hydration data — skip */ }
+
+  // ── 2. Steps (from health log if synced) ─────────────────────────────────
+  try {
+    const healthDoc = await db.doc(`users/${uid}/health/${today}`).get();
+    if (healthDoc.exists()) {
+      const data = healthDoc.data()!;
+      const steps: number | undefined    = data.steps as number | undefined;
+      const stepsGoal: number            = (data.steps_goal as number | undefined) ?? 10000;
+      if (steps !== undefined && steps < stepsGoal * 0.5) {
+        behind.push(`🚶 ${steps.toLocaleString()}/${stepsGoal.toLocaleString()} steps`);
+      }
+    }
+  } catch { /* health doc not synced yet — skip */ }
+
+  // ── 3. Habits due today but not yet completed ─────────────────────────────
+  try {
+    const habitsSnap = await db.collection(`users/${uid}/habits`).get();
+    const incomplete = habitsSnap.docs.filter((d) => {
+      const habit = d.data();
+      const targetDays: number[] = habit.target_days ?? [0, 1, 2, 3, 4, 5, 6];
+      if (!targetDays.includes(todayDay)) return false;
+      const completions: string[] = habit.completions ?? [];
+      return !completions.includes(today);
+    });
+    if (incomplete.length > 0) {
+      const shown = incomplete.slice(0, 2).map((d) => d.data().name as string).join(", ");
+      const extra = incomplete.length > 2 ? ` +${incomplete.length - 2}` : "";
+      behind.push(`✅ ${shown}${extra}`);
+    }
+  } catch { /* skip */ }
+
+  // ── 4. Nutrition — no meals logged today ─────────────────────────────────
+  try {
+    const nutritionSnap = await db.collection(`users/${uid}/nutrition`)
+      .where("date", "==", today).limit(1).get();
+    if (nutritionSnap.empty) {
+      behind.push("🥗 No meals logged");
+    }
+  } catch { /* skip */ }
+
+  // ── 5. Workout — scheduled training day with no session logged ────────────
+  try {
+    const [workoutSnap, habitsSnap] = await Promise.all([
+      db.collection(`users/${uid}/workouts`).where("date", "==", today).limit(1).get(),
+      db.collection(`users/${uid}/habits`).get(),
+    ]);
+    if (workoutSnap.empty) {
+      const workoutKeywords = ["workout", "gym", "exercise", "training", "lift", "run"];
+      const hasWorkoutHabitToday = habitsSnap.docs.some((d) => {
+        const habit = d.data();
+        const name = (habit.name as string ?? "").toLowerCase();
+        const targetDays: number[] = habit.target_days ?? [0, 1, 2, 3, 4, 5, 6];
+        return workoutKeywords.some((kw) => name.includes(kw)) && targetDays.includes(todayDay);
+      });
+      if (hasWorkoutHabitToday) {
+        behind.push("💪 Workout not done");
+      }
+    }
+  } catch { /* skip */ }
+
+  if (behind.length === 0) return null;
+
+  // Cap at 3 items to keep the notification readable
+  const body = behind.slice(0, 3).join(" · ");
+  const more = behind.length > 3 ? ` +${behind.length - 3} more` : "";
+  return {
+    title: "📊 Progress check-in",
+    body: `${body}${more}`,
+    tag: "progress-reminder",
+  };
+}
+}

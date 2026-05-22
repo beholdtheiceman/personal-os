@@ -7,7 +7,7 @@ import { getEnv } from "@/lib/env";
 import {
   morningBriefingHandler, streakAlertHandler, taskReminderHandler,
   goalDeadlineHandler, journalReminderHandler, healthReminderHandler, weeklyReviewHandler,
-  birthdayReminderHandler, savingsMilestoneHandler,
+  birthdayReminderHandler, savingsMilestoneHandler, progressReminderHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import type { NotificationSettings } from "@/types";
@@ -84,7 +84,33 @@ export async function GET(req: NextRequest) {
     }
 
     // Birthday reminder — fires once per day at morning hour
-    if (settings.birthday_reminder?.enabled && isHour(timeInfo, settings.morning_briefing.time ?? "08:00")) {
+    if (settings.birthday_reminder.enabled && isHour(timeInfo, settings.morning_briefing.time ?? "07:00")) {
+      const n = await birthdayReminderHandler(uid, settings.birthday_reminder.days_before ?? 7);
+      if (n) await send(n.title, n.body, n.tag ?? "birthday-reminder");
+    }
+
+    // Savings milestone — fires whenever a goal crosses 25/50/75/100%
+    if (settings.savings_milestone.enabled) {
+      const n = await savingsMilestoneHandler(uid);
+      if (n) await send(n.title, n.body, n.tag ?? "savings-milestone");
+    }
+
+    // Progress reminders — mid-day and evening checks against daily targets
+    // Only fires if actually behind; silently skips if targets are already met
+    if (settings.progress_midday.enabled && settings.progress_midday.time && isHour(timeInfo, settings.progress_midday.time)) {
+      const n = await progressReminderHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "progress-reminder");
+    }
+    if (settings.progress_evening.enabled && settings.progress_evening.time && isHour(timeInfo, settings.progress_evening.time)) {
+      const n = await progressReminderHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "progress-reminder");
+    }
+
+    results[uid] = fired;
+  }
+
+  return NextResponse.json({ ok: true, results });
+}ings.birthday_reminder?.enabled && isHour(timeInfo, settings.morning_briefing.time ?? "08:00")) {
       const n = await birthdayReminderHandler(uid, settings.birthday_reminder.days_before ?? 7);
       if (n) await send(n.title, n.body, n.tag ?? "birthday-reminder");
     }

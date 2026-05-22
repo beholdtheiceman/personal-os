@@ -116,6 +116,8 @@ export interface NotificationSettings {
   weekly_review: NotificationCategory;
   birthday_reminder: NotificationCategory;  // days_before used instead of time
   savings_milestone: NotificationCategory;  // fires when crossing 25/50/75/100%
+  progress_midday: NotificationCategory;    // mid-day check: water, habits, steps, nutrition, workout
+  progress_evening: NotificationCategory;   // evening check: same targets, more urgency
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -128,6 +130,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   weekly_review:     { enabled: false, time: "09:00", day_of_week: 0 },
   birthday_reminder: { enabled: false, days_before: 7 },
   savings_milestone: { enabled: false },
+  progress_midday:   { enabled: false, time: "13:00" },
+  progress_evening:  { enabled: false, time: "18:00" },
 };
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────

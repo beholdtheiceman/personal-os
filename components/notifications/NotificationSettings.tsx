@@ -9,7 +9,7 @@ import type { NotificationSettings, NotificationCategory } from "@/types";
 import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
-  RiCake2Line, RiSaveLine,
+  RiCake2Line, RiSaveLine, RiTimeLine, RiMoonLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -84,6 +84,20 @@ const CATEGORIES: {
     description: "Notifies when a savings goal hits 25%, 50%, 75%, or 100% of its target",
     icon: <RiSaveLine className="w-4 h-4" />,
     hasTime: false,
+  },
+  {
+    key: "progress_midday",
+    label: "Mid-Day Progress Check",
+    description: "Gentle nudge if you're behind on water, steps, habits, nutrition, or a scheduled workout — silent if you're on track",
+    icon: <RiTimeLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "progress_evening",
+    label: "Evening Progress Check",
+    description: "End-of-day reminder for any targets still unmet — only fires if there's something left to catch up on",
+    icon: <RiMoonLine className="w-4 h-4" />,
+    hasTime: true,
   },
 ];
 
