@@ -363,6 +363,17 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["email_id"],
     },
   },
+  {
+    name: "unsubscribe_from_email",
+    description: "Unsubscribe from a mailing list using the email's List-Unsubscribe header. Works for most marketing emails and newsletters. Pass the email ID and this tool will fire the unsubscribe request automatically — no browser needed. Use search_gmail first to find the email ID.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        email_id: { type: "string", description: "The Gmail message ID of the email to unsubscribe from" },
+      },
+      required: ["email_id"],
+    },
+  },
 
   // ── Web Search ──
   {
@@ -1822,6 +1833,96 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         return `Could not fetch email: ${msg}`;
+      }
+    }
+
+    case "unsubscribe_from_email": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${input.email_id}?format=metadata&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Unsubscribe-Post&metadataHeaders=Subject&metadataHeaders=From`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const msg = await res.json();
+        if (msg.error) return `Error fetching email: ${msg.error.message}`;
+
+        const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
+        const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+        const subject = get("Subject");
+        const from = get("From");
+        const listUnsub = get("List-Unsubscribe");
+        const listUnsubPost = get("List-Unsubscribe-Post");
+
+        if (!listUnsub) {
+          return `No List-Unsubscribe header found on this email from ${from}. This sender doesn't support automatic unsubscription — you'll need to open the email and click the unsubscribe link manually.`;
+        }
+
+        // Parse URLs and mailto from the header (format: <https://...>, <mailto:...>)
+        const httpMatch = listUnsub.match(/<(https?:\/\/[^>]+)>/);
+        const mailtoMatch = listUnsub.match(/<mailto:([^>]+)>/);
+
+        // Prefer one-click HTTP unsubscribe (RFC 8058) if List-Unsubscribe-Post is present
+        if (httpMatch?.[1] && listUnsubPost?.toLowerCase().includes("list-unsubscribe=one-click")) {
+          const unsubUrl = httpMatch[1];
+          const postRes = await fetch(unsubUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "List-Unsubscribe=One-Click",
+          });
+          if (postRes.ok) {
+            return `✓ Successfully unsubscribed from "${subject}" (${from}) via one-click unsubscribe.`;
+          }
+          return `One-click unsubscribe returned status ${postRes.status}. You may need to visit the link manually: ${unsubUrl}`;
+        }
+
+        // Fall back to GET request on the unsubscribe URL
+        if (httpMatch?.[1]) {
+          const unsubUrl = httpMatch[1];
+          const getRes = await fetch(unsubUrl, {
+            method: "GET",
+            headers: { "User-Agent": "Mozilla/5.0" },
+            redirect: "follow",
+          });
+          if (getRes.ok) {
+            return `✓ Unsubscribe request sent for "${subject}" (${from}). The page responded with status ${getRes.status} — you should be unsubscribed. If you keep receiving emails, visit: ${unsubUrl}`;
+          }
+          return `Unsubscribe URL returned status ${getRes.status}. Try visiting it directly: ${unsubUrl}`;
+        }
+
+        // Mailto fallback — send an unsubscribe email via Gmail
+        if (mailtoMatch?.[1]) {
+          const mailtoRaw = mailtoMatch[1];
+          const [toAddr, ...rest] = mailtoRaw.split("?");
+          const params = new URLSearchParams(rest.join("?"));
+          const subj = params.get("subject") ?? "Unsubscribe";
+          const body = params.get("body") ?? "";
+
+          const raw = [
+            `To: ${toAddr}`,
+            `Subject: ${subj}`,
+            `Content-Type: text/plain`,
+            ``,
+            body || "Please unsubscribe me from this mailing list.",
+          ].join("\r\n");
+
+          const encoded = Buffer.from(raw).toString("base64url");
+          const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ raw: encoded }),
+          });
+          const sendData = await sendRes.json();
+          if (sendRes.ok) {
+            return `✓ Sent unsubscribe email to ${toAddr} for "${subject}" (${from}).`;
+          }
+          return `Failed to send unsubscribe email: ${sendData.error?.message ?? "unknown error"}`;
+        }
+
+        return `Could not parse a usable unsubscribe method from the header: ${listUnsub}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Unsubscribe failed: ${msg}`;
       }
     }
 
