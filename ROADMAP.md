@@ -39,6 +39,9 @@
 - **Focus / Pomodoro Timer** — Countdown timer linked to tasks, auto-logs time on completion, persistent MiniFocusBar across all pages, break timer, TimerContext wired into app layout; chat can start sessions
 - **Morning Ritual / Daily Standup** — Daily Claude briefing via cron (calendar, tasks, habits, flagged items); dashboard widget with manual trigger; chat tool
 - **Decision Journal** — Structured decision logging with context, options, reasoning, expected outcomes, and scheduled reviews; dashboard nudge for pending reviews; dedicated /decisions page; chat tools
+- **Birthday & Gift Reminders** — Push notification when a contact's birthday is approaching; pulls gift ideas from People CRM; dedup logic prevents repeat fires; wired into daily notification cron
+- **Savings Milestone Notifications** — Fires when a savings goal crosses 25%, 50%, 75%, or 100% of its target; dedup per milestone per goal
+- **Gentle Progress Reminders** — Mid-day and evening push notifications that check actual progress against daily targets (hydration, steps, habits, nutrition, scheduled workouts); completely silent when targets are already met; configurable times in Settings; fixed truncated daily cron route as part of this work
 
 ---
 
@@ -53,7 +56,6 @@
 ### AI & Automation
 - **Smart Notifications** — Streak at-risk alerts, habit nudges, goal deadline reminders
 - **Proactive AI Insights** — Claude periodically analyzes patterns across all data sources (sleep, energy, mood, habits, nutrition, workouts, time logs) and surfaces correlations unprompted; weekly or daily insight card on dashboard; unique to this app because it holds all the data in one place
-- **Gentle Progress Reminders** — Mid-day and evening nudges that check actual progress against daily targets: water intake vs. goal, steps vs. target, habits not yet completed, nutrition not logged, workout not done on a scheduled training day, time not tracked; reminders are contextual — only fires if you're actually behind, not on days where you've already hit the target; configurable thresholds and quiet hours
 - **Decision Review Notifications** — Push notification when a logged decision hits its review date; uses the same dedup pattern as birthday and goal deadline handlers
 - **Net Worth Monthly Reminder** — First-of-month prompt to update your net worth snapshot; carries forward previous month's entries as a starting point
 - **Goals Check-in Cron** — Weekly automated review of goal milestone progress; nudges via notification if a goal has had no activity in 14+ days
@@ -72,7 +74,6 @@
 
 ### Life OS Features
 - **Reading List / Book Tracker** — Log books, highlights, key takeaways summarized by Claude
-- **Birthday & Gift Reminders** — Notify when a contact's birthday is approaching (configurable lead time); pull gift ideas already stored in People CRM; small lift on top of existing Smart Notifications infrastructure
 
 ---
 
