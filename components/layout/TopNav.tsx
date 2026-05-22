@@ -12,6 +12,7 @@ import {
   RiMoreLine, RiLogoutBoxLine, RiSettings3Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
   RiTimeLine, RiFocusLine, RiLightbulbLine,
+  RiMicLine, RiBook2Line,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -41,6 +42,8 @@ const MORE_NAV = [
   { href: "/time",         label: "Time Tracker",  icon: RiTimeLine },
   { href: "/focus",        label: "Focus",         icon: RiFocusLine },
   { href: "/decisions",    label: "Decisions",     icon: RiLightbulbLine },
+  { href: "/content",      label: "Content",       icon: RiMicLine },
+  { href: "/reading",      label: "Reading",       icon: RiBook2Line },
 ];
 
 export default function TopNav() {

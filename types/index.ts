@@ -114,7 +114,8 @@ export interface NotificationSettings {
   journal_reminder: NotificationCategory;
   health_reminder: NotificationCategory;
   weekly_review: NotificationCategory;
-  birthday_reminder: NotificationCategory; // lead_days_before used instead of time
+  birthday_reminder: NotificationCategory;  // days_before used instead of time
+  savings_milestone: NotificationCategory;  // fires when crossing 25/50/75/100%
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -126,6 +127,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   health_reminder:   { enabled: false, time: "20:00" },
   weekly_review:     { enabled: false, time: "09:00", day_of_week: 0 },
   birthday_reminder: { enabled: false, days_before: 7 },
+  savings_milestone: { enabled: false },
 };
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────
@@ -518,6 +520,48 @@ export interface KanbanCard {
   created_at: string;
 }
 
+// ─── Podcast / Content Tracker ───────────────────────────────────────────────
+export type EpisodeStatus = "idea" | "outlined" | "recorded" | "edited" | "published";
+
+export interface EpisodeLink {
+  label: string;
+  url: string;
+}
+
+export interface PodcastEpisode {
+  id: string;
+  title: string;
+  episode_number?: number;
+  status: EpisodeStatus;
+  record_date?: string;    // YYYY-MM-DD
+  publish_date?: string;   // YYYY-MM-DD
+  description?: string;
+  notes?: string;
+  tags?: string[];
+  links?: EpisodeLink[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Reading List / Book Tracker ──────────────────────────────────────────────
+export type BookStatus = "want_to_read" | "reading" | "finished" | "abandoned";
+
+export interface Book {
+  id: string;
+  title: string;
+  author: string;
+  status: BookStatus;
+  start_date?: string;    // YYYY-MM-DD
+  finish_date?: string;   // YYYY-MM-DD
+  rating?: number;        // 1–5
+  highlights: string[];
+  takeaways?: string;     // Claude summary or manual
+  cover_url?: string;
+  tags?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── Mood Tracker ─────────────────────────────────────────────────────────────
 export interface MoodEntry {
   id: string;
@@ -561,4 +605,33 @@ export interface SavingsGoal {
   status: SavingsGoalStatus;
   created_at: string;
   updated_at: string;
+}
+
+// ─── Supplement / Medication Log ─────────────────────────────────────────────
+export type SupplementTiming = "morning" | "afternoon" | "evening" | "with_meals" | "before_bed";
+
+export interface Supplement {
+  id: string;
+  name: string;
+  dosage: string;           // e.g. "1000mg", "2 capsules"
+  timing: SupplementTiming;
+  notes?: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplementLog {
+  date: string;             // YYYY-MM-DD, used as doc ID
+  taken: string[];          // supplement IDs checked off today
+  logged_at: string;
+}
+
+// ─── Proactive AI Insights ───────────────────────────────────────────────────
+export interface AIInsight {
+  id: string;               // YYYY-MM-DD
+  date: string;
+  content: string;          // Markdown insight text from Claude
+  data_sources: string[];   // which data streams had data
+  generated_at: string;
 }

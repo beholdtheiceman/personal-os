@@ -9,7 +9,7 @@ import type { NotificationSettings, NotificationCategory } from "@/types";
 import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
-  RiCake2Line,
+  RiCake2Line, RiSaveLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -76,6 +76,13 @@ const CATEGORIES: {
     label: "Birthday Reminders",
     description: "Notifies you when a contact's birthday is approaching (based on days_before setting)",
     icon: <RiCake2Line className="w-4 h-4" />,
+    hasTime: false,
+  },
+  {
+    key: "savings_milestone",
+    label: "Savings Milestones",
+    description: "Notifies when a savings goal hits 25%, 50%, 75%, or 100% of its target",
+    icon: <RiSaveLine className="w-4 h-4" />,
     hasTime: false,
   },
 ];

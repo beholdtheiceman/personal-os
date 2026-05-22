@@ -103,22 +103,83 @@ export async function taskReminderHandler(uid: string, tz: string): Promise<Noti
 export async function goalDeadlineHandler(uid: string, tz: string, daysBefore = 3): Promise<NotifPayload | null> {
   const db = getAdminDb();
   const now = localNow(tz);
+  const todayStr = todayLocal(tz);
   const snap = await db.collection(`users/${uid}/goals`).where("status", "==", "active").get();
 
   const approaching = snap.docs.filter((d) => {
     const target = d.data().target_date as string | undefined;
     if (!target) return false;
-    const daysUntil = Math.ceil((new Date(target).getTime() - now.getTime()) / 86400000);
+    const daysUntil = Math.ceil((new Date(target + "T00:00:00").getTime() - now.getTime()) / 86400000);
     return daysUntil >= 0 && daysUntil <= daysBefore;
   });
 
   if (approaching.length === 0) return null;
 
-  const names = approaching.slice(0, 2).map((d) => d.data().title as string);
+  // Dedup: only notify for goals not already notified today
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/goal_deadline_${todayStr}`).get();
+  const alreadySent: string[] = sentDoc.exists ? (sentDoc.data()?.ids as string[]) ?? [] : [];
+  const newOnes = approaching.filter((d) => !alreadySent.includes(d.id));
+  if (newOnes.length === 0) return null;
+
+  await db.doc(`users/${uid}/notification_sent/goal_deadline_${todayStr}`).set(
+    { ids: [...alreadySent, ...newOnes.map((d) => d.id)] },
+    { merge: true }
+  );
+
+  const lines = newOnes.slice(0, 2).map((d) => {
+    const target = d.data().target_date as string;
+    const daysUntil = Math.ceil((new Date(target + "T00:00:00").getTime() - now.getTime()) / 86400000);
+    return `${d.data().title as string} (${daysUntil === 0 ? "today" : `${daysUntil}d left`})`;
+  });
   return {
     title: "🎯 Goal deadline approaching",
-    body: `${names.join(", ")} ${approaching.length === 1 ? "is" : "are"} due soon`,
+    body: lines.join(", ") + (newOnes.length > 2 ? ` +${newOnes.length - 2} more` : ""),
     tag: "goal-deadline",
+  };
+}
+
+// ── Savings Milestone ─────────────────────────────────────────────────────────
+export async function savingsMilestoneHandler(uid: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const snap = await db.collection(`users/${uid}/savings_goals`)
+    .where("status", "==", "active").get();
+  if (snap.empty) return null;
+
+  const MILESTONES = [25, 50, 75, 100];
+  const hits: { name: string; milestone: number }[] = [];
+
+  for (const goalDoc of snap.docs) {
+    const data = goalDoc.data();
+    const pct = data.target_amount > 0
+      ? Math.min(100, (data.current_amount as number / (data.target_amount as number)) * 100)
+      : 0;
+
+    // Check which milestone was last notified
+    const sentRef = db.doc(`users/${uid}/notification_sent/savings_milestone_${goalDoc.id}`);
+    const sentDoc = await sentRef.get();
+    const lastMilestone: number = sentDoc.exists ? (sentDoc.data()?.last_milestone as number) ?? 0 : 0;
+
+    for (const m of MILESTONES) {
+      if (pct >= m && lastMilestone < m) {
+        hits.push({ name: data.name as string, milestone: m });
+        await sentRef.set({ last_milestone: m }, { merge: true });
+        break; // Only fire one milestone per goal per check
+      }
+    }
+  }
+
+  if (hits.length === 0) return null;
+
+  if (hits.length === 1) {
+    const { name, milestone } = hits[0];
+    const emoji = milestone === 100 ? "🎉" : milestone >= 75 ? "🚀" : "💰";
+    return { title: `${emoji} Savings milestone!`, body: `${name} is ${milestone}% funded`, tag: "savings-milestone" };
+  }
+
+  return {
+    title: "💰 Savings milestones hit!",
+    body: hits.map((h) => `${h.name}: ${h.milestone}%`).join(", "),
+    tag: "savings-milestone",
   };
 }
 

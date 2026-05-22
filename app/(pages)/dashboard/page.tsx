@@ -33,6 +33,7 @@ import DecisionReviewWidget from "@/components/dashboard/DecisionReviewWidget";
 import MoodDashboardWidget from "@/components/dashboard/MoodDashboardWidget";
 import BirthdayWidget from "@/components/dashboard/BirthdayWidget";
 import SavingsDashboardWidget from "@/components/dashboard/SavingsDashboardWidget";
+import InsightsWidget from "@/components/dashboard/InsightsWidget";
 import toast from "react-hot-toast";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -273,6 +274,9 @@ export default function DashboardPage() {
 
       {/* ── AI Briefing ── */}
       <DailyBriefingWidget />
+
+      {/* ── Proactive AI Insights ── */}
+      <InsightsWidget />
 
       {/* ── Decision Reviews ── */}
       <DecisionReviewWidget />

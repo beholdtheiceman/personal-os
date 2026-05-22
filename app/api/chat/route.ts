@@ -924,6 +924,141 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "add_episode",
+    description: "Add a new podcast episode to the content pipeline.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Episode title." },
+        episode_number: { type: "number", description: "Episode number (optional)." },
+        status: { type: "string", description: "Status: idea | outlined | recorded | edited | published. Defaults to 'idea'." },
+        record_date: { type: "string", description: "YYYY-MM-DD target record date (optional)." },
+        publish_date: { type: "string", description: "YYYY-MM-DD target publish date (optional)." },
+        description: { type: "string", description: "Short episode description (optional)." },
+        tags: { type: "array", items: { type: "string" }, description: "Topic tags (optional)." },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "update_episode_status",
+    description: "Update the status of a podcast episode by title or episode number.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Episode title to search for (partial match)." },
+        status: { type: "string", description: "New status: idea | outlined | recorded | edited | published." },
+      },
+      required: ["title", "status"],
+    },
+  },
+  {
+    name: "list_episodes",
+    description: "List podcast episodes, optionally filtered by status.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", description: "Filter by status: idea | outlined | recorded | edited | published | all. Defaults to 'all'." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "add_supplement",
+    description: "Add a new supplement or medication to the user's daily checklist.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:   { type: "string", description: "Supplement or medication name." },
+        dosage: { type: "string", description: "Dosage, e.g. '1000mg', '2 capsules'." },
+        timing: { type: "string", description: "When to take it: morning | afternoon | evening | with_meals | before_bed." },
+        notes:  { type: "string", description: "Optional notes (e.g., 'take with food')." },
+      },
+      required: ["name", "dosage"],
+    },
+  },
+  {
+    name: "log_supplement_taken",
+    description: "Mark one or more supplements as taken today.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        names: { type: "array", items: { type: "string" }, description: "Names of supplements to mark as taken (partial match)." },
+      },
+      required: ["names"],
+    },
+  },
+  {
+    name: "get_supplement_status",
+    description: "Get today's supplement checklist — which have been taken and which are still outstanding.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_insights",
+    description: "Get the user's latest AI-generated insights about correlations across their health, mood, habits, workouts, and time data.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "add_book",
+    description: "Add a book to the user's reading list.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:  { type: "string", description: "Book title." },
+        author: { type: "string", description: "Author name." },
+        status: { type: "string", description: "Status: want_to_read | reading | finished | abandoned. Defaults to 'want_to_read'." },
+        rating: { type: "number", description: "Rating 1–10 (optional, for finished books)." },
+        tags:   { type: "array", items: { type: "string" }, description: "Topic tags (optional)." },
+        takeaways: { type: "string", description: "Key takeaways or notes (optional)." },
+      },
+      required: ["title", "author"],
+    },
+  },
+  {
+    name: "update_book_status",
+    description: "Update the reading status of a book by title.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:  { type: "string", description: "Book title (partial match)." },
+        status: { type: "string", description: "New status: want_to_read | reading | finished | abandoned." },
+        rating: { type: "number", description: "Rating 1–10 (optional, good to set when finishing)." },
+      },
+      required: ["title", "status"],
+    },
+  },
+  {
+    name: "log_highlight",
+    description: "Add a highlight or quote to a book.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:     { type: "string", description: "Book title (partial match)." },
+        highlight: { type: "string", description: "The highlight or quote text." },
+      },
+      required: ["title", "highlight"],
+    },
+  },
+  {
+    name: "get_reading_list",
+    description: "Get the user's reading list, optionally filtered by status.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", description: "Filter by status: want_to_read | reading | finished | abandoned | all. Defaults to 'all'." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_daily_briefing",
     description: "Retrieve today's morning briefing (or a recent one). Returns the AI-generated briefing content and stats.",
     input_schema: {
@@ -3466,6 +3601,209 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
           ? Math.min(100, (g.current_amount as number / (g.target_amount as number)) * 100).toFixed(0)
           : "0";
         lines.push(`• ${g.name}: $${(g.current_amount as number).toLocaleString()} / $${(g.target_amount as number).toLocaleString()} (${pct}%) — target ${g.target_date}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "add_episode": {
+      const now = new Date().toISOString();
+      const status = (input.status as string) || "idea";
+      await db.collection(`users/${uid}/podcast_episodes`).add({
+        title: input.title as string,
+        episode_number: input.episode_number ?? null,
+        status,
+        record_date: (input.record_date as string) ?? null,
+        publish_date: (input.publish_date as string) ?? null,
+        description: (input.description as string) ?? "",
+        notes: "",
+        tags: (input.tags as string[]) ?? [],
+        links: [],
+        created_at: now,
+        updated_at: now,
+      });
+      return `Episode "${input.title}" added to pipeline with status: ${status}.`;
+    }
+
+    case "update_episode_status": {
+      const titleQuery = (input.title as string).toLowerCase();
+      const allEps = await db.collection(`users/${uid}/podcast_episodes`).get();
+      const match = allEps.docs.find((d) =>
+        (d.data().title as string).toLowerCase().includes(titleQuery)
+      );
+      if (!match) return `No episode found matching "${input.title}".`;
+      const newStatus = input.status as string;
+      await match.ref.update({ status: newStatus, updated_at: new Date().toISOString() });
+      return `"${match.data().title}" status updated to: ${newStatus}.`;
+    }
+
+    case "list_episodes": {
+      const statusFilter = (input.status as string) ?? "all";
+      let q = db.collection(`users/${uid}/podcast_episodes`).orderBy("created_at", "desc") as FirebaseFirestore.Query;
+      if (statusFilter !== "all") q = q.where("status", "==", statusFilter);
+      const snap = await q.get();
+      if (snap.empty) return statusFilter === "all" ? "No episodes yet." : `No episodes with status '${statusFilter}'.`;
+      const order = ["idea", "outlined", "recorded", "edited", "published"];
+      const byStatus = new Map<string, string[]>();
+      for (const d of snap.docs) {
+        const ep = d.data();
+        const s = ep.status as string;
+        if (!byStatus.has(s)) byStatus.set(s, []);
+        const epNum = ep.episode_number ? `#${ep.episode_number} ` : "";
+        byStatus.get(s)!.push(`  • ${epNum}${ep.title}${ep.publish_date ? ` (pub: ${ep.publish_date})` : ""}`);
+      }
+      const lines = ["**Podcast Pipeline**"];
+      for (const s of order) {
+        if (byStatus.has(s)) {
+          lines.push(`\n**${s.charAt(0).toUpperCase() + s.slice(1)}** (${byStatus.get(s)!.length})`);
+          lines.push(...byStatus.get(s)!);
+        }
+      }
+      return lines.join("\n");
+    }
+
+    case "add_supplement": {
+      const now = new Date().toISOString();
+      const timing = (input.timing as string) || "morning";
+      await db.collection(`users/${uid}/supplements`).add({
+        name: input.name as string,
+        dosage: input.dosage as string,
+        timing,
+        notes: (input.notes as string) ?? "",
+        active: true,
+        created_at: now,
+        updated_at: now,
+      });
+      return `"${input.name}" (${input.dosage}, ${timing}) added to your supplement checklist.`;
+    }
+
+    case "log_supplement_taken": {
+      const names = (input.names as string[]) ?? [];
+      const suppSnap = await db.collection(`users/${uid}/supplements`).where("active", "==", true).get();
+      const date = today();
+      const logRef = db.doc(`users/${uid}/supplement_logs/${date}`);
+      const logSnap = await logRef.get();
+      const currentTaken: string[] = logSnap.exists ? (logSnap.data()!.taken as string[]) : [];
+      const newTaken = new Set(currentTaken);
+      const matched: string[] = [];
+      for (const name of names) {
+        const lower = name.toLowerCase();
+        const match = suppSnap.docs.find((d) => (d.data().name as string).toLowerCase().includes(lower));
+        if (match) { newTaken.add(match.id); matched.push(match.data().name as string); }
+      }
+      await logRef.set({ date, taken: Array.from(newTaken), logged_at: new Date().toISOString() }, { merge: true });
+      return matched.length > 0 ? `Marked as taken: ${matched.join(", ")}.` : `No matching supplements found for: ${names.join(", ")}.`;
+    }
+
+    case "get_supplement_status": {
+      const suppSnap = await db.collection(`users/${uid}/supplements`).where("active", "==", true).get();
+      if (suppSnap.empty) return "No active supplements in your checklist.";
+      const date = today();
+      const logSnap = await db.doc(`users/${uid}/supplement_logs/${date}`).get();
+      const taken = new Set<string>(logSnap.exists ? (logSnap.data()!.taken as string[]) : []);
+      const timingLabels: Record<string, string> = { morning: "Morning", afternoon: "Afternoon", evening: "Evening", with_meals: "With Meals", before_bed: "Before Bed" };
+      const lines = ["**Supplement Status — Today**"];
+      for (const d of suppSnap.docs) {
+        const s = d.data();
+        const status = taken.has(d.id) ? "✅" : "⬜";
+        lines.push(`${status} ${s.name} — ${s.dosage} (${timingLabels[s.timing as string] ?? s.timing})`);
+      }
+      const takenCount = suppSnap.docs.filter((d) => taken.has(d.id)).length;
+      lines.push(`\n${takenCount}/${suppSnap.size} taken today.`);
+      return lines.join("\n");
+    }
+
+    case "get_insights": {
+      const insightSnap = await db.collection(`users/${uid}/ai_insights`).orderBy("date", "desc").limit(1).get();
+      if (insightSnap.empty) return "No AI insights generated yet. Ask the user to open the dashboard and click 'Generate Insights' in the AI Insights widget.";
+      const insight = insightSnap.docs[0].data();
+      return `**AI Insights — ${insight.date as string}** (generated ${insight.generated_at as string})\n\n${insight.content as string}\n\n*Sources: ${(insight.data_sources as string[]).join(", ")}*`;
+    }
+
+    case "add_book": {
+      const now = new Date().toISOString();
+      const status = (input.status as string) || "want_to_read";
+      const extra: Record<string, string> = {};
+      if (status === "reading") extra.start_date = new Date().toLocaleDateString("en-CA");
+      if (status === "finished") {
+        extra.start_date = new Date().toLocaleDateString("en-CA");
+        extra.finish_date = new Date().toLocaleDateString("en-CA");
+      }
+      await db.collection(`users/${uid}/books`).add({
+        title:     input.title as string,
+        author:    input.author as string,
+        status,
+        rating:    input.rating ?? null,
+        cover_url: null,
+        tags:      (input.tags as string[]) ?? [],
+        takeaways: (input.takeaways as string) ?? "",
+        highlights: [],
+        ...extra,
+        created_at: now,
+        updated_at: now,
+      });
+      return `"${input.title}" by ${input.author} added to your reading list (status: ${status}).`;
+    }
+
+    case "update_book_status": {
+      const titleQ = (input.title as string).toLowerCase();
+      const allBooks = await db.collection(`users/${uid}/books`).get();
+      const match = allBooks.docs.find((d) =>
+        (d.data().title as string).toLowerCase().includes(titleQ)
+      );
+      if (!match) return `No book found matching "${input.title}".`;
+      const patch: Record<string, unknown> = {
+        status: input.status as string,
+        updated_at: new Date().toISOString(),
+      };
+      if (input.rating) patch.rating = input.rating as number;
+      const bk = match.data();
+      if (input.status === "reading" && !bk.start_date) patch.start_date = new Date().toLocaleDateString("en-CA");
+      if (input.status === "finished" && !bk.finish_date) patch.finish_date = new Date().toLocaleDateString("en-CA");
+      await match.ref.update(patch);
+      return `"${bk.title}" status updated to: ${input.status}${input.rating ? `, rated ${input.rating}/10` : ""}.`;
+    }
+
+    case "log_highlight": {
+      const titleQ = (input.title as string).toLowerCase();
+      const allBooks = await db.collection(`users/${uid}/books`).get();
+      const match = allBooks.docs.find((d) =>
+        (d.data().title as string).toLowerCase().includes(titleQ)
+      );
+      if (!match) return `No book found matching "${input.title}".`;
+      const bk = match.data();
+      const highlights = (bk.highlights as string[]) ?? [];
+      await match.ref.update({
+        highlights: [...highlights, input.highlight as string],
+        updated_at: new Date().toISOString(),
+      });
+      return `Highlight added to "${bk.title}".`;
+    }
+
+    case "get_reading_list": {
+      const statusFilter = (input.status as string) ?? "all";
+      let bq = db.collection(`users/${uid}/books`).orderBy("created_at", "desc") as FirebaseFirestore.Query;
+      if (statusFilter !== "all") bq = bq.where("status", "==", statusFilter);
+      const snap = await bq.get();
+      if (snap.empty) return statusFilter === "all" ? "No books in your reading list yet." : `No books with status '${statusFilter}'.`;
+      const statusOrder = ["reading", "want_to_read", "finished", "abandoned"];
+      const statusLabels: Record<string, string> = {
+        reading: "📖 Reading", want_to_read: "📚 Want to Read",
+        finished: "✅ Finished", abandoned: "🗃 Abandoned",
+      };
+      const byStatus = new Map<string, string[]>();
+      for (const d of snap.docs) {
+        const b = d.data();
+        const s = b.status as string;
+        if (!byStatus.has(s)) byStatus.set(s, []);
+        const rating = b.rating ? ` ★${b.rating}` : "";
+        byStatus.get(s)!.push(`  • ${b.title} — ${b.author}${rating}`);
+      }
+      const lines = ["**Reading List**"];
+      for (const s of statusOrder) {
+        if (byStatus.has(s)) {
+          lines.push(`\n${statusLabels[s]} (${byStatus.get(s)!.length})`);
+          lines.push(...byStatus.get(s)!);
+        }
       }
       return lines.join("\n");
     }

@@ -23,6 +23,10 @@
     {
       "path": "/api/daily-briefing",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/insights",
+      "schedule": "0 6 * * *"
     }
   ]
 }
