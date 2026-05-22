@@ -26,6 +26,7 @@ import { habitXP, taskXP } from "@/lib/xp";
 import XPWidget from "@/components/xp/XPWidget";
 import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
 import EmailAgentWidget from "@/components/dashboard/EmailAgentWidget";
+import UnsubscribeWidget from "@/components/dashboard/UnsubscribeWidget";
 import QuickLinksWidget from "@/components/dashboard/QuickLinksWidget";
 import WeeklyReviewWidget from "@/components/dashboard/WeeklyReviewWidget";
 import toast from "react-hot-toast";
@@ -708,6 +709,9 @@ export default function DashboardPage() {
 
       {/* ── Email Agent ── */}
       {gmailConnected && <EmailAgentWidget />}
+
+      {/* ── Unsubscribe Manager ── */}
+      {gmailConnected && <UnsubscribeWidget />}
 
       {/* ── Gmail ── */}
       {gmailConnected && (
