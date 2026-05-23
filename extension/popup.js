@@ -1,8 +1,8 @@
 // Personal OS Capture Extension — popup.js
 // Reads the current tab's URL + title and opens the /share page in a popup window.
-// No auth needed — it uses your existing browser session on personal-os.vercel.app.
+// No auth needed — it uses your existing browser session on personal-os-tau-red.vercel.app.
 
-const APP_URL = "https://personal-os.vercel.app";
+const APP_URL = "https://personal-os-tau-red.vercel.app";
 
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   const tab = tabs[0];

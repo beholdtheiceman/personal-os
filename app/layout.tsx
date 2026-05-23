@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { Toaster } from "react-hot-toast";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <AuthProvider>
+          <ServiceWorkerRegistration />
           {children}
           {/* Global toast notification system */}
           <Toaster
