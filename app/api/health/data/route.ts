@@ -49,18 +49,18 @@ const BASE = "https://health.googleapis.com/v4/users/me";
 async function fetchDataPoints(
   dataType: string,
   token: string,
-  startTimeMs?: number,
-  endTimeMs?: number,
 ): Promise<Record<string, unknown>[]> {
   const allPoints: Record<string, unknown>[] = [];
   let pageToken: string | undefined;
 
   do {
     const url = new URL(`${BASE}/dataTypes/${dataType}/dataPoints`);
-    // Server-side time filtering — avoids paginating through all historical data
-    if (startTimeMs) url.searchParams.set("startTime", new Date(startTimeMs).toISOString());
-    if (endTimeMs)   url.searchParams.set("endTime",   new Date(endTimeMs).toISOString());
-    if (pageToken)   url.searchParams.set("pageToken", pageToken);
+    // Fetch the most recent 200 data points. The Health Connect REST API v4
+    // does NOT accept startTime/endTime as query params — those cause a 400
+    // INVALID_ARGUMENT. JavaScript-side time filtering (below) handles the
+    // window instead.
+    url.searchParams.set("pageSize", "200");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
 
     const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
     const raw = await res.json();
@@ -144,12 +144,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ...cacheData, connected: true, from_cache: true });
     }
 
-    // Fetch all in parallel with server-side time filters — no more full history scan
+    // Fetch recent data points in parallel. Time filtering happens in JS below
+    // because the Health Connect REST API v4 rejects startTime/endTime as query params.
     const [allSleep, allSteps, allExercise, allHr] = await Promise.all([
-      fetchDataPoints("sleep",                     token, sleepWindowStart, sleepWindowEnd),
-      fetchDataPoints("steps",                     token, stepsStart,       todayEnd),
-      fetchDataPoints("exercise",                  token, stepsStart,       todayEnd),
-      fetchDataPoints("daily-resting-heart-rate",  token, hrStart,          todayEnd),
+      fetchDataPoints("sleep",                    token),
+      fetchDataPoints("steps",                    token),
+      fetchDataPoints("exercise",                 token),
+      fetchDataPoints("daily-resting-heart-rate", token),
     ]);
 
     // ── SLEEP ────────────────────────────────────────────────────────────────
