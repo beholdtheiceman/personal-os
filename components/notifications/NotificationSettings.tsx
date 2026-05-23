@@ -10,7 +10,7 @@ import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
   RiCake2Line, RiSaveLine, RiTimeLine, RiMoonLine,
-  RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine,
+  RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine, RiZzzLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -120,6 +120,13 @@ const CATEGORIES: {
     description: "End-of-day summary of hours tracked and top categories — only fires if at least 10 minutes were logged",
     icon: <RiTimerLine className="w-4 h-4" />,
     hasTime: true,
+  },
+  {
+    key: "goal_inactivity",
+    label: "Goal Inactivity Nudge",
+    description: "Weekly reminder when an active goal hasn't had any progress in 14+ days — fires at most once per week",
+    icon: <RiZzzLine className="w-4 h-4" />,
+    hasTime: false,
   },
 ];
 

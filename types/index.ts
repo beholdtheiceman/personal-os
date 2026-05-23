@@ -121,6 +121,7 @@ export interface NotificationSettings {
   decision_review: NotificationCategory;    // fires when decisions have pending_review && review_date <= today
   networth_reminder: NotificationCategory;  // fires on 1st of month if no snapshot logged yet
   time_summary: NotificationCategory;       // end-of-day summary of tracked time
+  goal_inactivity: NotificationCategory;    // weekly nudge when an active goal has had no activity in 14+ days
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -138,6 +139,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   decision_review:   { enabled: false, time: "09:00" },
   networth_reminder: { enabled: false },
   time_summary:      { enabled: false, time: "21:00" },
+  goal_inactivity:   { enabled: false },
 };
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────

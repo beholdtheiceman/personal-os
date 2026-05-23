@@ -50,6 +50,8 @@
 - **Phase 8: Supplement / Medication Log** — Daily checklist of active supplements with dosage and timing; one-tap "taken" toggle; "X/Y taken" counter; add/edit modal with name, dosage, timing, notes, active toggle; Health page widget; chat tools
 - **Phase 8: Proactive AI Insights** — Daily cron uses Claude Opus to analyze 30 days of cross-domain data (mood, health, hydration, habits, workouts, nutrition, time entries, body metrics) and surfaces correlations; dashboard widget with manual refresh; Markdown-rendered insight cards with data source tags; stores to `users/{uid}/ai_insights/{date}`
 - **Nav polish** — Desktop More dropdown reorganized into 5 labeled sections with dividers + max-height scroll (never clips); Mobile More sheet reorganized into 4 labeled sections with per-section grids + `overflow-y-auto` (never cut off on small phones); Settings now reachable on mobile (was desktop-only)
+- **Goal progress visualization** — Progress bar + milestone checklist already rendered in GoalCard; confirmed complete
+- **Goals Check-in Cron** — `GET /api/goals/checkin` handler uses Firestore `updateTime` to detect goals with 14+ days of inactivity; deduped once per week per user; respects `goal_inactivity` notification setting; cron already wired at `0 9 * * *` in `vercel.json`
 
 ---
 
@@ -62,14 +64,11 @@
 - **Google Contacts Auto-Sync** — Weekly cron re-syncs contacts using the stored OAuth token; catches new additions and updated info without a manual import
 
 ### AI & Automation
-- **Goals Check-in Cron** — Weekly automated notification if a goal has had no activity in 14+ days; `/api/goals/checkin` currently only handles `POST` (on-demand AI message for the UI) — needs a `GET` handler with inactivity detection and FCM push; cron is wired in `vercel.json` at `0 9 * * *`
-
 ### Dashboard
 - **Dashboard customization** — Show/hide and reorder dashboard widgets; currently all widgets render unconditionally; a simple `settings/dashboard` doc with a widget order array would drive it
 
 ### Analytics
 - **Habit analytics** — GitHub-style heatmap + streak history + completion rate chart per habit; data is all in Firestore, just no visualization beyond the basic checklist
-- **Goal progress visualization** — Visual progress bar for milestone completion; milestones array exists in the type but isn't rendered graphically on the goals page
 
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
