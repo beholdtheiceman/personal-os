@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+// Note: Vercel Authentication (Deployment Protection) is disabled for this project.
 const nextConfig = {
   serverExternalPackages: ['@anthropic-ai/sdk'],
   images: {
