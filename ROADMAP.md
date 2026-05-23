@@ -75,7 +75,5 @@
 ---
 
 ## 💡 Ideas / Parking Lot
-- Embedded Discord UI (iframe) — bypass bot API for DMs, blocked by Discord's X-Frame-Options
-- Suno official API (no public API yet — check back)
 - Beeper Desktop API — MCP server covering WhatsApp, iMessage, Telegram, etc. Local-only, better as a Claude Desktop add-on
 - Net Worth snapshot carry-forward — when logging a new month, pre-populate from the previous month's entries as a starting point
