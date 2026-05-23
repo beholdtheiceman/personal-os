@@ -12,6 +12,7 @@ import {
   RiMoonLine, RiFlashlightLine, RiBookLine, RiHeartPulseLine,
   RiCalendarLine, RiBowlLine, RiMailLine, RiLineChartLine,
   RiFolderLine, RiMoneyDollarCircleLine, RiArrowUpLine, RiArrowDownLine,
+  RiLayoutLine,
 } from "react-icons/ri";
 
 interface DailyVerse { text: string; reference: string; }
@@ -20,6 +21,7 @@ import { useToday } from "@/hooks/useToday";
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
 import { habitXP, taskXP } from "@/lib/xp";
+import { useDashboardSettings } from "@/hooks/useDashboardSettings";
 import XPWidget from "@/components/xp/XPWidget";
 import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
 import EmailAgentWidget from "@/components/dashboard/EmailAgentWidget";
@@ -34,7 +36,7 @@ import MoodDashboardWidget from "@/components/dashboard/MoodDashboardWidget";
 import BirthdayWidget from "@/components/dashboard/BirthdayWidget";
 import SavingsDashboardWidget from "@/components/dashboard/SavingsDashboardWidget";
 import InsightsWidget from "@/components/dashboard/InsightsWidget";
-import toast from "react-hot-toast";
+import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
 interface CalendarEvent {
@@ -46,16 +48,12 @@ interface CalendarEvent {
   location?: string;
 }
 
-function eventDayLabel(dateStr: string) {
-  const d = parseISO(dateStr);
-  if (isToday(d)) return "Today";
-  if (isTomorrow(d)) return "Tomorrow";
-  return format(d, "EEE, MMM d");
-}
-
 export default function DashboardPage() {
   const { user } = useAuth();
   const { totalXP } = useXP();
+  const { widgetOrder, hiddenWidgets, save: saveDashboard } = useDashboardSettings();
+  const [customizing, setCustomizing] = useState(false);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [todayHealth, setTodayHealth] = useState<HealthLog | null>(null);
@@ -206,7 +204,6 @@ export default function DashboardPage() {
       : habit.completions.filter((d) => d !== today);
     await updateDoc(doc(db, "users", user.uid, "habits", id), { completions });
     if (completing) {
-      // simple streak: count consecutive days before today
       let streak = 0;
       const base = new Date(today);
       for (let i = 1; i <= 365; i++) {
@@ -239,7 +236,6 @@ export default function DashboardPage() {
     { cal: 0, protein: 0 }
   );
 
-  // Finance — this month's totals
   const monthTransactions = transactions.filter((t) => t.date?.startsWith(thisMonth));
   const monthIncome = monthTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const monthExpense = monthTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -248,418 +244,457 @@ export default function DashboardPage() {
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
-  // Active goals with milestone progress
   const activeGoals = goals.filter((g) => g.status === "active").slice(0, 3);
-
-  // Active projects
   const activeProjects = projects.filter((p) => p.status === "active").slice(0, 4);
 
-  // Group upcoming calendar events — today + tomorrow only for dashboard
   const upcomingEvents = calendarEvents.filter((e) => {
     const d = parseISO(e.start);
     return isToday(d) || isTomorrow(d);
   }).slice(0, 5);
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-text-primary">Dashboard</h1>
-      </div>
+  // ── Widget renderer ─────────────────────────────────────────────────────────
+  function renderWidget(id: string) {
+    switch (id) {
+      case "xp":
+        return <XPWidget key="xp" />;
 
-      {/* ── XP / Level ── */}
-      <XPWidget />
+      case "quick_links":
+        return <QuickLinksWidget key="quick_links" />;
 
-      {/* ── Quick Links ── */}
-      <QuickLinksWidget />
+      case "daily_briefing":
+        return <DailyBriefingWidget key="daily_briefing" />;
 
-      {/* ── AI Briefing ── */}
-      <DailyBriefingWidget />
+      case "insights":
+        return <InsightsWidget key="insights" />;
 
-      {/* ── Proactive AI Insights ── */}
-      <InsightsWidget />
+      case "decision_review":
+        return <DecisionReviewWidget key="decision_review" />;
 
-      {/* ── Decision Reviews ── */}
-      <DecisionReviewWidget />
+      case "birthday":
+        return <BirthdayWidget key="birthday" />;
 
-      {/* ── Upcoming Birthdays ── */}
-      <BirthdayWidget />
-
-      {/* ── Verse of the Day ── */}
-      {verse && (
-        <div className="card border-accent/20 bg-accent/5 flex items-start gap-3">
-          <span className="text-lg mt-0.5">✝</span>
-          <div>
-            <p className="text-sm text-text-primary italic leading-relaxed">"{verse.text}"</p>
-            <p className="text-xs text-accent-text mt-1.5 font-medium">— {verse.reference}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Tasks + Habits ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiTaskLine className="w-3.5 h-3.5" /> Top Tasks
-            </h2>
-            <a href="/tasks" className="text-xs text-accent hover:text-accent-text">View all</a>
-          </div>
-          {tasks.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-6">
-              No active tasks. <a href="/tasks" className="text-accent">Add one</a>
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onComplete={completeTask}
-                  onDelete={() => {}}
-                  onEdit={() => {}}
-                  compact
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiLoopLeftLine className="w-3.5 h-3.5" /> Habits Today
-            </h2>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-muted">{completedToday}/{habits.length}</span>
-              <a href="/habits" className="text-xs text-accent hover:text-accent-text">Manage</a>
+      case "verse":
+        return verse ? (
+          <div key="verse" className="card border-accent/20 bg-accent/5 flex items-start gap-3">
+            <span className="text-lg mt-0.5">✝</span>
+            <div>
+              <p className="text-sm text-text-primary italic leading-relaxed">"{verse.text}"</p>
+              <p className="text-xs text-accent-text mt-1.5 font-medium">— {verse.reference}</p>
             </div>
           </div>
-          {habits.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-6">
-              No habits yet. <a href="/habits" className="text-accent">Add one</a>
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {habits.map((habit) => {
-                const done = habit.completions.includes(today);
-                return (
-                  <button
-                    key={habit.id}
-                    onClick={() => toggleHabit(habit.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left ${
-                      done ? "border-success/30 bg-success/5" : "border-bg-border hover:border-success/40"
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
-                      done ? "bg-success border-success" : "border-bg-border"
-                    }`}>
-                      {done && <RiCheckLine className="w-3 h-3 text-white" />}
-                    </div>
-                    <span className={`text-sm flex-1 ${done ? "text-text-muted line-through" : "text-text-primary"}`}>
-                      {habit.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+        ) : null;
 
-      {/* ── Hydration + Mood ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <HydrationDashboardWidget />
-        <MoodDashboardWidget />
-      </div>
-
-      {/* ── Calendar + Nutrition ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiCalendarLine className="w-3.5 h-3.5" /> Upcoming
-            </h2>
-            <a href="/calendar" className="text-xs text-accent hover:text-accent-text">View all</a>
-          </div>
-          {!calendarConnected ? (
-            <p className="text-xs text-text-muted text-center py-4">
-              <a href="/calendar" className="text-accent">Connect Google Calendar</a>
-            </p>
-          ) : upcomingEvents.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-4">Nothing today or tomorrow</p>
-          ) : (
-            <div className="space-y-2">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3">
-                  <span className="text-xs text-text-muted shrink-0 mt-0.5 w-16">
-                    {event.allDay ? "All day" : format(parseISO(event.start), "h:mm a")}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-text-primary truncate">{event.title}</p>
-                    {isToday(parseISO(event.start)) ? null : (
-                      <p className="text-xs text-text-muted">Tomorrow</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiBowlLine className="w-3.5 h-3.5" /> Nutrition Today
-            </h2>
-            <a href="/nutrition" className="text-xs text-accent hover:text-accent-text">Log meal</a>
-          </div>
-          {todayNutrition.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-4">
-              Nothing logged. <a href="/nutrition" className="text-accent">Add a meal</a>
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex gap-4 text-sm">
-                <div>
-                  <span className="text-text-primary font-medium">{nutritionTotals.cal}</span>
-                  <span className="text-text-muted text-xs ml-1">kcal</span>
-                </div>
-                <div>
-                  <span className="text-text-primary font-medium">{nutritionTotals.protein}g</span>
-                  <span className="text-text-muted text-xs ml-1">protein</span>
-                </div>
-                <div>
-                  <span className="text-text-muted text-xs">{todayNutrition.length} meal{todayNutrition.length > 1 ? "s" : ""}</span>
-                </div>
+      case "tasks_habits":
+        return (
+          <div key="tasks_habits" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiTaskLine className="w-3.5 h-3.5" /> Top Tasks
+                </h2>
+                <a href="/tasks" className="text-xs text-accent hover:text-accent-text">View all</a>
               </div>
-              <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-amber-400 transition-all"
-                  style={{ width: `${Math.min(100, (nutritionTotals.cal / 2000) * 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-text-muted">{Math.max(0, 2000 - nutritionTotals.cal)} kcal remaining</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Health + Journal ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiHeartPulseLine className="w-3.5 h-3.5" /> Health Today
-            </h2>
-            <a href="/health" className="text-xs text-accent hover:text-accent-text">Log</a>
-          </div>
-          {todayHealth ? (
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div className="flex items-center gap-1.5">
-                <RiMoonLine className="w-4 h-4 text-indigo-400" />
-                <span className="text-text-primary font-medium">{todayHealth.sleep_hours}h</span>
-                <span className="text-text-muted text-xs">sleep</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <RiFlashlightLine className="w-4 h-4 text-amber-400" />
-                <span className="text-text-primary font-medium">{todayHealth.energy_level}/10</span>
-                <span className="text-text-muted text-xs">energy</span>
-              </div>
-              {todayHealth.exercise_done && (
-                <div className="flex items-center gap-1.5">
-                  <RiCheckLine className="w-4 h-4 text-success" />
-                  <span className="text-text-primary font-medium">Exercised</span>
+              {tasks.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-6">
+                  No active tasks. <a href="/tasks" className="text-accent">Add one</a>
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {tasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onComplete={completeTask}
+                      onDelete={() => {}}
+                      onEdit={() => {}}
+                      compact
+                    />
+                  ))}
                 </div>
               )}
             </div>
-          ) : (
-            <p className="text-xs text-text-muted text-center py-4">
-              Not logged yet. <a href="/health" className="text-accent">Log now</a>
-            </p>
-          )}
-        </div>
 
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiBookLine className="w-3.5 h-3.5" /> Latest Journal
-            </h2>
-            <a href="/journal" className="text-xs text-accent hover:text-accent-text">View all</a>
-          </div>
-          {latestJournal ? (
-            <div className="space-y-1.5">
-              <p className="text-xs text-text-muted">
-                {format(parseISO(latestJournal.created_at), "MMM d · h:mm a")} · Mood {latestJournal.mood_score}/10
-              </p>
-              <p className="text-sm text-text-primary line-clamp-3">{latestJournal.ai_summary}</p>
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiLoopLeftLine className="w-3.5 h-3.5" /> Habits Today
+                </h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-muted">{completedToday}/{habits.length}</span>
+                  <a href="/habits" className="text-xs text-accent hover:text-accent-text">Manage</a>
+                </div>
+              </div>
+              {habits.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-6">
+                  No habits yet. <a href="/habits" className="text-accent">Add one</a>
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {habits.map((habit) => {
+                    const done = habit.completions.includes(today);
+                    return (
+                      <button
+                        key={habit.id}
+                        onClick={() => toggleHabit(habit.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left ${
+                          done ? "border-success/30 bg-success/5" : "border-bg-border hover:border-success/40"
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
+                          done ? "bg-success border-success" : "border-bg-border"
+                        }`}>
+                          {done && <RiCheckLine className="w-3 h-3 text-white" />}
+                        </div>
+                        <span className={`text-sm flex-1 ${done ? "text-text-muted line-through" : "text-text-primary"}`}>
+                          {habit.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ) : (
-            <p className="text-xs text-text-muted text-center py-4">
-              No entries yet. <a href="/journal" className="text-accent">Write one</a>
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Goals + Projects ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiLineChartLine className="w-3.5 h-3.5" /> Active Goals
-            </h2>
-            <a href="/goals" className="text-xs text-accent hover:text-accent-text">View all</a>
           </div>
-          {activeGoals.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-4">
-              No active goals. <a href="/goals" className="text-accent">Add one</a>
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {activeGoals.map((goal) => {
-                const total = goal.milestones?.length ?? 0;
-                const done = goal.milestones?.filter((m) => m.completed).length ?? 0;
-                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                return (
-                  <div key={goal.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-text-primary truncate flex-1">{goal.title}</span>
-                      {total > 0 && (
-                        <span className="text-xs text-text-muted ml-2 shrink-0">{done}/{total}</span>
-                      )}
-                    </div>
-                    {total > 0 && (
-                      <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-accent transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
+        );
+
+      case "hydration_mood":
+        return (
+          <div key="hydration_mood" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <HydrationDashboardWidget />
+            <MoodDashboardWidget />
+          </div>
+        );
+
+      case "calendar_nutrition":
+        return (
+          <div key="calendar_nutrition" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiCalendarLine className="w-3.5 h-3.5" /> Upcoming
+                </h2>
+                <a href="/calendar" className="text-xs text-accent hover:text-accent-text">View all</a>
+              </div>
+              {!calendarConnected ? (
+                <p className="text-xs text-text-muted text-center py-4">
+                  <a href="/calendar" className="text-accent">Connect Google Calendar</a>
+                </p>
+              ) : upcomingEvents.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-4">Nothing today or tomorrow</p>
+              ) : (
+                <div className="space-y-2">
+                  {upcomingEvents.map((event) => (
+                    <div key={event.id} className="flex items-start gap-3">
+                      <span className="text-xs text-text-muted shrink-0 mt-0.5 w-16">
+                        {event.allDay ? "All day" : format(parseISO(event.start), "h:mm a")}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-text-primary truncate">{event.title}</p>
+                        {isToday(parseISO(event.start)) ? null : (
+                          <p className="text-xs text-text-muted">Tomorrow</p>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiFolderLine className="w-3.5 h-3.5" /> Active Projects
-            </h2>
-            <a href="/projects" className="text-xs text-accent hover:text-accent-text">View all</a>
-          </div>
-          {activeProjects.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-4">
-              No active projects. <a href="/projects" className="text-accent">Add one</a>
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {activeProjects.map((project) => (
-                <a
-                  key={project.id}
-                  href="/projects"
-                  className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
-                >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: project.color_tag ?? "#C4728A" }}
-                  />
-                  <span className="text-sm text-text-primary flex-1 truncate">{project.name}</span>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Finance ── */}
-      {monthTransactions.length > 0 && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiMoneyDollarCircleLine className="w-3.5 h-3.5" /> Finance — {format(new Date(), "MMMM")}
-            </h2>
-            <a href="/finance" className="text-xs text-accent hover:text-accent-text">Details</a>
-          </div>
-          <div className="flex gap-6">
-            <div className="flex items-center gap-1.5">
-              <RiArrowUpLine className="w-4 h-4 text-success shrink-0" />
-              <span className="text-sm font-medium text-text-primary">{fmt(monthIncome)}</span>
-              <span className="text-xs text-text-muted">income</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <RiArrowDownLine className="w-4 h-4 text-danger shrink-0" />
-              <span className="text-sm font-medium text-text-primary">{fmt(monthExpense)}</span>
-              <span className="text-xs text-text-muted">expenses</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className={`text-sm font-semibold ${monthNet >= 0 ? "text-success" : "text-danger"}`}>
-                {monthNet >= 0 ? "+" : ""}{fmt(monthNet)}
-              </span>
-              <span className="text-xs text-text-muted">net</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Budget + Savings ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <BudgetDashboardWidget />
-        <SavingsDashboardWidget />
-      </div>
-
-      {/* ── Weekly Review ── */}
-      <WeeklyReviewWidget />
-
-      {/* ── API Usage ── */}
-      <ApiUsageWidget />
-
-      {/* ── Email Agent ── */}
-      {gmailConnected && <EmailAgentWidget />}
-
-      {/* ── Unsubscribe Manager ── */}
-      {gmailConnected && <UnsubscribeWidget />}
-
-      {/* ── Gmail ── */}
-      {gmailConnected && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
-              <RiMailLine className="w-3.5 h-3.5" /> Gmail
-            </h2>
-            <div className="flex items-center gap-2">
-              {gmailMessages.filter((m) => !m.read).length > 0 && (
-                <span className="text-xs font-semibold bg-accent/15 text-accent px-2 py-0.5 rounded-full">
-                  {gmailMessages.filter((m) => !m.read).length} unread
-                </span>
+                    </div>
+                  ))}
+                </div>
               )}
-              <a href="/gmail" className="text-xs text-accent hover:text-accent-text">Open inbox</a>
+            </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiBowlLine className="w-3.5 h-3.5" /> Nutrition Today
+                </h2>
+                <a href="/nutrition" className="text-xs text-accent hover:text-accent-text">Log meal</a>
+              </div>
+              {todayNutrition.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-4">
+                  Nothing logged. <a href="/nutrition" className="text-accent">Add a meal</a>
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-sm">
+                    <div>
+                      <span className="text-text-primary font-medium">{nutritionTotals.cal}</span>
+                      <span className="text-text-muted text-xs ml-1">kcal</span>
+                    </div>
+                    <div>
+                      <span className="text-text-primary font-medium">{nutritionTotals.protein}g</span>
+                      <span className="text-text-muted text-xs ml-1">protein</span>
+                    </div>
+                    <div>
+                      <span className="text-text-muted text-xs">{todayNutrition.length} meal{todayNutrition.length > 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-amber-400 transition-all"
+                      style={{ width: `${Math.min(100, (nutritionTotals.cal / 2000) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-text-muted">{Math.max(0, 2000 - nutritionTotals.cal)} kcal remaining</p>
+                </div>
+              )}
             </div>
           </div>
-          {gmailMessages.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-3">Inbox is empty</p>
-          ) : (
-            <div className="space-y-1">
-              {gmailMessages.slice(0, 5).map((msg) => (
-                <a
-                  key={msg.id}
-                  href="/gmail"
-                  className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
-                >
-                  {!msg.read && <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />}
-                  {msg.read && <div className="w-1.5 h-1.5 shrink-0" />}
-                  <span className={`text-sm flex-1 truncate ${!msg.read ? "font-medium text-text-primary" : "text-text-secondary"}`}>
-                    {msg.subject || "(no subject)"}
-                  </span>
-                  <span className="text-xs text-text-muted shrink-0">{msg.from}</span>
-                </a>
-              ))}
+        );
+
+      case "health_journal":
+        return (
+          <div key="health_journal" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiHeartPulseLine className="w-3.5 h-3.5" /> Health Today
+                </h2>
+                <a href="/health" className="text-xs text-accent hover:text-accent-text">Log</a>
+              </div>
+              {todayHealth ? (
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <RiMoonLine className="w-4 h-4 text-indigo-400" />
+                    <span className="text-text-primary font-medium">{todayHealth.sleep_hours}h</span>
+                    <span className="text-text-muted text-xs">sleep</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <RiFlashlightLine className="w-4 h-4 text-amber-400" />
+                    <span className="text-text-primary font-medium">{todayHealth.energy_level}/10</span>
+                    <span className="text-text-muted text-xs">energy</span>
+                  </div>
+                  {todayHealth.exercise_done && (
+                    <div className="flex items-center gap-1.5">
+                      <RiCheckLine className="w-4 h-4 text-success" />
+                      <span className="text-text-primary font-medium">Exercised</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-text-muted text-center py-4">
+                  Not logged yet. <a href="/health" className="text-accent">Log now</a>
+                </p>
+              )}
             </div>
-          )}
+
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiBookLine className="w-3.5 h-3.5" /> Latest Journal
+                </h2>
+                <a href="/journal" className="text-xs text-accent hover:text-accent-text">View all</a>
+              </div>
+              {latestJournal ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-text-muted">
+                    {format(parseISO(latestJournal.created_at), "MMM d · h:mm a")} · Mood {latestJournal.mood_score}/10
+                  </p>
+                  <p className="text-sm text-text-primary line-clamp-3">{latestJournal.ai_summary}</p>
+                </div>
+              ) : (
+                <p className="text-xs text-text-muted text-center py-4">
+                  No entries yet. <a href="/journal" className="text-accent">Write one</a>
+                </p>
+              )}
+            </div>
+          </div>
+        );
+
+      case "goals_projects":
+        return (
+          <div key="goals_projects" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiLineChartLine className="w-3.5 h-3.5" /> Active Goals
+                </h2>
+                <a href="/goals" className="text-xs text-accent hover:text-accent-text">View all</a>
+              </div>
+              {activeGoals.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-4">
+                  No active goals. <a href="/goals" className="text-accent">Add one</a>
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {activeGoals.map((goal) => {
+                    const total = goal.milestones?.length ?? 0;
+                    const done = goal.milestones?.filter((m) => m.completed).length ?? 0;
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                    return (
+                      <div key={goal.id}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm text-text-primary truncate flex-1">{goal.title}</span>
+                          {total > 0 && (
+                            <span className="text-xs text-text-muted ml-2 shrink-0">{done}/{total}</span>
+                          )}
+                        </div>
+                        {total > 0 && (
+                          <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-accent transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                  <RiFolderLine className="w-3.5 h-3.5" /> Active Projects
+                </h2>
+                <a href="/projects" className="text-xs text-accent hover:text-accent-text">View all</a>
+              </div>
+              {activeProjects.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-4">
+                  No active projects. <a href="/projects" className="text-accent">Add one</a>
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {activeProjects.map((project) => (
+                    <a
+                      key={project.id}
+                      href="/projects"
+                      className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
+                    >
+                      <div
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: project.color_tag ?? "#C4728A" }}
+                      />
+                      <span className="text-sm text-text-primary flex-1 truncate">{project.name}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case "finance":
+        return monthTransactions.length > 0 ? (
+          <div key="finance" className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                <RiMoneyDollarCircleLine className="w-3.5 h-3.5" /> Finance — {format(new Date(), "MMMM")}
+              </h2>
+              <a href="/finance" className="text-xs text-accent hover:text-accent-text">Details</a>
+            </div>
+            <div className="flex gap-6">
+              <div className="flex items-center gap-1.5">
+                <RiArrowUpLine className="w-4 h-4 text-success shrink-0" />
+                <span className="text-sm font-medium text-text-primary">{fmt(monthIncome)}</span>
+                <span className="text-xs text-text-muted">income</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <RiArrowDownLine className="w-4 h-4 text-danger shrink-0" />
+                <span className="text-sm font-medium text-text-primary">{fmt(monthExpense)}</span>
+                <span className="text-xs text-text-muted">expenses</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-sm font-semibold ${monthNet >= 0 ? "text-success" : "text-danger"}`}>
+                  {monthNet >= 0 ? "+" : ""}{fmt(monthNet)}
+                </span>
+                <span className="text-xs text-text-muted">net</span>
+              </div>
+            </div>
+          </div>
+        ) : null;
+
+      case "budget_savings":
+        return (
+          <div key="budget_savings" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <BudgetDashboardWidget />
+            <SavingsDashboardWidget />
+          </div>
+        );
+
+      case "weekly_review":
+        return <WeeklyReviewWidget key="weekly_review" />;
+
+      case "api_usage":
+        return <ApiUsageWidget key="api_usage" />;
+
+      case "email_agent":
+        return gmailConnected ? <EmailAgentWidget key="email_agent" /> : null;
+
+      case "unsubscribe":
+        return gmailConnected ? <UnsubscribeWidget key="unsubscribe" /> : null;
+
+      case "gmail":
+        return gmailConnected ? (
+          <div key="gmail" className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide flex items-center gap-2">
+                <RiMailLine className="w-3.5 h-3.5" /> Gmail
+              </h2>
+              <div className="flex items-center gap-2">
+                {gmailMessages.filter((m) => !m.read).length > 0 && (
+                  <span className="text-xs font-semibold bg-accent/15 text-accent px-2 py-0.5 rounded-full">
+                    {gmailMessages.filter((m) => !m.read).length} unread
+                  </span>
+                )}
+                <a href="/gmail" className="text-xs text-accent hover:text-accent-text">Open inbox</a>
+              </div>
+            </div>
+            {gmailMessages.length === 0 ? (
+              <p className="text-xs text-text-muted text-center py-3">Inbox is empty</p>
+            ) : (
+              <div className="space-y-1">
+                {gmailMessages.slice(0, 5).map((msg) => (
+                  <a
+                    key={msg.id}
+                    href="/gmail"
+                    className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
+                  >
+                    {!msg.read && <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />}
+                    {msg.read && <div className="w-1.5 h-1.5 shrink-0" />}
+                    <span className={`text-sm flex-1 truncate ${!msg.read ? "font-medium text-text-primary" : "text-text-secondary"}`}>
+                      {msg.subject || "(no subject)"}
+                    </span>
+                    <span className="text-xs text-text-muted shrink-0">{msg.from}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null;
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-text-primary">Dashboard</h1>
+          <button
+            onClick={() => setCustomizing(true)}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary px-2.5 py-1.5 rounded-lg hover:bg-bg-tertiary border border-bg-border transition-colors"
+            title="Customize dashboard layout"
+          >
+            <RiLayoutLine className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Customize</span>
+          </button>
         </div>
+
+        {widgetOrder
+          .filter((id) => !hiddenWidgets.has(id))
+          .map((id) => renderWidget(id))}
+      </div>
+
+      {customizing && (
+        <DashboardCustomizer
+          widgetOrder={widgetOrder}
+          hiddenWidgets={hiddenWidgets}
+          onSave={saveDashboard}
+          onClose={() => setCustomizing(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
