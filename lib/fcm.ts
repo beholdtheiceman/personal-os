@@ -13,11 +13,11 @@ export async function registerForPushNotifications(): Promise<{ token: string } 
   }
 
   try {
+    // Dedicated scope so the FCM worker coexists with the PWA worker at "/".
     const registration = await navigator.serviceWorker.register(
       "/api/firebase-messaging-sw",
-      { scope: "/" }
+      { scope: "/firebase-cloud-messaging-push-scope" }
     );
-    await navigator.serviceWorker.ready;
 
     const messaging = getMessaging(getApp());
     const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;

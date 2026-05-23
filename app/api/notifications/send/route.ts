@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
           notification: {
             title,
             body: body ?? "",
-            icon: "/icon-192.png",
-            badge: "/icon-192.png",
+            icon: "/icons/icon.svg",
+            badge: "/icons/icon.svg",
             tag: tag ?? "default",
           },
           fcmOptions: { link: "/" },

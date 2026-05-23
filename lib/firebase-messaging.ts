@@ -11,9 +11,14 @@ export async function requestAndSaveToken(uid: string): Promise<string | null> {
   try {
     const { getMessaging, getToken } = await import("firebase/messaging");
     const messaging = getMessaging(app);
+    // Register (or reuse) the dynamically-served FCM worker on its own scope so it
+    // doesn't collide with the PWA service worker registered at "/".
+    const registration = await navigator.serviceWorker.register("/api/firebase-messaging-sw", {
+      scope: "/firebase-cloud-messaging-push-scope",
+    });
     const token = await getToken(messaging, {
       vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-      serviceWorkerRegistration: await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js"),
+      serviceWorkerRegistration: registration,
     });
 
     if (token) {
@@ -47,7 +52,9 @@ export async function removeToken(uid: string, token: string): Promise<void> {
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;
   try {
-    const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
+    const reg = await navigator.serviceWorker.register("/api/firebase-messaging-sw", {
+      scope: "/firebase-cloud-messaging-push-scope",
+    });
     return reg;
   } catch (err) {
     console.error("SW registration error:", err);
