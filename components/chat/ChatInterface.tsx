@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsTouch } from "@/hooks/useIsTouch";
 import {
   collection, addDoc, getDocs, query, orderBy, limit,
   onSnapshot, doc, updateDoc, setDoc, getDoc, writeBatch, deleteDoc,
@@ -67,6 +68,7 @@ function chatDateLabel(iso: string) {
 
 export default function ChatInterface() {
   const { user } = useAuth();
+  const isTouch = useIsTouch();
 
   // ── Chats list state ─────────────────────────────────────────────────────
   const [chats, setChats] = useState<Chat[]>([]);
@@ -608,7 +610,12 @@ export default function ChatInterface() {
                 el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  // On touch devices, Enter inserts a newline — send with the button instead.
+                  if (isTouch) return;
+                  e.preventDefault();
+                  sendMessage(input);
+                }
               }}
               rows={1}
             />
@@ -636,7 +643,9 @@ export default function ChatInterface() {
               <RiSendPlane2Line className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-center text-[11px] text-text-muted mt-2">Shift+Enter for new line · Enter to send</p>
+          <p className="text-center text-[11px] text-text-muted mt-2">
+            {isTouch ? "Tap send to send · Enter adds a new line" : "Shift+Enter for new line · Enter to send"}
+          </p>
         </div>
       </div>
 

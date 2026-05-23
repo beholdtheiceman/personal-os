@@ -19,6 +19,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
+import { useIsTouch } from "@/hooks/useIsTouch";
 import type { ChatMessage } from "@/types";
 
 interface AssistantMessage extends ChatMessage {
@@ -63,6 +64,7 @@ function ActionsLog({ actions }: { actions: string[] }) {
 export default function ChatPanel() {
   const { isOpen, close } = useChatPanel();
   const { user } = useAuth();
+  const isTouch = useIsTouch();
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeChatName, setActiveChatName] = useState("Chat");
@@ -235,6 +237,8 @@ export default function ChatPanel() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
+      // On touch devices, Enter inserts a newline — send with the button instead.
+      if (isTouch) return;
       e.preventDefault();
       sendMessage(input);
     }

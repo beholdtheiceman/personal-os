@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import TopNav from "@/components/layout/TopNav";
 import MobileNav from "@/components/layout/MobileNav";
@@ -21,6 +21,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const { currentTrack } = usePlayer();
   const { isOpen } = useChatPanel();
   const { status: timerStatus } = useTimer();
+  const pathname = usePathname();
+  // Hide the floating quick-log button while chatting — it otherwise covers the
+  // chat's send button (slide-in panel) or sits on top of the full chat page.
+  const hideQuickLog = isOpen || pathname === "/chat";
   useNotifications();
   const hasPlayer = !!currentTrack;
   const hasTimer = timerStatus !== "idle";
@@ -44,7 +48,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <ChatPanel />
       </div>
       <MobileNav />
-      <QuickLogButton />
+      {!hideQuickLog && <QuickLogButton />}
       <MiniFocusBar />
       <MiniPlayer />
       <YouTubePlayer />
