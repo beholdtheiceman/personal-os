@@ -9,7 +9,7 @@ import {
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
   RiTimeLine, RiFocusLine, RiLightbulbLine,
-  RiMicLine, RiBook2Line,
+  RiMicLine, RiBook2Line, RiSettings3Line,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -20,27 +20,48 @@ const PRIMARY = [
   { href: "/habits",    label: "Habits",   icon: RiLoopLeftLine },
 ];
 
-const MORE = [
-  { href: "/chat",         label: "Chat (Full)",   icon: RiRobot2Line },
-  { href: "/calendar",     label: "Calendar",      icon: RiCalendarLine },
-  { href: "/projects",     label: "Projects",      icon: RiFolderLine },
-  { href: "/media",        label: "Media",         icon: RiMusicLine },
-  { href: "/memory",       label: "Memory",        icon: RiDatabase2Line },
-  { href: "/journal",      label: "Journal",       icon: RiBookLine },
-  { href: "/bible",        label: "Bible",         icon: RiBookReadLine },
-  { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
-  { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
-  { href: "/health",       label: "Health",        icon: RiHeartPulseLine },
-  { href: "/goals",        label: "Goals",         icon: RiLineChartLine },
-  { href: "/finance",      label: "Finance",       icon: RiMoneyDollarCircleLine },
-  { href: "/people",       label: "People",        icon: RiContactsBook2Line },
-  { href: "/drive",        label: "Drive",         icon: RiGoogleLine },
-  { href: "/workout",      label: "Workout",       icon: RiRunLine },
-  { href: "/time",         label: "Time Tracker",  icon: RiTimeLine },
-  { href: "/focus",        label: "Focus",         icon: RiFocusLine },
-  { href: "/decisions",    label: "Decisions",     icon: RiLightbulbLine },
-  { href: "/content",      label: "Content",       icon: RiMicLine },
-  { href: "/reading",      label: "Reading",       icon: RiBook2Line },
+const MORE_SECTIONS = [
+  {
+    label: "Life & Planning",
+    items: [
+      { href: "/journal",   label: "Journal",   icon: RiBookLine },
+      { href: "/bible",     label: "Bible",     icon: RiBookReadLine },
+      { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
+      { href: "/decisions", label: "Decisions", icon: RiLightbulbLine },
+      { href: "/people",    label: "People",    icon: RiContactsBook2Line },
+      { href: "/calendar",  label: "Calendar",  icon: RiCalendarLine },
+      { href: "/projects",  label: "Projects",  icon: RiFolderLine },
+    ],
+  },
+  {
+    label: "Health",
+    items: [
+      { href: "/health",       label: "Health",     icon: RiHeartPulseLine },
+      { href: "/workout",      label: "Workout",    icon: RiRunLine },
+      { href: "/nutrition",    label: "Nutrition",  icon: RiBowlLine },
+      { href: "/meal-planner", label: "Meal Plan",  icon: RiRestaurantLine },
+    ],
+  },
+  {
+    label: "Finance & Work",
+    items: [
+      { href: "/finance", label: "Finance", icon: RiMoneyDollarCircleLine },
+      { href: "/time",    label: "Time",    icon: RiTimeLine },
+      { href: "/focus",   label: "Focus",   icon: RiFocusLine },
+      { href: "/drive",   label: "Drive",   icon: RiGoogleLine },
+    ],
+  },
+  {
+    label: "Creative & Tools",
+    items: [
+      { href: "/content",  label: "Content",  icon: RiMicLine },
+      { href: "/reading",  label: "Reading",  icon: RiBook2Line },
+      { href: "/media",    label: "Media",    icon: RiMusicLine },
+      { href: "/chat",     label: "Chat",     icon: RiRobot2Line },
+      { href: "/memory",   label: "Memory",   icon: RiDatabase2Line },
+      { href: "/settings", label: "Settings", icon: RiSettings3Line },
+    ],
+  },
 ];
 
 export default function MobileNav() {
@@ -48,7 +69,7 @@ export default function MobileNav() {
   const { isOpen: panelOpen, toggle: togglePanel } = useChatPanel();
   const [open, setOpen] = useState(false);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
-  const moreActive = MORE.some((n) => isActive(n.href));
+  const moreActive = MORE_SECTIONS.flatMap((s) => s.items).some((n) => isActive(n.href));
 
   return (
     <>
@@ -117,21 +138,30 @@ export default function MobileNav() {
               </button>
             </div>
 
-            <div className="grid grid-cols-4 gap-3">
-              {MORE.map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setOpen(false)}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-colors ${
-                    isActive(href)
-                      ? "bg-accent/15 text-accent"
-                      : "bg-white/10 text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  <Icon className="w-6 h-6" />
-                  <span className="text-xs font-medium">{label}</span>
-                </Link>
+            <div className="overflow-y-auto max-h-[65vh] space-y-4 pr-1">
+              {MORE_SECTIONS.map((section) => (
+                <div key={section.label}>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted mb-2">
+                    {section.label}
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {section.items.map(({ href, label, icon: Icon }) => (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => setOpen(false)}
+                        className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl transition-colors ${
+                          isActive(href)
+                            ? "bg-accent/15 text-accent"
+                            : "bg-white/10 text-text-secondary hover:text-text-primary"
+                        }`}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span className="text-xs font-medium text-center leading-tight">{label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

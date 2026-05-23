@@ -26,24 +26,49 @@ const PRIMARY_NAV = [
   { href: "/media",     label: "Media",     icon: RiMusicLine },
 ];
 
-const MORE_NAV = [
-  { href: "/chat",         label: "Chat (Full)",   icon: RiRobot2Line },
-  { href: "/memory",       label: "Memory",        icon: RiDatabase2Line },
-  { href: "/journal",      label: "Journal",       icon: RiBookLine },
-  { href: "/bible",        label: "Bible",         icon: RiBookReadLine },
-  { href: "/nutrition",    label: "Nutrition",     icon: RiBowlLine },
-  { href: "/meal-planner", label: "Meal Planner",  icon: RiRestaurantLine },
-  { href: "/health",       label: "Health",        icon: RiHeartPulseLine },
-  { href: "/goals",        label: "Goals",         icon: RiLineChartLine },
-  { href: "/finance",      label: "Finance",       icon: RiMoneyDollarCircleLine },
-  { href: "/people",       label: "People",        icon: RiContactsBook2Line },
-  { href: "/drive",        label: "Drive",         icon: RiGoogleLine },
-  { href: "/workout",      label: "Workout",       icon: RiRunLine },
-  { href: "/time",         label: "Time Tracker",  icon: RiTimeLine },
-  { href: "/focus",        label: "Focus",         icon: RiFocusLine },
-  { href: "/decisions",    label: "Decisions",     icon: RiLightbulbLine },
-  { href: "/content",      label: "Content",       icon: RiMicLine },
-  { href: "/reading",      label: "Reading",       icon: RiBook2Line },
+const MORE_SECTIONS = [
+  {
+    label: "Life",
+    items: [
+      { href: "/journal",   label: "Journal",   icon: RiBookLine },
+      { href: "/bible",     label: "Bible",     icon: RiBookReadLine },
+      { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
+      { href: "/decisions", label: "Decisions", icon: RiLightbulbLine },
+      { href: "/people",    label: "People",    icon: RiContactsBook2Line },
+    ],
+  },
+  {
+    label: "Health",
+    items: [
+      { href: "/health",       label: "Health",       icon: RiHeartPulseLine },
+      { href: "/workout",      label: "Workout",      icon: RiRunLine },
+      { href: "/nutrition",    label: "Nutrition",    icon: RiBowlLine },
+      { href: "/meal-planner", label: "Meal Planner", icon: RiRestaurantLine },
+    ],
+  },
+  {
+    label: "Finance & Work",
+    items: [
+      { href: "/finance", label: "Finance",      icon: RiMoneyDollarCircleLine },
+      { href: "/time",    label: "Time Tracker", icon: RiTimeLine },
+      { href: "/focus",   label: "Focus",        icon: RiFocusLine },
+      { href: "/drive",   label: "Drive",        icon: RiGoogleLine },
+    ],
+  },
+  {
+    label: "Creative",
+    items: [
+      { href: "/content", label: "Content", icon: RiMicLine },
+      { href: "/reading", label: "Reading", icon: RiBook2Line },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [
+      { href: "/chat",   label: "Chat (Full)", icon: RiRobot2Line },
+      { href: "/memory", label: "Memory",      icon: RiDatabase2Line },
+    ],
+  },
 ];
 
 export default function TopNav() {
@@ -56,7 +81,7 @@ export default function TopNav() {
   const userRef = useRef<HTMLDivElement>(null);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
-  const moreActive = MORE_NAV.some((n) => isActive(n.href));
+  const moreActive = MORE_SECTIONS.flatMap((s) => s.items).some((n) => isActive(n.href));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -118,7 +143,7 @@ export default function TopNav() {
           </button>
           {moreOpen && (
             <div
-              className="absolute top-full mt-2 left-0 min-w-[160px] rounded-xl py-1 z-50"
+              className="absolute top-full mt-2 left-0 w-56 rounded-xl py-2 z-50 max-h-[85vh] overflow-y-auto"
               style={{
                 background: "rgba(18, 7, 15, 0.95)",
                 backdropFilter: "blur(16px)",
@@ -127,20 +152,28 @@ export default function TopNav() {
                 boxShadow: "0 8px 32px rgba(0,0,0,0.50)",
               }}
             >
-              {MORE_NAV.map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMoreOpen(false)}
-                  className={`flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
-                    isActive(href)
-                      ? "text-accent bg-accent/10"
-                      : "text-text-secondary hover:text-text-primary hover:bg-white/10"
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  {label}
-                </Link>
+              {MORE_SECTIONS.map((section, si) => (
+                <div key={section.label}>
+                  {si > 0 && <div className="my-1.5 mx-3 border-t border-white/10" />}
+                  <p className="px-4 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+                    {section.label}
+                  </p>
+                  {section.items.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setMoreOpen(false)}
+                      className={`flex items-center gap-2.5 px-4 py-2 text-sm transition-colors ${
+                        isActive(href)
+                          ? "text-accent bg-accent/10"
+                          : "text-text-secondary hover:text-text-primary hover:bg-white/10"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
               ))}
             </div>
           )}

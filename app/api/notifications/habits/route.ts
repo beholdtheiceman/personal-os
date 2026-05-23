@@ -1,3 +1,8 @@
+// Per-habit reminder dispatcher — called by Vercel cron (hourly).
+// Fires individual habit reminders based on each habit's own reminder_enabled +
+// reminder_times fields. This is SEPARATE from /api/notifications/daily, which
+// sends category-level summaries (streak alerts, morning briefing, etc.).
+// Neither route duplicates the other.
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
