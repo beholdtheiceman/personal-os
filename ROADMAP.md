@@ -65,6 +65,10 @@
 ### Data & Integrations
 - **Grocery Price Checker** — When generating a shopping list from the meal planner, Claude searches for current prices at a store of your choice (via web search) and annotates the list with per-item estimates and a total; can compare across two or three stores
 
+### Mobile & Browser
+- **PWA Share Target** — Add `share_target` to `manifest.json` so Personal OS appears in the Android share sheet; create a `/share` page that receives incoming URL/text/title and lets you route it to reading list, Second Brain, task, or chat
+- **Browser Extension** — Chrome extension for quick capture from any webpage; popup hits existing API routes; load unpacked for personal use, no store submission needed
+
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
 
@@ -73,7 +77,6 @@
 ## 💡 Ideas / Parking Lot
 - Embedded Discord UI (iframe) — bypass bot API for DMs, blocked by Discord's X-Frame-Options
 - Suno official API (no public API yet — check back)
-- Browser extension for quick capture from any webpage
 - Beeper Desktop API — MCP server covering WhatsApp, iMessage, Telegram, etc. Local-only, better as a Claude Desktop add-on
 - Weekly/monthly PDF report export
 - Net Worth snapshot carry-forward — when logging a new month, pre-populate from the previous month's entries as a starting point
