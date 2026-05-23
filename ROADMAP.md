@@ -73,7 +73,6 @@
 ## 💡 Ideas / Parking Lot
 - Embedded Discord UI (iframe) — bypass bot API for DMs, blocked by Discord's X-Frame-Options
 - Suno official API (no public API yet — check back)
-- Mobile app (React Native or Capacitor wrapper)
 - Browser extension for quick capture from any webpage
 - Beeper Desktop API — MCP server covering WhatsApp, iMessage, Telegram, etc. Local-only, better as a Claude Desktop add-on
 - Weekly/monthly PDF report export
