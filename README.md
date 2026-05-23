@@ -1,283 +1,426 @@
 # Personal OS
 
-A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude AI. Manage your tasks, habits, health, finances, relationships, and more — all in one place, with a conversational AI assistant that has full context of your life.
+A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude AI. Tasks, habits, health, finance, relationships, and more — all in one place, with a conversational AI assistant that has full context of your life.
 
 ## Tech Stack
 
-- **Framework:** Next.js 15 (App Router), TypeScript
+- **Framework:** Next.js 15 (App Router, Turbopack), TypeScript
 - **Auth & Database:** Firebase Auth (Google SSO), Firestore
 - **Push Notifications:** Firebase Cloud Messaging (FCM)
-- **AI:** Anthropic Claude API (claude-sonnet-4-6, claude-haiku-4-5)
+- **AI:** Anthropic Claude API (`claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-opus-4-5`)
+- **Web Search:** Tavily API
+- **File Storage:** Vercel Blob (audio files)
 - **Styling:** Tailwind CSS, custom dark glass UI
 - **Background:** Pixel art cherry blossom parallax (4-layer scroll)
-- **Deployment:** Vercel
+- **Deployment:** Vercel (cron jobs via `vercel.json`)
+
+---
 
 ## Features
 
 ### 🤖 AI Chat Assistant
-- Multi-conversation chat with persistent history
-- **Persistent slide-in panel** — 400px panel fixed to the right edge of every page; pushes content on desktop, full-screen overlay on mobile; toggle from TopNav or MobileNav without leaving your current tab
-- Full context of all your data (tasks, habits, health, goals, etc.)
-- Second Brain integration — sync your local Obsidian/markdown vault
-- 30+ tools: create tasks, log habits, schedule events, search Gmail, read Drive files, manage contacts, plan meals, and more — all via natural language
-- Auto-names conversations based on content
-- Voice input via Web Speech API
+- Persistent slide-in panel (400px desktop, full-screen mobile) on every page — no tab switching
+- Full `/chat` page also available
+- 30+ tools: full CRUD across tasks, calendar, habits, nutrition, health, journal, goals, finance, projects, memory, meal planner, people CRM, Drive, workouts, time tracker, focus timer, decisions, savings goals, supplements, content tracker, reading list, hydration, mood, body metrics, quick links, web search
+- Second Brain integration — PARA vault auto-injected into chat context
+- Voice input via Web Speech API (browser-native, no Whisper)
 - Image attachment support
-- Web search via Tavily
+- Auto-named conversations
+- Web search via Tavily with prompt injection defense
 
 ### ✅ Tasks
-- Full task management with priority scoring, tags, and due dates
-- Create, complete, and archive tasks via UI or AI chat
-- XP awarded on completion
+- Priority scoring, tags, due dates
+- **Recurring tasks** — daily/weekly/monthly cadence, auto-spawns next instance on completion
+- XP on completion
+- Chat tools: create, update, complete, delete, list
 
 ### 🔄 Habits
-- Track daily and weekly habits with streak counting
-- Completion toggle with XP rewards
-- Push notification reminders (multiple times per day)
-- Streak bonuses
+- Daily/weekly habit tracking with streak counting
+- 16-week GitHub-style heatmap, current streak, longest streak, 30-day rate
+- Per-habit push notification reminders (multiple times per day)
+- Streak bonus XP
+- Chat tools: log, list, create habits
 
 ### 📅 Calendar
-- Google Calendar integration (OAuth)
+- Google Calendar OAuth integration
 - View upcoming events on dashboard and calendar page
-- Create events via AI chat ("schedule a meeting tomorrow at 2pm")
+- Create/update/delete events via chat ("schedule a meeting tomorrow at 2pm")
 
 ### 📧 Gmail
-- Gmail OAuth integration
-- Inbox view with unread indicators
-- Read and search emails via AI chat
-- Dashboard inbox preview
+- OAuth inbox with unread indicators, email detail, reply, archive, trash, mark read/unread
+- Dashboard inbox preview widget
+- Chat tools: search, read, reply, archive
 
 ### 🤖 Email Agent
-- Automated Gmail scanner — runs daily via Vercel cron
-- Classifies emails as receipts or subscriptions using Claude Haiku
-- Auto-writes detected transactions to Finance and subscriptions to the Subscription tracker
-- `source: "email-agent"` tag on all auto-written records for easy filtering
-- Inbox analysis: Claude summarizes your inbox and flags unsubscribe candidates
-- Manual "Run now" trigger from dashboard widget
-- Dedup logic: fuzzy name match for subscriptions, description+amount+date for transactions
-
-### 🗓️ Weekly AI Review
-- Auto-generated every Sunday at 6 PM UTC via Vercel cron
-- Pulls tasks, habits, journal entries, health, nutrition, and goals for the week
-- Claude generates a structured 4-section report: Wins, Gaps, Insight, Focus for Next Week
-- Manual "Generate" button — trigger anytime, not just Sundays
-- Collapsed preview on dashboard with full expand
+- Daily cron scanner — classifies receipts and subscriptions using Claude Haiku
+- Auto-writes transactions to Finance and subscriptions to Subscription tracker
+- Inbox analysis with unsubscribe suggestions
+- Manual trigger from dashboard widget
+- Dedup logic prevents double-writes
 
 ### 🍽️ Meal Planner
 - Weekly meal grid (Mon–Sun × Breakfast/Lunch/Dinner/Snack)
-- Recipe library with search, ingredients, macros, and tags
-- Shopping list auto-generated from week's planned meals
-- Claude tools: add recipes, plan meals, read week's plan, generate shopping list via chat
+- Recipe library with ingredients, macros, tags
+- Shopping list auto-generated from planned meals; check off items inline
+- **Grocery Price Checker** — "Price Check" button on shopping list; Claude + Tavily agentic search; side-by-side comparison of up to 2 stores; per-item prices shown inline with store total
+- Save shopping list to Google Drive (.docx) or download locally
+- Chat tools: add recipes, plan meals, generate/read shopping list
 
 ### 👥 People / Relationships CRM
-- Contact management: name, relationship type, email, phone, birthday, company, location
+- Contact management: name, relationship, email, phone, birthday, company, location, gift ideas
 - Interaction logging (call, text, email, in-person, social)
 - Contact frequency targets with "Needs attention" dashboard section
 - Follow-up dates and notes
-- Gift ideas per person
 - Google Contacts one-click import (OAuth, People API)
-- Claude tools: list contacts, add/update people, log interactions
+- Weekly auto-sync cron
+- Chat tools: list contacts, add/update people, log interactions
 
 ### ☁️ Google Drive
-- OAuth integration with read-only Drive access
-- File browser with search across file names and content
-- Preview Google Docs, Sheets, Slides, and plain text files inline
-- Claude tools: `search_drive`, `read_drive_file` — pull any doc into chat context
-
-### 🔗 Quick Links
-- Configurable grid of frequently visited sites on the dashboard
-- Auto-fetches favicons; optional emoji override
-- Add, remove, and edit links inline — persisted to Firestore
-
-### 🎮 XP & Gamification
-- Level system with 75+ levels and unique titles
-- XP awarded for: completing tasks, logging habits, journal entries, health logs, goal milestones
-- Progress bar and level badge on dashboard
-- Level-up toast notifications
-- Recent XP event feed
-
-### 🧠 Memory & Second Brain
-- Persistent AI memory — store facts, preferences, and context
-- Second Brain sync: upload your local markdown folder (Obsidian/PARA) to Firestore
-- AI automatically pulls relevant notes into chat context
-- Capture ideas and tasks to your vault via chat
-
-### 📓 Journal
-- Voice or text journal entries
-- AI-generated summaries and mood scoring (1–10)
-- Tag system for themes
-- XP for each entry
-
-### 🥗 Nutrition
-- Log meals with macro estimates (AI estimates calories/protein/carbs/fat from description)
-- Daily and weekly views with bar charts
-- Calorie goal tracking
-
-### 💪 Health
-- Daily health logging: sleep hours/quality, energy level, exercise, steps, notes
-- **Google Health integration** — OAuth connect to Google Health API v4; auto-syncs sleep (hours, efficiency, stage breakdown), daily steps, resting heart rate, and exercise sessions from wearables (Pixel Watch, Fitbit, etc.)
-- Health log form pre-fills from Google Health data with one-click import
-- Weekly chart visualization
-- Dashboard health snapshot
-
-### 🎯 Goals
-- Goal tracking with milestone system
-- Progress bars based on milestone completion
-- AI can create goals and toggle milestones via chat
+- OAuth read-only access
+- File browser with search across names and content
+- Preview Google Docs, Sheets, Slides inline
+- Chat tools: `search_drive`, `read_drive_file`
 
 ### 💰 Finance
-- Income and expense tracking with categories
-- Monthly net summary on dashboard
-- AI can log transactions via chat
+- Income and expense tracking with categories, monthly net summary
 - Subscription tracker with renewal dates and monthly cost rollup
+- **Budget tracking** — per-category monthly spending limits with progress bars
+- **Net Worth dashboard** — assets/liabilities with monthly snapshots and trend chart
+- **Plaid integration** — auto-syncs bank/credit card transactions and recurring streams *(Sandbox — Production approval pending)*
+- Chat tools: log transactions, set budgets, update net worth, list subscriptions
+
+### 💪 Health
+- Daily logging: sleep, energy, exercise, steps, notes
+- **Google Health integration** — OAuth sync via Health API v4; sleep (hours/efficiency/stages), daily steps, resting heart rate, exercise sessions from Pixel Watch/Fitbit; auto-prefills log form; 15-min Firestore cache
+- **Nightly auto-sync cron** — writes Google Health data automatically if no manual entry exists
+- Weekly trend chart
+- **Hydration tracking** — daily water intake with goal, quick +1 widget, dashboard indicator
+- **Body metrics** — log weight, body fat %, measurements with trend charts
+- **Supplement / Medication log** — daily checklist, one-tap "taken" toggle, add/edit modal
+- Chat tools: log health, log water, log body metrics, get supplement status
+
+### 🧘 Mood Tracker
+- Daily mood check-in (1–10 with optional note)
+- Cross-domain data available in AI Insights
+- Dashboard widget
+- Chat tools: log mood, get mood history
+
+### 🏋️ Workout Planner
+- Full workout logging (sets/reps/weight)
+- PR tracking per exercise
+- Claude-generated training plans
+- Workout history with search
+- Chat tools: log workout, get PRs, generate training plan
+
+### ⏱️ Time Tracker
+- Toggl-style time logging linked to tasks and projects
+- Weekly bar chart by category
+- Injected into weekly AI review
+- Chat tools: start/stop timer, log entry, get summary
+
+### 🍅 Focus / Pomodoro Timer
+- Countdown timer linked to tasks
+- Auto-logs time on completion
+- Persistent MiniFocusBar across all pages
+- Break timer
+- Chat can start focus sessions
+
+### 🎯 Goals
+- Milestone-based goal tracking with progress bars
+- AI motivating check-ins on demand
+- **Goal inactivity cron** — weekly nudge when active goals haven't had progress in 14+ days
+- Chat tools: create goals, toggle milestones, get check-in
 
 ### 📁 Projects
-- Kanban-style project management (todo / in progress / done)
+- Kanban board (todo / in progress / done)
 - Color-tagged projects
-- Card management via AI chat
+- Card management via chat
+
+### 📔 Journal
+- Voice or text entries
+- AI-generated summaries and mood scoring (1–10)
+- Tag system
+- XP per entry
+
+### 🧠 Memory & Second Brain
+- Persistent AI memory — facts, preferences, context
+- PARA vault: upload local Obsidian/markdown folder → auto-injected into chat context
+- Capture ideas to vault via chat
+
+### 📖 Reading List / Book Tracker
+- Log books with status: want to read / reading / finished / abandoned
+- Star rating, highlights capture, takeaways
+- Tabbed views with live counts and search
+- Chat tools: add book, update status, log highlight, get list
+
+### 🎙️ Content Calendar / Podcast Tracker
+- Episode pipeline: idea → outlined → recorded → edited → published
+- Kanban view, calendar view, all-episodes search
+- Notes, tags, links per episode
+- Chat tools: add episode, update status, list episodes
+
+### 📊 Proactive AI Insights
+- Daily cron uses Claude Opus to analyze 30 days of cross-domain data
+- Surfaces correlations across mood, health, hydration, habits, workouts, nutrition, time, body metrics
+- Dashboard widget with manual refresh
+- Markdown-rendered insight cards with data source tags
+
+### 🎮 XP & Gamification
+- 75+ level system with unique titles
+- XP for tasks, habits, journal, health logs, goal milestones, hydration goals
+- Streak bonuses, level-up toasts
+
+### 🔔 Smart Notifications (14 categories)
+All configurable per-category with enable/time controls in Settings:
+
+| Category | Trigger |
+|---|---|
+| Morning Briefing | Daily summary — calendar, tasks, habits |
+| Streak Alert | Habit streak at risk of breaking |
+| Task Reminder | Tasks due today / overdue |
+| Goal Deadline | Goal target date approaching |
+| Journal Reminder | Evening prompt (skipped if already journaled) |
+| Health Log Reminder | Skipped if already logged |
+| Weekly Review | Sunday summary |
+| Birthday Reminders | Contact birthday approaching (configurable days ahead) |
+| Savings Milestones | 25/50/75/100% of savings goal target |
+| Mid-Day Progress Check | Behind on water, steps, habits, nutrition, workout — silent if on track |
+| Evening Progress Check | End-of-day unmet targets only |
+| Decision Review | Pending decision reviews due |
+| Net Worth Check-In | Monthly reminder on 1st (skipped if already logged) |
+| Daily Time Summary | End-of-day hours tracked (fires only if ≥10 min logged) |
 
 ### 🎵 Media Player
-- YouTube search and playback
-- **The Crate** — personal audio library: upload any MP3/M4A/WAV/OGG/FLAC (up to 50MB) from your computer, stored on Vercel Blob, streams via audio proxy
-- Tab switcher between YouTube and The Crate
-- Persistent MiniPlayer bar across all pages — dark glass aesthetic with cherry blossom accent
+- YouTube search and IFrame playback
+- **The Crate** — personal audio library: upload MP3/M4A/WAV/OGG/FLAC (up to 50MB), stored on Vercel Blob, streamed via audio proxy
+- Persistent MiniPlayer bar across all pages
 - Background playback persists across navigation
 
-### 🔔 Notifications
-- Push notifications via FCM (Firebase Cloud Messaging)
-- Configurable categories: Morning Briefing, Streak Alerts, Task Reminders, Journal Reminder, Health Reminder, Weekly Review
-- Per-habit reminder times (multiple per day)
-- Cron-based delivery via Vercel
-- Configure via UI or AI chat ("remind me every morning at 7am")
+### 🌸 Dashboard
+- **Customizable layout** — show/hide and reorder all 19 widgets; persisted to Firestore; "Customize" button opens a slide-in panel with eye toggles and ↑↓ reorder
+- Widgets: XP/Level, Quick Links, AI Briefing, AI Insights, Decision Reviews, Birthdays, Bible Verse, Tasks+Habits, Hydration+Mood, Calendar+Nutrition, Health+Journal, Goals+Projects, Finance Summary, Budget+Savings, Weekly Review, API Usage, Email Agent, Unsubscribe Manager, Gmail Inbox
 
-### 📊 Claude API Usage
-- Real-time token usage tracking (input/output) per conversation
-- Daily and monthly rollups stored in Firestore
-- Dashboard widget with 7-day bar chart and estimated cost
+### 📱 PWA & Browser Extension
+- **PWA** — installable on Android home screen, FCM push notifications, offline-capable service worker
+- **Android Share Target** — Personal OS appears in Android share sheet; tap Share on any article/URL → captured to reading list, Second Brain, task, or chat
+- **Chrome Extension** — `extension/` folder; load unpacked at `chrome://extensions`; click toolbar button → opens `/share` popup pre-filled with current tab's URL and title; uses existing browser session (no separate auth)
 
-### 🎨 UI / Design
-- Dark cherry-blossom glass aesthetic throughout
-- Pixel art parallax background (4 scrolling layers)
-- Frosted glass cards (`backdrop-filter: blur`)
-- Accent: cherry blossom rose `#C4728A`
-- Fully responsive — mobile bottom nav, desktop top nav
+### 📖 Bible
+- Verse of the day on dashboard (NLT, free API)
+- Full Bible reader with book/chapter navigation
+- Daily read logging with streak
+
+### 🔐 Auth & Security
+- Firebase Auth (Google SSO only)
+- Firebase ID token verification on all `/api/chat` calls; uid spoofing blocked
+- Cron routes protected with `CRON_SECRET` bearer token
+- Tavily search results treated as untrusted (prompt injection defense)
+
+---
 
 ## Project Structure
 
 ```
 personal-os/
 ├── app/
-│   ├── (pages)/          # App routes (dashboard, tasks, habits, drive, people, etc.)
-│   ├── api/              # API routes (chat, gmail, drive, weekly-review, etc.)
-│   └── globals.css       # Global styles, dark glass tokens
+│   ├── (pages)/              # App pages (protected by auth layout)
+│   │   ├── dashboard/        # Main dashboard
+│   │   ├── tasks/
+│   │   ├── habits/
+│   │   ├── health/
+│   │   ├── journal/
+│   │   ├── nutrition/
+│   │   ├── goals/
+│   │   ├── projects/
+│   │   ├── finance/
+│   │   ├── calendar/
+│   │   ├── gmail/
+│   │   ├── meal-planner/
+│   │   ├── people/
+│   │   ├── drive/
+│   │   ├── workout/
+│   │   ├── time/
+│   │   ├── focus/
+│   │   ├── decisions/
+│   │   ├── content/          # Podcast/content calendar
+│   │   ├── reading/          # Book tracker
+│   │   ├── media/            # YouTube + The Crate
+│   │   ├── memory/
+│   │   ├── chat/
+│   │   ├── settings/
+│   │   ├── bible/
+│   │   ├── share/            # PWA share target + extension capture page
+│   │   └── layout.tsx        # Auth guard + TopNav + MobileNav + MiniPlayer + ChatPanel
+│   ├── api/
+│   │   ├── chat/             # Main Claude agent with 30+ tools
+│   │   ├── notifications/    # daily dispatcher, habits, send
+│   │   ├── gmail/            # OAuth, messages, agent, analyze
+│   │   ├── calendar/         # OAuth, events
+│   │   ├── drive/            # OAuth, files
+│   │   ├── health/           # Google Health OAuth, data, auto-sync
+│   │   ├── plaid/            # Link token, exchange, sync
+│   │   ├── contacts/         # OAuth, sync
+│   │   ├── meal-planner/     # Shopping list export, Drive save, price check
+│   │   ├── insights/         # AI insights cron
+│   │   ├── goals/checkin/    # On-demand AI check-in + inactivity cron
+│   │   ├── weekly-review/    # Weekly AI review cron
+│   │   ├── daily-briefing/   # Morning briefing cron
+│   │   └── bible/            # Verse of the day, passage lookup
+│   └── globals.css           # Design tokens (dark glass palette)
 ├── components/
-│   ├── chat/             # Multi-conversation chat interface
-│   ├── dashboard/        # Dashboard widgets (XP, API usage, email agent, weekly review, quick links)
-│   ├── meal-planner/     # Recipe library, weekly grid, shopping list
-│   ├── people/           # Contacts CRM, person detail, interaction log
-│   ├── habits/           # Habit tracker
-│   ├── tasks/            # Task manager
-│   ├── health/           # Health logging + charts
-│   ├── nutrition/        # Nutrition tracker
-│   ├── journal/          # Journal with voice input
-│   ├── goals/            # Goal + milestone tracker
-│   ├── finance/          # Income/expense tracker
-│   ├── projects/         # Kanban project boards
-│   ├── media/            # YouTube media player
-│   ├── memory/           # Memory manager + Second Brain sync
-│   ├── notifications/    # Notification settings
-│   ├── layout/           # TopNav, MobileNav, ParallaxBackground
-│   └── xp/               # XP widget + level system
-├── hooks/                # useAuth, useXP, usePeople, useMealPlanner, useQuickLinks, etc.
-├── lib/                  # Firebase, memory, XP, gmail-token, drive-token, email-classifier, etc.
-├── contexts/             # AuthContext, PlayerContext
+│   ├── chat/                 # ChatInterface, ChatPanel, CameraCapture
+│   ├── dashboard/            # All dashboard widgets + DashboardCustomizer
+│   ├── habits/               # HabitCard, HabitStats (heatmap), HabitForm
+│   ├── health/               # HealthForm, HydrationWidget, MoodWidget, BodyMetricsWidget, SupplementWidget
+│   ├── finance/              # FinanceTracker, BudgetTracker, NetWorthTracker, SavingsGoals
+│   ├── meal-planner/         # WeeklyPlanner, RecipeLibrary, ShoppingListView
+│   ├── people/               # Contacts CRM, person detail, interaction log
+│   ├── workout/              # WorkoutLogger, WorkoutHistory, PRBoard, WorkoutPlan
+│   ├── focus/                # FocusTimer, MiniFocusBar
+│   ├── decisions/            # DecisionCard, DecisionForm, DecisionReview
+│   ├── content/              # ContentCalendar, EpisodeCard, EpisodeForm
+│   ├── notifications/        # NotificationSettings (14 categories)
+│   ├── layout/               # TopNav, MobileNav, ParallaxBackground
+│   └── xp/                   # XPWidget, level system
+├── hooks/
+│   ├── useDashboardSettings  # Widget order + visibility persistence
+│   ├── useMealPlanner        # Recipes, meal plan, shopping list
+│   ├── useWorkout            # Workout logs, PRs
+│   ├── useTimeTracker        # Time entries
+│   ├── useDecisions          # Decision journal
+│   ├── useMood               # Mood logs
+│   ├── useBodyMetrics        # Body metrics
+│   ├── useSavingsGoals       # Savings goals
+│   ├── useHydration          # Daily water intake
+│   ├── useBudget             # Budget categories
+│   ├── useNetWorth           # Net worth snapshots
+│   ├── usePodcast            # Podcast episodes
+│   ├── useBooks              # Reading list
+│   └── ...
+├── lib/
+│   ├── firebase.ts           # Client SDK
+│   ├── firebase-admin.ts     # Admin SDK
+│   ├── env.ts                # Env var accessors (Turbopack-safe)
+│   ├── awardXP.ts            # XP award helper
+│   ├── recurrence.ts         # Recurring task date math
+│   ├── second-brain.ts       # PARA vault Firestore helpers
+│   ├── shopping-list-docx.ts # .docx builder (shared by export + Drive save)
+│   └── timezone.ts           # Timezone-aware cron helpers
+├── contexts/
+│   ├── AuthContext
+│   ├── PlayerContext         # Media player state
+│   ├── ChatPanelContext      # Slide-in panel open/close state
+│   └── TimerContext          # Focus timer state across pages
+├── extension/                # Chrome MV3 extension (load unpacked)
+│   ├── manifest.json
+│   ├── popup.html
+│   ├── popup.js
+│   └── README.md
 ├── public/
-│   └── cherry-blossom/   # Pixel art background PNGs (5 layers)
-└── types/                # Shared TypeScript types
+│   ├── manifest.json         # PWA manifest (includes share_target)
+│   ├── icons/
+│   └── cherry-blossom/       # Pixel art parallax layers
+└── types/index.ts            # All shared TypeScript interfaces
 ```
+
+---
 
 ## Environment Variables
 
 ```env
-# Firebase (client)
+# Firebase (client-side)
 NEXT_PUBLIC_FIREBASE_API_KEY=
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
-NEXT_PUBLIC_FIREBASE_VAPID_KEY=
+NEXT_PUBLIC_FIREBASE_VAPID_KEY=         # FCM web push
 
-# Firebase Admin (server)
+# Firebase Admin (server-side)
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 
 # AI
 ANTHROPIC_API_KEY=
 
-# Google OAuth (Calendar, Gmail, Drive, Contacts — all same client)
+# Google OAuth — one client for Calendar, Gmail, Drive, Contacts, Health
 GOOGLE_CALENDAR_CLIENT_ID=
 GOOGLE_CALENDAR_CLIENT_SECRET=
 
 # Web Search
 TAVILY_API_KEY=
 
-# Vercel Blob (audio file storage for The Crate)
-# Vercel Dashboard → Storage → Create Blob Store (Public access)
-# Token is auto-injected when linked to your project, or use: npx vercel env pull
-BLOB_READ_WRITE_TOKEN=
+# Vercel Blob (The Crate audio storage)
+BLOB_READ_WRITE_TOKEN=                  # Auto-injected when Blob store linked to project
 
-# Google Health (sleep, steps, exercise, heart rate)
-# Enable "Cloud Healthcare API" in Google Cloud Console > APIs & Services > Library
-# Add /api/health/callback to your Google OAuth client redirect URIs
-# Scopes: googlehealth.activity_and_fitness.readonly, googlehealth.sleep.readonly,
-#         googlehealth.health_metrics_and_measurements.readonly
-# No extra credentials needed — uses existing GOOGLE_CALENDAR_CLIENT_ID/SECRET
+# Plaid (Finance auto-sync)
+PLAID_CLIENT_ID=
+PLAID_SECRET=
+PLAID_ENV=sandbox                       # sandbox | development | production
 
 # Cron security
-CRON_SECRET=
+CRON_SECRET=                            # Bearer token checked by all cron GET handlers
 ```
+
+---
 
 ## Google Cloud Setup
 
-All Google integrations (Calendar, Gmail, Drive, Contacts) share a single OAuth 2.0 client. Required setup:
+All Google integrations share a single OAuth 2.0 client.
 
-1. **APIs to enable** in Google Cloud Console → APIs & Services → Library:
-   - Google Calendar API
-   - Gmail API
-   - Google Drive API
-   - People API (for Contacts import)
+**APIs to enable** (Google Cloud Console → APIs & Services → Library):
+- Google Calendar API
+- Gmail API
+- Google Drive API
+- People API
+- Cloud Healthcare API (for Google Health)
 
-2. **Authorized redirect URIs** to add to your OAuth client:
-   ```
-   http://localhost:3000/api/calendar/callback
-   http://localhost:3000/api/gmail/callback
-   http://localhost:3000/api/drive/callback
-   http://localhost:3000/api/people/contacts-callback
-   http://localhost:3000/api/health/googlefit-callback
-   http://localhost:3001/api/calendar/callback
-   http://localhost:3001/api/gmail/callback
-   http://localhost:3001/api/drive/callback
-   http://localhost:3001/api/people/contacts-callback
-   http://localhost:3001/api/health/googlefit-callback
-   https://your-app.vercel.app/api/calendar/callback
-   https://your-app.vercel.app/api/gmail/callback
-   https://your-app.vercel.app/api/drive/callback
-   https://your-app.vercel.app/api/people/contacts-callback
-   https://your-app.vercel.app/api/health/googlefit-callback
-   ```
+**Authorized redirect URIs** to add to your OAuth client:
+```
+http://localhost:3000/api/calendar/callback
+http://localhost:3000/api/gmail/callback
+http://localhost:3000/api/drive/callback
+http://localhost:3000/api/people/contacts-callback
+http://localhost:3000/api/health/googlefit-callback
+https://your-app.vercel.app/api/calendar/callback
+https://your-app.vercel.app/api/gmail/callback
+https://your-app.vercel.app/api/drive/callback
+https://your-app.vercel.app/api/people/contacts-callback
+https://your-app.vercel.app/api/health/googlefit-callback
+```
+
+**Firebase Auth authorized domains** (Firebase Console → Authentication → Settings → Authorized domains):
+```
+localhost
+your-app.vercel.app
+```
+
+---
 
 ## Getting Started
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign in with Google to get started.
+Open [http://localhost:3000](http://localhost:3000) and sign in with Google.
+
+---
+
+## Chrome Extension
+
+Load the extension unpacked for personal use — no store submission needed:
+
+1. Open `chrome://extensions`
+2. Toggle **Developer mode** on
+3. Click **Load unpacked** → select the `extension/` folder
+4. Pin the 🌸 icon to your toolbar
+
+Click the icon on any page → capture to reading list, Second Brain, task, or chat. Requires being logged into the Vercel-deployed app in Chrome.
+
+---
 
 ## Firestore Data Structure
 
@@ -300,32 +443,66 @@ users/{uid}/
 ├── shopping_lists/{weekStart}
 ├── people/{personId}/
 │   └── interactions/{interactionId}
+├── workouts/{workoutId}
+├── time_entries/{entryId}
+├── focus_sessions/{sessionId}
+├── decisions/{decisionId}
+├── mood/{YYYY-MM-DD}
+├── body_metrics/{entryId}
+├── savings_goals/{goalId}
+├── books/{bookId}
+├── episodes/{episodeId}
+├── supplements/{supplementId}
+├── ai_insights/{YYYY-MM-DD}
+├── budget/{categoryId}
+├── net_worth/{YYYY-MM}
 ├── memory/{entryId}
 ├── second_brain/{path}
+├── inbox/{itemId}            # Second Brain quick capture
 ├── weekly_reviews/latest
 ├── xp/summary
 ├── xp_events/{eventId}
 ├── api_usage/{YYYY-MM-DD}
 ├── agent_runs/gmail
+├── fcm_tokens/{tokenId}
+├── notification_sent/{key}   # Dedup guards for cron notifications
 ├── settings/
-│   ├── notifications
+│   ├── notifications         # 14 notification category preferences
 │   ├── quick_links
+│   ├── dashboard             # Widget order + hidden widgets
 │   └── chat_migration
 └── integrations/
     ├── gmail
     ├── google_calendar
-    └── drive
+    ├── drive
+    ├── google_health
+    ├── google_contacts
+    └── plaid
 ```
 
-## Cron Jobs (`vercel.json`)
+---
+
+## Cron Jobs
+
+All crons run hourly (`0 * * * *`) and check local time internally, or at fixed UTC times for less frequent jobs. All handlers are GET routes protected by `Authorization: Bearer ${CRON_SECRET}`.
 
 | Schedule | Route | Purpose |
 |---|---|---|
-| `0 12 * * *` | `/api/notifications/daily` | Morning briefing push notification |
-| `0 13 * * *` | `/api/notifications/habits` | Habit reminder push notification |
-| `0 14 * * *` | `/api/gmail/agent` | Email agent — scan inbox, auto-write transactions/subscriptions |
-| `0 18 * * 0` | `/api/weekly-review` | Sunday weekly AI review |
+| `0 * * * *` | `/api/notifications/daily` | Dispatches all time-based notifications: morning briefing, streak alerts, task reminders, journal/health reminders, decision reviews, net worth check-in, time summary, goal deadlines, progress mid-day/evening |
+| `0 * * * *` | `/api/notifications/habits` | Per-habit reminder notifications based on each habit's configured reminder times |
+| `0 * * * *` | `/api/gmail/agent` | Email agent — scans inbox, auto-classifies receipts and subscriptions |
+| `0 * * * *` | `/api/weekly-review` | Generates Sunday weekly AI review |
+| `0 * * * *` | `/api/daily-briefing` | Morning AI briefing (calendar, tasks, habits) |
+| `0 6 * * *` | `/api/insights` | Proactive AI insights — 30-day cross-domain analysis via Claude Opus |
+| `0 9 * * *` | `/api/goals/checkin` | Goal inactivity nudge — fires for goals with 14+ days no progress |
+| `0 3 * * *` | `/api/health/auto-sync` | Pulls Google Health data for all connected users, writes daily health doc if no manual entry |
+| `0 4 * * *` | `/api/plaid/sync` | Syncs Plaid transactions for all connected bank accounts |
+| `0 5 * * 0` | `/api/contacts/sync` | Weekly Google Contacts sync — upserts all contacts via People API |
+
+---
 
 ## Deployment
 
-Deployed on Vercel. Push to `main` branch to trigger a production deploy.
+Push to `main` → Vercel auto-deploys. All cron jobs activate automatically on the production deployment.
+
+> **Note:** After first deploy, add your Vercel domain to Firebase Console → Authentication → Settings → Authorized domains so Google Sign-in works on the production URL.

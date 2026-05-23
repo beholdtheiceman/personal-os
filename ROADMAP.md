@@ -65,10 +65,6 @@
 
 ## 📋 Roadmap
 
-### Data & Integrations
-
-### Mobile & Browser
-
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
 
