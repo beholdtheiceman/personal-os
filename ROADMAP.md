@@ -56,6 +56,7 @@
 - **Plaid Auto-Sync** — Daily cron (`0 4 * * *`) via new `GET /api/plaid/sync` handler; sync logic extracted into shared `syncUserPlaid(uid, db)` function reused by both POST (user-triggered) and GET (cron); loops all users with connected Plaid items
 - **Google Contacts Auto-Sync** — Weekly cron (`0 5 * * 0`) at `GET /api/contacts/sync`; refreshes OAuth token, fetches all contacts from Google People API, upserts by email-first then name-match; batches Firestore writes in groups of 400; updates `last_synced` on integration doc
 - **Habit analytics** — 16-week GitHub-style heatmap in `HabitStats.tsx`; current streak, longest streak (365-day window), 30-day completion rate; expandable "Stats" toggle in each HabitCard via bar-chart icon button
+- **Dashboard customization** — Show/hide and reorder 19 dashboard widgets; `useDashboardSettings` hook persists `widgetOrder` + `hiddenWidgets` to `users/{uid}/settings/dashboard`; slide-in `DashboardCustomizer` panel with eye-icon toggles + ↑↓ reorder arrows; "Customize" button in dashboard header; new widgets auto-appended to saved order
 
 ---
 
@@ -63,9 +64,6 @@
 
 ### Data & Integrations
 - **Grocery Price Checker** — When generating a shopping list from the meal planner, Claude searches for current prices at a store of your choice (via web search) and annotates the list with per-item estimates and a total; can compare across two or three stores
-
-### Dashboard
-- **Dashboard customization** — Show/hide and reorder dashboard widgets; currently all widgets render unconditionally; a simple `settings/dashboard` doc with a widget order array would drive it
 
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
