@@ -10,7 +10,7 @@ import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
   RiCake2Line, RiSaveLine, RiTimeLine, RiMoonLine,
-  RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine, RiZzzLine,
+  RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine, RiZzzLine, RiRefreshLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -137,10 +137,11 @@ function fmt12h(time: string) {
 
 export default function NotificationSettings() {
   const { user } = useAuth();
-  const { permission, token, enable } = useNotifications();
+  const { permission, token, enable, disable } = useNotifications();
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [deviceBusy, setDeviceBusy] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -169,6 +170,47 @@ export default function NotificationSettings() {
     }
   };
 
+  // Register this device for push (also used to re-register / refresh the token).
+  const handleEnable = async () => {
+    setDeviceBusy(true);
+    try {
+      await enable();
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        toast.success("Notifications enabled on this device");
+      } else {
+        toast.error("Permission wasn't granted — check your browser settings");
+      }
+    } catch {
+      toast.error("Couldn't enable notifications");
+    } finally {
+      setDeviceBusy(false);
+    }
+  };
+
+  const handleReregister = async () => {
+    setDeviceBusy(true);
+    try {
+      await enable(); // re-runs token registration, refreshing this device's fcm_tokens entry
+      toast.success("This device was re-registered");
+    } catch {
+      toast.error("Couldn't re-register this device");
+    } finally {
+      setDeviceBusy(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    setDeviceBusy(true);
+    try {
+      await disable();
+      toast.success("Notifications disabled on this device");
+    } catch {
+      toast.error("Couldn't disable notifications");
+    } finally {
+      setDeviceBusy(false);
+    }
+  };
+
   if (!loaded) return null;
 
   return (
@@ -191,13 +233,36 @@ export default function NotificationSettings() {
               </p>
             </div>
           </div>
-          {permission !== "granted" && permission !== "denied" && permission !== "unsupported" && (
-            <button onClick={enable} className="btn-primary text-sm py-1.5 px-4">
-              Enable
+          {/* No token yet (permission default, or granted but not registered) → register */}
+          {(permission === "default" || (permission === "granted" && !token)) && (
+            <button
+              onClick={handleEnable}
+              disabled={deviceBusy}
+              className="btn-primary text-sm py-1.5 px-4"
+            >
+              {deviceBusy ? "…" : permission === "granted" ? "Register this device" : "Enable"}
             </button>
           )}
-          {permission === "granted" && (
-            <span className="text-xs text-success bg-success/10 px-2 py-1 rounded-lg">Active</span>
+          {/* Active on this device → allow re-register or disable */}
+          {permission === "granted" && token && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleReregister}
+                disabled={deviceBusy}
+                title="Refresh this device's push token"
+                className="btn-ghost text-sm py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RiRefreshLine className={`w-4 h-4 ${deviceBusy ? "animate-spin" : ""}`} />
+                Re-register
+              </button>
+              <button
+                onClick={handleDisable}
+                disabled={deviceBusy}
+                className="btn-ghost text-sm py-1.5 px-3 disabled:opacity-50"
+              >
+                Disable
+              </button>
+            </div>
           )}
         </div>
       </div>
