@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { RiEditLine, RiDeleteBinLine, RiFireLine, RiNotificationLine, RiNotificationOffLine } from "react-icons/ri";
+import { RiEditLine, RiDeleteBinLine, RiFireLine, RiNotificationLine, RiNotificationOffLine, RiBarChartLine } from "react-icons/ri";
 import { format, subDays } from "date-fns";
 import type { Habit } from "@/types";
+import HabitStats from "./HabitStats";
 
 const DAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -53,6 +54,7 @@ export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete,
   const hasReminders = habit.reminder_enabled && times.length > 0;
 
   const [showPanel, setShowPanel] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [newTime, setNewTime] = useState("08:00");
   const [adding, setAdding] = useState(false);
 
@@ -108,6 +110,13 @@ export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete,
                 title={hasReminders ? `${times.length} reminder${times.length > 1 ? "s" : ""}` : "Set reminders"}
               >
                 {hasReminders ? <RiNotificationLine className="w-3.5 h-3.5" /> : <RiNotificationOffLine className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={() => setShowStats((v) => !v)}
+                className={`p-1 transition-colors ${showStats ? "text-accent" : "text-text-muted hover:text-accent opacity-0 group-hover:opacity-100"}`}
+                title="Toggle stats"
+              >
+                <RiBarChartLine className="w-3.5 h-3.5" />
               </button>
               <button onClick={() => onEdit(habit)} className="p-1 text-text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity">
                 <RiEditLine className="w-3.5 h-3.5" />
@@ -192,6 +201,15 @@ export default function HabitCard({ habit, todayStr, onToggle, onEdit, onDelete,
               );
             })}
           </div>
+
+          {/* Stats panel */}
+          {showStats && (
+            <HabitStats
+              completions={habit.completions}
+              targetDays={habit.target_days ?? [0, 1, 2, 3, 4, 5, 6]}
+              todayStr={todayStr}
+            />
+          )}
         </div>
       </div>
     </div>

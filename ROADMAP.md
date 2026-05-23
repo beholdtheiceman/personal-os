@@ -52,6 +52,10 @@
 - **Nav polish** — Desktop More dropdown reorganized into 5 labeled sections with dividers + max-height scroll (never clips); Mobile More sheet reorganized into 4 labeled sections with per-section grids + `overflow-y-auto` (never cut off on small phones); Settings now reachable on mobile (was desktop-only)
 - **Goal progress visualization** — Progress bar + milestone checklist already rendered in GoalCard; confirmed complete
 - **Goals Check-in Cron** — `GET /api/goals/checkin` handler uses Firestore `updateTime` to detect goals with 14+ days of inactivity; deduped once per week per user; respects `goal_inactivity` notification setting; cron already wired at `0 9 * * *` in `vercel.json`
+- **Google Health Auto-Sync** — Nightly cron (`0 3 * * *`) at `GET /api/health/auto-sync`; loops all users with Google Health connected; calls internal `/api/health/data` to get processed sleep/steps/HR/exercise; writes to `users/{uid}/health/{today}` only if no manual entry exists; auto-builds notes string from available metrics
+- **Plaid Auto-Sync** — Daily cron (`0 4 * * *`) via new `GET /api/plaid/sync` handler; sync logic extracted into shared `syncUserPlaid(uid, db)` function reused by both POST (user-triggered) and GET (cron); loops all users with connected Plaid items
+- **Google Contacts Auto-Sync** — Weekly cron (`0 5 * * 0`) at `GET /api/contacts/sync`; refreshes OAuth token, fetches all contacts from Google People API, upserts by email-first then name-match; batches Firestore writes in groups of 400; updates `last_synced` on integration doc
+- **Habit analytics** — 16-week GitHub-style heatmap in `HabitStats.tsx`; current streak, longest streak (365-day window), 30-day completion rate; expandable "Stats" toggle in each HabitCard via bar-chart icon button
 
 ---
 
@@ -59,16 +63,9 @@
 
 ### Data & Integrations
 - **Grocery Price Checker** — When generating a shopping list from the meal planner, Claude searches for current prices at a store of your choice (via web search) and annotates the list with per-item estimates and a total; can compare across two or three stores
-- **Google Health Auto-Sync** — Nightly cron pulls sleep, steps, heart rate, and exercise from Google Health API and writes to Firestore automatically; no manual refresh needed; pre-populates health log form when you open it *(15-min cache is live; full nightly cron still pending)*
-- **Plaid Auto-Sync** — Daily cron keeps bank and credit card transactions current without requiring a manual "Sync now" tap; mirrors the Gmail agent pattern
-- **Google Contacts Auto-Sync** — Weekly cron re-syncs contacts using the stored OAuth token; catches new additions and updated info without a manual import
 
-### AI & Automation
 ### Dashboard
 - **Dashboard customization** — Show/hide and reorder dashboard widgets; currently all widgets render unconditionally; a simple `settings/dashboard` doc with a widget order array would drive it
-
-### Analytics
-- **Habit analytics** — GitHub-style heatmap + streak history + completion rate chart per habit; data is all in Firestore, just no visualization beyond the basic checklist
 
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
