@@ -57,6 +57,8 @@
 - **Google Contacts Auto-Sync** — Weekly cron (`0 5 * * 0`) at `GET /api/contacts/sync`; refreshes OAuth token, fetches all contacts from Google People API, upserts by email-first then name-match; batches Firestore writes in groups of 400; updates `last_synced` on integration doc
 - **Habit analytics** — 16-week GitHub-style heatmap in `HabitStats.tsx`; current streak, longest streak (365-day window), 30-day completion rate; expandable "Stats" toggle in each HabitCard via bar-chart icon button
 - **Grocery Price Checker** — "Price Check" button on meal planner shopping list tab; store picker (6 quick-select + custom); Claude + Tavily agentic loop searches for current prices; results shown inline per item with store total banner; supports side-by-side comparison of up to 2 stores
+- **PWA Share Target** — `share_target` in `manifest.json`; `/share` page receives URL/title/text and routes to reading list, Second Brain, task, or chat; appears in Android share sheet when PWA is installed
+- **Browser Extension** — `extension/` folder: Chrome MV3, reads active tab URL+title, opens `/share` as a 500×620 popup window; reuses existing browser session (no separate auth); load unpacked at `chrome://extensions`
 - **Dashboard customization** — Show/hide and reorder 19 dashboard widgets; `useDashboardSettings` hook persists `widgetOrder` + `hiddenWidgets` to `users/{uid}/settings/dashboard`; slide-in `DashboardCustomizer` panel with eye-icon toggles + ↑↓ reorder arrows; "Customize" button in dashboard header; new widgets auto-appended to saved order
 
 ---
@@ -66,8 +68,6 @@
 ### Data & Integrations
 
 ### Mobile & Browser
-- **PWA Share Target** — Add `share_target` to `manifest.json` so Personal OS appears in the Android share sheet; create a `/share` page that receives incoming URL/text/title and lets you route it to reading list, Second Brain, task, or chat
-- **Browser Extension** — Chrome extension for quick capture from any webpage; popup hits existing API routes; load unpacked for personal use, no store submission needed
 
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
