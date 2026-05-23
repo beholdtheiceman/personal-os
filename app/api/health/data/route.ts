@@ -140,7 +140,8 @@ export async function GET(req: NextRequest) {
     const cacheSnap = await cacheRef.get();
     const cacheData = cacheSnap.exists ? cacheSnap.data()! : null;
     const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-    if (cacheData && cacheData.fetched_at && (now.getTime() - new Date(cacheData.fetched_at as string).getTime()) < CACHE_TTL_MS) {
+    const cacheHasData = cacheData && (cacheData.sleep_hours != null || cacheData.steps != null || (cacheData.exercises as unknown[])?.length > 0);
+    if (cacheHasData && cacheData.fetched_at && (now.getTime() - new Date(cacheData.fetched_at as string).getTime()) < CACHE_TTL_MS) {
       return NextResponse.json({ ...cacheData, connected: true, from_cache: true });
     }
 
