@@ -398,3 +398,115 @@ export async function progressReminderHandler(uid: string, tz: string): Promise<
     tag: "progress-reminder",
   };
 }
+
+// ── Decision Review Notifications ─────────────────────────────────────────────
+export async function decisionReviewHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const today = todayLocal(tz);
+
+  // Dedup — only fire once per day
+  const dedupRef = db.doc(`users/${uid}/notification_sent/decision_review_${today}`);
+  const dedupSnap = await dedupRef.get();
+  if (dedupSnap.exists) return null;
+
+  // Find decisions whose review_date is today or overdue and still pending
+  const snap = await db.collection(`users/${uid}/decisions`)
+    .where("status", "==", "pending_review")
+    .where("review_date", "<=", today)
+    .get();
+
+  if (snap.empty) return null;
+
+  await dedupRef.set({ sent_at: new Date().toISOString() });
+
+  const count = snap.size;
+  const first = snap.docs[0].data().title as string;
+  const body = count === 1
+    ? `"${first}" is ready for review`
+    : `"${first}" and ${count - 1} other${count > 2 ? "s" : ""} ready for review`;
+
+  return {
+    title: "🧠 Decision review due",
+    body,
+    tag: "decision-review",
+  };
+}
+
+// ── Net Worth Monthly Reminder ────────────────────────────────────────────────
+export async function netWorthReminderHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const now = localNow(tz);
+  const today = todayLocal(tz);
+
+  // Only fire on the 1st of the month
+  if (now.getDate() !== 1) return null;
+
+  // Dedup — only once per month
+  const monthKey = today.slice(0, 7); // YYYY-MM
+  const dedupRef = db.doc(`users/${uid}/notification_sent/networth_reminder_${monthKey}`);
+  const dedupSnap = await dedupRef.get();
+  if (dedupSnap.exists) return null;
+
+  // Check if a snapshot was already logged this month
+  const monthStart = `${monthKey}-01`;
+  const snap = await db.collection(`users/${uid}/net_worth_snapshots`)
+    .where("date", ">=", monthStart)
+    .limit(1)
+    .get();
+
+  if (!snap.empty) return null; // already logged this month
+
+  await dedupRef.set({ sent_at: new Date().toISOString() });
+
+  return {
+    title: "💰 Net worth check-in",
+    body: "Time to log your monthly net worth snapshot",
+    tag: "networth-reminder",
+  };
+}
+
+// ── End-of-Day Time Summary ───────────────────────────────────────────────────
+export async function timeSummaryHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const today = todayLocal(tz);
+
+  // Dedup — only once per day
+  const dedupRef = db.doc(`users/${uid}/notification_sent/time_summary_${today}`);
+  const dedupSnap = await dedupRef.get();
+  if (dedupSnap.exists) return null;
+
+  // Fetch today's time entries
+  const snap = await db.collection(`users/${uid}/time_entries`)
+    .where("date", "==", today)
+    .get();
+
+  if (snap.empty) return null; // nothing tracked today, skip
+
+  // Tally total minutes and top categories
+  let totalMins = 0;
+  const catMins: Record<string, number> = {};
+  for (const d of snap.docs) {
+    const entry = d.data();
+    const mins = (entry.duration_minutes as number) ?? 0;
+    totalMins += mins;
+    const cat = (entry.category as string) || "Other";
+    catMins[cat] = (catMins[cat] ?? 0) + mins;
+  }
+
+  if (totalMins < 10) return null; // less than 10 minutes — not worth notifying
+
+  await dedupRef.set({ sent_at: new Date().toISOString() });
+
+  const totalHrs = (totalMins / 60).toFixed(1);
+  const top = Object.entries(catMins)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([cat, mins]) => `${cat} ${(mins / 60).toFixed(1)}h`)
+    .join(", ");
+
+  return {
+    title: `⏱ ${totalHrs}h tracked today`,
+    body: top || `${snap.size} session${snap.size > 1 ? "s" : ""} logged`,
+    tag: "time-summary",
+  };
+}

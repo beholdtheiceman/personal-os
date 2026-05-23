@@ -8,6 +8,7 @@ import {
   morningBriefingHandler, streakAlertHandler, taskReminderHandler,
   goalDeadlineHandler, journalReminderHandler, healthReminderHandler, weeklyReviewHandler,
   birthdayReminderHandler, savingsMilestoneHandler, progressReminderHandler,
+  decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import type { NotificationSettings } from "@/types";
@@ -104,6 +105,24 @@ export async function GET(req: NextRequest) {
     if (settings.progress_evening.enabled && settings.progress_evening.time && isHour(timeInfo, settings.progress_evening.time)) {
       const n = await progressReminderHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "progress-reminder");
+    }
+
+    // Decision review — fires at configured time when pending reviews are due
+    if (settings.decision_review.enabled && settings.decision_review.time && isHour(timeInfo, settings.decision_review.time)) {
+      const n = await decisionReviewHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "decision-review");
+    }
+
+    // Net worth reminder — fires on 1st of month (handler guards the date)
+    if (settings.networth_reminder.enabled) {
+      const n = await netWorthReminderHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "networth-reminder");
+    }
+
+    // End-of-day time summary
+    if (settings.time_summary.enabled && settings.time_summary.time && isHour(timeInfo, settings.time_summary.time)) {
+      const n = await timeSummaryHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "time-summary");
     }
 
     results[uid] = fired;

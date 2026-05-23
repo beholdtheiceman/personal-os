@@ -10,6 +10,7 @@ import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
   RiCake2Line, RiSaveLine, RiTimeLine, RiMoonLine,
+  RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -97,6 +98,27 @@ const CATEGORIES: {
     label: "Evening Progress Check",
     description: "End-of-day reminder for any targets still unmet — only fires if there's something left to catch up on",
     icon: <RiMoonLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "decision_review",
+    label: "Decision Review",
+    description: "Notifies you when a decision journal entry is due for review — only fires if reviews are pending",
+    icon: <RiBrainLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "networth_reminder",
+    label: "Net Worth Check-In",
+    description: "Monthly reminder on the 1st to log your net worth snapshot — skipped if you've already logged this month",
+    icon: <RiMoneyDollarCircleLine className="w-4 h-4" />,
+    hasTime: false,
+  },
+  {
+    key: "time_summary",
+    label: "Daily Time Summary",
+    description: "End-of-day summary of hours tracked and top categories — only fires if at least 10 minutes were logged",
+    icon: <RiTimerLine className="w-4 h-4" />,
     hasTime: true,
   },
 ];

@@ -118,6 +118,9 @@ export interface NotificationSettings {
   savings_milestone: NotificationCategory;  // fires when crossing 25/50/75/100%
   progress_midday: NotificationCategory;    // mid-day check: water, habits, steps, nutrition, workout
   progress_evening: NotificationCategory;   // evening check: same targets, more urgency
+  decision_review: NotificationCategory;    // fires when decisions have pending_review && review_date <= today
+  networth_reminder: NotificationCategory;  // fires on 1st of month if no snapshot logged yet
+  time_summary: NotificationCategory;       // end-of-day summary of tracked time
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -132,6 +135,9 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   savings_milestone: { enabled: false },
   progress_midday:   { enabled: false, time: "13:00" },
   progress_evening:  { enabled: false, time: "18:00" },
+  decision_review:   { enabled: false, time: "09:00" },
+  networth_reminder: { enabled: false },
+  time_summary:      { enabled: false, time: "21:00" },
 };
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────
