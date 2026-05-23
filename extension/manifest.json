@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Personal OS Capture",
+  "version": "1.0",
+  "description": "Capture the current page to your Personal OS — reading list, second brain, task, or chat.",
+  "permissions": ["activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Capture to Personal OS"
+  }
+}

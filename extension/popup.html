@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 280px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a0a0f;
+      color: #f0e8ea;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .header-icon {
+      width: 28px;
+      height: 28px;
+      background: #c4728a22;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f0e8ea;
+    }
+
+    .preview {
+      background: #c4728a11;
+      border: 1px solid #c4728a33;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .preview-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: #f0e8ea;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px;
+    }
+
+    .preview-url {
+      font-size: 11px;
+      color: #c4728a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .capture-btn {
+      width: 100%;
+      padding: 11px 14px;
+      background: #c4728a;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+
+    .capture-btn:hover { background: #a85a72; }
+    .capture-btn:active { background: #8f4a5f; }
+
+    .footer {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 11px;
+      color: #7a6a6e;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">🌸</div>
+    <h1>Personal OS</h1>
+  </div>
+
+  <div class="preview">
+    <div class="preview-title" id="tab-title">Loading…</div>
+    <div class="preview-url" id="tab-url"></div>
+  </div>
+
+  <button class="capture-btn" id="capture-btn">
+    ⚡ Capture this page
+  </button>
+
+  <div class="footer">Opens the Personal OS share screen</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
