@@ -11,6 +11,7 @@ import {
   decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
+import { sendPushToUser } from "@/lib/send-push";
 import type { NotificationSettings } from "@/types";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 
@@ -40,14 +41,9 @@ export async function GET(req: NextRequest) {
 
     // One Firestore read for timezone info; reuse for all category checks
     const timeInfo = await getLocalTimeInfo(uid);
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
 
     const send = async (title: string, body: string, tag: string) => {
-      await fetch(`${baseUrl}/api/notifications/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${cronSecret}` },
-        body: JSON.stringify({ uid, title, body, tag }),
-      });
+      await sendPushToUser(uid, { title, body, tag });
       fired.push(tag);
     };
 

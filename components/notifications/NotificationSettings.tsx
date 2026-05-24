@@ -211,6 +211,33 @@ export default function NotificationSettings() {
     }
   };
 
+  // Fires a real push to this user's devices through the live delivery path.
+  const handleTest = async () => {
+    if (!user) return;
+    setDeviceBusy(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/notifications/test", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ? `Test failed: ${data.error}` : "Test failed");
+      } else if (data.sent > 0) {
+        toast.success(`Test notification sent to ${data.sent} device${data.sent > 1 ? "s" : ""}`);
+      } else if (data.reason === "No tokens registered") {
+        toast.error("No device registered yet — tap Register/Enable first");
+      } else {
+        toast.error(data.errors?.[0] ? `Send failed: ${data.errors[0]}` : "Send failed — no devices reachable");
+      }
+    } catch {
+      toast.error("Couldn't send test notification");
+    } finally {
+      setDeviceBusy(false);
+    }
+  };
+
   if (!loaded) return null;
 
   return (
@@ -243,9 +270,17 @@ export default function NotificationSettings() {
               {deviceBusy ? "…" : permission === "granted" ? "Register this device" : "Enable"}
             </button>
           )}
-          {/* Active on this device → allow re-register or disable */}
+          {/* Active on this device → test, re-register, or disable */}
           {permission === "granted" && token && (
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleTest}
+                disabled={deviceBusy}
+                title="Send a test notification to this device"
+                className="btn-ghost text-sm py-1.5 px-3 disabled:opacity-50"
+              >
+                Send test
+              </button>
               <button
                 onClick={handleReregister}
                 disabled={deviceBusy}

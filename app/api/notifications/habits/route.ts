@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
+import { sendPushToUser } from "@/lib/send-push";
 
 export async function GET(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
@@ -31,8 +32,6 @@ export async function GET(req: NextRequest) {
     const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
     if (tokensSnap.empty) continue;
 
-    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
-
     for (const habitDoc of habitsSnap.docs) {
       const habit = habitDoc.data();
       if (!habit.reminder_enabled) continue;
@@ -55,18 +54,10 @@ export async function GET(req: NextRequest) {
       const completions: string[] = habit.completions ?? [];
       if (skipIfDone && completions.includes(localDate)) continue;
 
-      await fetch(`${baseUrl}/api/notifications/send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${cronSecret}`,
-        },
-        body: JSON.stringify({
-          uid,
-          title: "⏰ Habit Reminder",
-          body: `Don't forget: ${habit.name}`,
-          tag: `habit-${habitDoc.id}`,
-        }),
+      await sendPushToUser(uid, {
+        title: "⏰ Habit Reminder",
+        body: `Don't forget: ${habit.name}`,
+        tag: `habit-${habitDoc.id}`,
       });
 
       notified.push(`${uid}:${habit.name}`);

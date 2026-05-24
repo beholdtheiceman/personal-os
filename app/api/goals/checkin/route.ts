@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, getEnv } from "@/lib/env";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { sendPushToUser } from "@/lib/send-push";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 import type { NotificationSettings } from "@/types";
 
@@ -27,10 +28,6 @@ export async function GET(req: NextRequest) {
   const monday = new Date(now);
   monday.setDate(now.getDate() + daysToMonday);
   const weekKey = monday.toLocaleDateString("en-CA"); // YYYY-MM-DD
-
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
 
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
@@ -75,11 +72,7 @@ export async function GET(req: NextRequest) {
       ? `"${stale[0]}" hasn't had any progress in ${INACTIVE_DAYS}+ days`
       : `${stale.length} goals need attention — "${stale[0]}" and ${stale.length - 1} more`;
 
-    await fetch(`${baseUrl}/api/notifications/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cronSecret}` },
-      body: JSON.stringify({ uid, title, body, tag: "goal-inactivity" }),
-    });
+    await sendPushToUser(uid, { title, body, tag: "goal-inactivity" });
     notified.push(uid);
   }
 

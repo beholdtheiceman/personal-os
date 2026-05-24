@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminDb, getAdminMessaging, getAdminAuth } from "@/lib/firebase-admin";
+import { getAdminAuth } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
+import { sendPushToUser } from "@/lib/send-push";
 
 export async function POST(req: NextRequest) {
   // Allow either cron secret or authenticated user
@@ -20,33 +21,6 @@ export async function POST(req: NextRequest) {
   const { uid, title, body, tag, data } = await req.json();
   if (!uid || !title) return NextResponse.json({ error: "Missing uid or title" }, { status: 400 });
 
-  const db = getAdminDb();
-  const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
-  if (tokensSnap.empty) return NextResponse.json({ sent: 0, reason: "No tokens registered" });
-
-  const tokens: string[] = tokensSnap.docs.map((d) => d.data().token as string);
-  const messaging = getAdminMessaging();
-
-  const results = await Promise.allSettled(
-    tokens.map((token) =>
-      messaging.send({
-        token,
-        notification: { title, body: body ?? "" },
-        webpush: {
-          notification: {
-            title,
-            body: body ?? "",
-            icon: "/icons/icon.svg",
-            badge: "/icons/icon.svg",
-            tag: tag ?? "default",
-          },
-          fcmOptions: { link: "/" },
-        },
-        data: data ?? {},
-      })
-    )
-  );
-
-  const sent = results.filter((r) => r.status === "fulfilled").length;
-  return NextResponse.json({ sent, total: tokens.length });
+  const result = await sendPushToUser(uid, { title, body, tag, data });
+  return NextResponse.json(result);
 }
