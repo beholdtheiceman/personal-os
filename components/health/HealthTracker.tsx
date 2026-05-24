@@ -246,7 +246,7 @@ export default function HealthTracker() {
         <div className="flex gap-3 flex-wrap">
           <StatChip icon={RiMoonLine} label="Sleep" value={`${todayLog.sleep_hours}h`} color="text-indigo-400" />
           <StatChip icon={RiMoonLine} label="Quality" value={`${todayLog.sleep_quality}/10`} color="text-emerald-400" />
-          <StatChip icon={RiFlashlightLine} label="Energy" value={`${todayLog.energy_level}/10`} color="text-amber-400" />
+          <StatChip icon={RiFlashlightLine} label="Readiness" value={`${todayLog.readiness_score ?? todayLog.energy_level * 10}/100`} color="text-amber-400" />
           <StatChip
             icon={todayLog.exercise_done ? RiCheckLine : RiRunLine}
             label="Exercise"

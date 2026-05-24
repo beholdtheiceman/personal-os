@@ -9,7 +9,7 @@ interface Props {
 const METRICS = [
   { key: "sleep_hours" as keyof HealthLog, label: "Sleep", color: "#818cf8", max: 12 },
   { key: "sleep_quality" as keyof HealthLog, label: "Sleep Quality", color: "#34d399", max: 10 },
-  { key: "energy_level" as keyof HealthLog, label: "Energy", color: "#fbbf24", max: 10 },
+  { key: "energy_level" as keyof HealthLog, label: "Readiness", color: "#fbbf24", max: 10 },
 ];
 
 const W = 560;
