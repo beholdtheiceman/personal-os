@@ -81,8 +81,8 @@ export default function HealthForm({ initial, onSave, onClose }: Props) {
             onChange={(v) => set("sleep_hours", v)} suffix="h" />
           <Slider label="Sleep Quality" value={form.sleep_quality} min={1} max={10}
             onChange={(v) => set("sleep_quality", v)} suffix="/10" />
-          <Slider label="Energy Level" value={form.energy_level} min={1} max={10}
-            onChange={(v) => set("energy_level", v)} suffix="/10" />
+          <Slider label="Readiness Score" value={form.energy_level * 10} min={0} max={100} step={5}
+            onChange={(v) => set("energy_level", Math.max(1, Math.round(v / 10)))} suffix="/100" />
 
           {/* Exercise */}
           <div className="space-y-2">

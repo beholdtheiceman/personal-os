@@ -76,6 +76,47 @@ async function fetchDataPoints(
   return allPoints;
 }
 
+// Compute a 0-100 readiness score mirroring Fitbit's three-factor model.
+// Components with no data are dropped and the remaining weights are renormalized.
+function computeReadiness(params: {
+  todayRhr: number | null;
+  rhrHistory: number[];   // past-week RHR values (excluding today)
+  sleepHistory: number[]; // past-week sleep_quality values (1-10 scale)
+  hrv: number | null;     // RMSSD ms — null when unavailable
+}): number | null {
+  const { todayRhr, rhrHistory, sleepHistory, hrv } = params;
+  const components: { score: number; weight: number }[] = [];
+
+  // RHR (35%): below 7-day baseline = recovering well, above = fatigued
+  if (todayRhr !== null) {
+    let rhrScore: number;
+    if (rhrHistory.length >= 2) {
+      const baseline = rhrHistory.reduce((a, b) => a + b, 0) / rhrHistory.length;
+      rhrScore = Math.max(0, Math.min(100, 70 - (todayRhr - baseline) * 5));
+    } else {
+      // No baseline yet — score on absolute RHR (avg adult 60-80; lower = better)
+      rhrScore = Math.max(0, Math.min(100, 120 - todayRhr));
+    }
+    components.push({ score: rhrScore, weight: 0.35 });
+  }
+
+  // Sleep (40%): avg quality over past 7 days
+  if (sleepHistory.length > 0) {
+    const avg = sleepHistory.reduce((a, b) => a + b, 0) / sleepHistory.length;
+    components.push({ score: (avg / 10) * 100, weight: 0.40 });
+  }
+
+  // HRV (25%): RMSSD typical range 15-80ms — higher is better
+  if (hrv !== null) {
+    const hrvScore = Math.max(0, Math.min(100, ((hrv - 15) / 65) * 100));
+    components.push({ score: hrvScore, weight: 0.25 });
+  }
+
+  if (components.length === 0) return null;
+  const totalWeight = components.reduce((s, c) => s + c.weight, 0);
+  return Math.round(components.reduce((s, c) => s + c.score * (c.weight / totalWeight), 0));
+}
+
 // Helper: get interval startTime from a data point (type-specific paths)
 function getPointStartTime(pt: Record<string, unknown>, dataType: string): number {
   let startStr: string | undefined;
@@ -145,13 +186,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ...cacheData, connected: true, from_cache: true });
     }
 
-    // Fetch recent data points in parallel. Time filtering happens in JS below
-    // because the Health Connect REST API v4 rejects startTime/endTime as query params.
-    const [allSleep, allSteps, allExercise, allHr] = await Promise.all([
+    // Fetch recent data points + past-week health logs for readiness baseline in parallel.
+    // HRV attempt is best-effort — many devices don't write it to Health Connect.
+    const [allSleep, allSteps, allExercise, allHr, allHrv, historySnap] = await Promise.all([
       fetchDataPoints("sleep",                    token),
       fetchDataPoints("steps",                    token),
       fetchDataPoints("exercise",                 token),
       fetchDataPoints("daily-resting-heart-rate", token),
+      fetchDataPoints("heart-rate-variability",   token).catch(() => []),
+      db.collection(`users/${uid}/health`).orderBy("date", "desc").limit(7).get(),
     ]);
 
     // ── SLEEP ────────────────────────────────────────────────────────────────
@@ -273,6 +316,33 @@ export async function GET(req: NextRequest) {
       return { name, duration_minutes, calories };
     });
 
+    // ── READINESS ────────────────────────────────────────────────────────────
+    // Extract 7-day RHR and sleep history from stored logs (excludes today).
+    const rhrHistory: number[] = [];
+    const sleepHistory: number[] = [];
+    for (const doc of historySnap.docs) {
+      const d = doc.data();
+      if (d.resting_heart_rate != null) rhrHistory.push(d.resting_heart_rate as number);
+      if (d.sleep_quality != null) sleepHistory.push(d.sleep_quality as number);
+    }
+
+    // Best HRV RMSSD reading from today's window (Health Connect stores ms)
+    let hrv: number | null = null;
+    if (allHrv.length > 0) {
+      const todayHrvPoints = allHrv.filter((pt) => {
+        const ts = (pt.heartRateVariabilityRmssd as Record<string, unknown> | undefined)
+          ?.time as string | undefined;
+        return ts ? new Date(ts).getTime() >= stepsStart : false;
+      });
+      if (todayHrvPoints.length > 0) {
+        const val = (todayHrvPoints[0].heartRateVariabilityRmssd as Record<string, unknown> | undefined)
+          ?.milliseconds;
+        if (val !== undefined) hrv = parseFloat(val as string) || null;
+      }
+    }
+
+    const readiness_score = computeReadiness({ todayRhr: resting_heart_rate, rhrHistory, sleepHistory, hrv });
+
     const result = {
       connected: true,
       sleep_hours,
@@ -281,6 +351,7 @@ export async function GET(req: NextRequest) {
       steps,
       resting_heart_rate,
       exercises,
+      readiness_score,
       fetched_at: new Date().toISOString(),
     };
 

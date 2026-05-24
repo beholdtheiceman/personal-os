@@ -77,6 +77,10 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      // ── Compute energy_level from readiness (backward compat for AI routes) ─
+      const readiness_score = typeof data.readiness_score === "number" ? data.readiness_score : null;
+      const energy_level = readiness_score !== null ? Math.max(1, Math.round(readiness_score / 10)) : 5;
+
       // ── Build notes string from available data ─────────────────────────────
       const noteParts: string[] = ["Auto-synced"];
       if (data.steps != null) {
@@ -96,7 +100,8 @@ export async function GET(req: NextRequest) {
         sleep_quality: data.sleep_quality ?? 5,
         exercise_done: (data.exercises?.length ?? 0) > 0,
         exercise_description: exerciseNames,
-        energy_level: 5,
+        energy_level,
+        ...(readiness_score !== null && { readiness_score }),
         notes,
         logged_at: new Date().toISOString(),
       });

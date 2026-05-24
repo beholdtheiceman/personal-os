@@ -224,6 +224,7 @@ export interface HealthLog {
   exercise_done: boolean;
   exercise_description: string;
   energy_level: number;
+  readiness_score?: number; // 0-100, computed from RHR trend + sleep history + HRV
   notes: string;
   logged_at: string;
 }
