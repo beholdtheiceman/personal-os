@@ -142,6 +142,25 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   goal_inactivity:   { enabled: false },
 };
 
+// Deep-merges a stored settings doc onto the defaults. A shallow spread
+// ({ ...DEFAULT, ...stored }) lets a partial stored category — e.g.
+// progress_midday: { enabled: true } with no time — clobber the default's
+// time, leaving time undefined and silently disabling the notification.
+export function mergeNotificationSettings(
+  stored: Record<string, unknown> | undefined | null
+): NotificationSettings {
+  const defaults = DEFAULT_NOTIFICATION_SETTINGS as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...defaults };
+  for (const [key, value] of Object.entries(stored ?? {})) {
+    const def = defaults[key];
+    out[key] =
+      def && typeof def === "object" && value && typeof value === "object" && !Array.isArray(value)
+        ? { ...(def as object), ...(value as object) }
+        : value;
+  }
+  return out as unknown as NotificationSettings;
+}
+
 // ─── XP / Gamification ───────────────────────────────────────────────────────
 export type XPEventType =
   | "habit_complete"
@@ -647,4 +666,51 @@ export interface AIInsight {
   content: string;          // Markdown insight text from Claude
   data_sources: string[];   // which data streams had data
   generated_at: string;
+}
+
+// ─── Achievements ─────────────────────────────────────────────────────────────
+export type AchievementCategory =
+  | "tasks"
+  | "habits"
+  | "health"
+  | "journal"
+  | "goals_finance"
+  | "reading"
+  | "people"
+  | "ai_app"
+  | "secret";
+
+export type AchievementId =
+  // Tasks
+  | "first_blood" | "triple_digits" | "the_machine" | "ahead_of_the_curve"
+  // Habits
+  | "creature_of_habit" | "week_one" | "the_long_game" | "unbreakable" | "perfect_day"
+  // Health
+  | "body_check" | "ten_k_club" | "full_tank" | "sweat_equity" | "pr_breaker" | "century_club"
+  // Journal
+  | "dear_diary" | "stream_of_consciousness" | "thirty_days_of_truth"
+  // Goals & Finance
+  | "milestone_reached" | "goal_digger" | "in_the_black" | "nest_egg"
+  // Reading
+  | "page_turner" | "bibliophile" | "highlight_reel"
+  // People
+  | "social_network" | "never_forget" | "people_person"
+  // AI & App
+  | "hello_world" | "power_user" | "capture_artist" | "connected"
+  // Secret
+  | "night_owl" | "early_bird" | "the_completionist";
+
+export interface AchievementDef {
+  id: AchievementId;
+  title: string;
+  description: string;
+  gamerscore: number;
+  category: AchievementCategory;
+  secret?: boolean;
+}
+
+export interface AchievementUnlock {
+  id: AchievementId;
+  unlockedAt: string;   // ISO
+  gamerscore: number;
 }

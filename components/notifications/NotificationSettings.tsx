@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
-import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
+import { DEFAULT_NOTIFICATION_SETTINGS, mergeNotificationSettings } from "@/types";
 import type { NotificationSettings, NotificationCategory } from "@/types";
 import {
   RiNotificationLine, RiNotificationOffLine, RiSunLine, RiFireLine,
@@ -147,7 +147,7 @@ export default function NotificationSettings() {
     if (!user) return;
     getDoc(doc(db, `users/${user.uid}/settings/notifications`)).then((snap) => {
       if (snap.exists()) {
-        setSettings({ ...DEFAULT_NOTIFICATION_SETTINGS, ...(snap.data() as Partial<NotificationSettings>) });
+        setSettings(mergeNotificationSettings(snap.data()));
       }
       setLoaded(true);
     });

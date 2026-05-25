@@ -33,17 +33,19 @@ export async function sendPushToUser(uid: string, payload: PushPayload): Promise
   const tokenDocs = tokensSnap.docs.map((d) => ({ id: d.id, token: d.data().token as string }));
   const messaging = getAdminMessaging();
   const { title, body = "", tag = "default", data = {} } = payload;
+  const link = data.url ?? "/";
 
   const results = await Promise.allSettled(
     tokenDocs.map(({ token }) =>
+      // Data-only message: the service worker's onBackgroundMessage renders the
+      // single notification. Including a `notification` payload here would make
+      // FCM auto-display a SECOND copy on top of the SW's — the duplicate bug.
       messaging.send({
         token,
-        notification: { title, body },
+        data: { ...data, title, body, tag },
         webpush: {
-          notification: { title, body, icon: "/icons/icon.svg", badge: "/icons/icon.svg", tag },
-          fcmOptions: { link: "/" },
+          fcmOptions: { link },
         },
-        data,
       })
     )
   );

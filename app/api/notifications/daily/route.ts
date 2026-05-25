@@ -12,8 +12,7 @@ import {
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
-import type { NotificationSettings } from "@/types";
-import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
+import { mergeNotificationSettings } from "@/types";
 
 export async function GET(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
@@ -31,10 +30,7 @@ export async function GET(req: NextRequest) {
     const fired: string[] = [];
 
     const settingsDoc = await db.doc(`users/${uid}/settings/notifications`).get();
-    const settings: NotificationSettings = {
-      ...DEFAULT_NOTIFICATION_SETTINGS,
-      ...(settingsDoc.data() as Partial<NotificationSettings> ?? {}),
-    };
+    const settings = mergeNotificationSettings(settingsDoc.data());
 
     const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();
     if (tokensSnap.empty) continue;

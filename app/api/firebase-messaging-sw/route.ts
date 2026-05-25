@@ -17,15 +17,18 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();
 
-// Handle background push messages (app is closed or in background)
+// Handle background push messages (app is closed or in background).
+// Messages are data-only (see lib/send-push.ts), so read title/body/tag from
+// payload.data. Passing tag lets repeat reminders replace instead of stacking.
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title ?? 'Personal OS';
-  const body  = payload.notification?.body  ?? '';
+  const d = payload.data || {};
+  const title = d.title || 'Personal OS';
   self.registration.showNotification(title, {
-    body,
+    body:  d.body || '',
     icon:  '/icons/icon.svg',
     badge: '/icons/icon.svg',
-    data:  payload.data ?? {},
+    tag:   d.tag || undefined,
+    data:  d,
   });
 });
 
