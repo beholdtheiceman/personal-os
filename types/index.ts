@@ -589,6 +589,7 @@ export interface Book {
   highlights: string[];
   takeaways?: string;     // Claude summary or manual
   cover_url?: string;
+  url?: string;
   tags?: string[];
   created_at: string;
   updated_at: string;
@@ -713,4 +714,42 @@ export interface AchievementUnlock {
   id: AchievementId;
   unlockedAt: string;   // ISO
   gamerscore: number;
+}
+
+// ─── News Feed ────────────────────────────────────────────────────────────────
+export type NewsItemStatus = "unread" | "read" | "saved" | "dismissed";
+export type NewsFeedType   = "rss" | "reddit";
+
+export interface NewsFeed {
+  id: string;
+  name: string;
+  url: string;
+  type: NewsFeedType;
+  tags: string[];
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface NewsItem {
+  id: string;                // base64(feedId + "|" + url)
+  feed_id: string;
+  feed_name: string;
+  title: string;
+  url: string;
+  description: string;
+  published_at: string;      // ISO
+  fetched_at: string;        // ISO
+  tags: string[];
+  relevance_score: number;   // 1–10
+  status: NewsItemStatus;
+  starred?: boolean;
+  saved_at?: string;         // ISO, set when status → "saved"
+}
+
+export interface NewsBrief {
+  date: string;             // YYYY-MM-DD (also doc ID)
+  summary: string;          // 4-5 sentence plain prose
+  sources: { title: string; url: string }[];
+  generated_at: string;     // ISO
+  article_count: number;
 }

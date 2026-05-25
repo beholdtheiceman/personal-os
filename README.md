@@ -159,6 +159,14 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - Notes, tags, links per episode
 - Chat tools: add episode, update status, list episodes
 
+### 📰 News Feed
+- RSS and Reddit JSON feeds fetched hourly via Vercel cron; classified by Claude Haiku (relevance 1–10, topic tags)
+- `/news` page with category tabs, relevance-sorted list, save-to-reading-list, dismiss, and star articles
+- **Star feedback loop** — starring articles tags them; those tags boost Haiku relevance scores on the next refresh cycle
+- **Daily AI brief** — Claude Sonnet generates a 4–5 sentence prose summary of top stories each morning; cached in Firestore, shown collapsibly at the top of `/news`
+- **Dashboard widget** — displays the brief summary + 3 source links; falls back to top 3 unread articles if no brief exists yet
+- Chat tools: `get_news_feed`, `save_article`, `add_news_feed`
+
 ### 📊 Proactive AI Insights
 - Daily cron uses Claude Opus to analyze 30 days of cross-domain data
 - Surfaces correlations across mood, health, hydration, habits, workouts, nutrition, time, body metrics
@@ -474,6 +482,9 @@ users/{uid}/
 ├── memory/{entryId}
 ├── second_brain/{path}
 ├── inbox/{itemId}            # Second Brain quick capture
+├── news_feeds/{feedId}
+├── news_items/{itemId}        # { title, url, feed_name, tags, relevance_score, status, starred, fetched_at }
+├── news_brief/{YYYY-MM-DD}   # Daily AI synopsis (Claude Sonnet)
 ├── weekly_reviews/latest
 ├── achievements/{achievementId} # { id, unlockedAt, gamerscore }
 ├── xp/summary
@@ -514,6 +525,7 @@ All crons run hourly (`0 * * * *`) and check local time internally, or at fixed 
 | `0 3 * * *` | `/api/health/auto-sync` | Pulls Google Health data for all connected users, writes daily health doc if no manual entry |
 | `0 4 * * *` | `/api/plaid/sync` | Syncs Plaid transactions for all connected bank accounts |
 | `0 5 * * 0` | `/api/contacts/sync` | Weekly Google Contacts sync — upserts all contacts via People API |
+| `0 * * * *` | `/api/news/refresh` | Fetches RSS/Reddit feeds for all users, classifies articles with Claude Haiku |
 
 ---
 

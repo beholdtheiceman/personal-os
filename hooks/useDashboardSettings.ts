@@ -25,6 +25,7 @@ export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "unsubscribe",          label: "Unsubscribe Manager" },
   { id: "gmail",                label: "Gmail Inbox" },
   { id: "achievements",         label: "Achievements" },
+  { id: "news_feed",            label: "News Feed" },
 ];
 
 export const DEFAULT_WIDGET_ORDER = DASHBOARD_WIDGETS.map((w) => w.id);

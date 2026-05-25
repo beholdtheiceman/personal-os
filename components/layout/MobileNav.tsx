@@ -9,7 +9,7 @@ import {
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
   RiTimeLine, RiFocusLine, RiLightbulbLine,
-  RiMicLine, RiBook2Line, RiSettings3Line, RiTrophyLine,
+  RiMicLine, RiBook2Line, RiSettings3Line, RiTrophyLine, RiNewspaperLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -56,6 +56,7 @@ const MORE_SECTIONS = [
     items: [
       { href: "/content",  label: "Content",  icon: RiMicLine },
       { href: "/reading",  label: "Reading",  icon: RiBook2Line },
+      { href: "/news",     label: "News",     icon: RiNewspaperLine },
       { href: "/media",    label: "Media",    icon: RiMusicLine },
       { href: "/chat",         label: "Chat",         icon: RiRobot2Line },
       { href: "/memory",       label: "Memory",       icon: RiDatabase2Line },

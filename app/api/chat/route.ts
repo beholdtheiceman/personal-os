@@ -2052,6 +2052,49 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["name_search"],
     },
   },
+
+  // ── News Feed ──────────────────────────────────────────────────────────────
+  {
+    name: "get_news_feed",
+    description: "Get recent news items from the user's personalized feed. Optionally filter by tag or status.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", description: "unread | read | saved | dismissed. Defaults to unread." },
+        tag:    { type: "string", description: "Filter by tag e.g. 'tech', 'finance', 'world'." },
+        limit:  { type: "number", description: "Max items to return. Defaults to 10." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "save_article",
+    description: "Save a news article to the user's reading list.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:     { type: "string" },
+        url:       { type: "string", description: "Article URL." },
+        feed_name: { type: "string", description: "Source publication or feed name." },
+        tags:      { type: "array", items: { type: "string" }, description: "Topic tags." },
+      },
+      required: ["title", "url"],
+    },
+  },
+  {
+    name: "add_news_feed",
+    description: "Add a new RSS or Reddit feed to the user's newsfeed sources.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Display name for the feed." },
+        url:  { type: "string", description: "RSS feed URL, or Reddit subreddit slug e.g. 'programming'." },
+        type: { type: "string", description: "rss or reddit." },
+        tags: { type: "array", items: { type: "string" }, description: "Category labels e.g. ['tech']." },
+      },
+      required: ["name", "url", "type"],
+    },
+  },
 ];
 
 // ── Tool execution ─────────────────────────────────────────────────────────────
@@ -5097,6 +5140,53 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         const msg = e instanceof Error ? e.message : "Unknown error";
         return `Calendar operation failed: ${msg}`;
       }
+    }
+
+    // ── News Feed ────────────────────────────────────────────────────────────
+    case "get_news_feed": {
+      const status = (input.status as string) || "unread";
+      const lim    = (input.limit  as number) || 10;
+      const tag    = input.tag as string | undefined;
+
+      let q = db.collection(`users/${uid}/news_items`).where("status", "==", status);
+      if (tag) q = q.where("tags", "array-contains", tag);
+      const snap = await q.orderBy("relevance_score", "desc").limit(lim).get();
+
+      if (snap.empty) return `No ${status} news items found.`;
+      const lines = snap.docs.map((d) => {
+        const n = d.data();
+        return `- [${n.relevance_score}/10] **${n.title}** (${n.feed_name}) — ${n.url}`;
+      });
+      return `**${status} news** (${lines.length} items):\n${lines.join("\n")}`;
+    }
+
+    case "save_article": {
+      const now = new Date().toISOString();
+      await db.collection(`users/${uid}/books`).add({
+        title:      input.title as string,
+        author:     (input.feed_name as string) || "Unknown",
+        status:     "want_to_read",
+        highlights: [],
+        url:        input.url as string,
+        tags:       (input.tags as string[]) ?? [],
+        created_at: now,
+        updated_at: now,
+      });
+      return `"${input.title as string}" saved to your reading list.`;
+    }
+
+    case "add_news_feed": {
+      const now = new Date().toISOString();
+      const ref = await db.collection(`users/${uid}/news_feeds`).add({
+        name:       input.name as string,
+        url:        input.url  as string,
+        type:       input.type as string,
+        tags:       (input.tags as string[]) ?? [],
+        enabled:    true,
+        created_at: now,
+      });
+      await ref.update({ id: ref.id });
+      return `Feed "${input.name as string}" added. It will appear in your next hourly refresh.`;
     }
 
     default:

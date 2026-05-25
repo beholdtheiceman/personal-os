@@ -43,6 +43,10 @@
     {
       "path": "/api/contacts/sync",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/news/refresh",
+      "schedule": "0 * * * *"
     }
   ]
 }
