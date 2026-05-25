@@ -29,6 +29,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       if (u) {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        // Create/touch the users/{uid} parent document so cron jobs that
+        // iterate db.collection("users") can find this user. Subcollection
+        // writes alone do NOT create the parent doc in Firestore.
+        setDoc(doc(db, "users", u.uid), {
+          uid: u.uid,
+          email: u.email ?? null,
+          displayName: u.displayName ?? null,
+          last_seen: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
         setDoc(doc(db, `users/${u.uid}/settings/timezone`), {
           current_timezone: tz,
           updated_at: new Date().toISOString(),
