@@ -7,7 +7,24 @@ import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 import { format, getDay } from "date-fns";
-import { getUserLocalDate } from "@/lib/timezone";
+import { getLocalTimeInfo } from "@/lib/timezone";
+
+// Returns RFC 3339 start/end-of-day strings in the user's local timezone so the
+// Google Calendar query covers exactly the user's local day, not UTC midnight→midnight.
+function localDayBounds(date: string, tz: string): { start: string; end: string } {
+  // Use noon UTC as a safe reference point away from DST transition boundaries.
+  const ref = new Date(`${date}T12:00:00Z`);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    timeZoneName: "longOffset",
+  }).formatToParts(ref);
+  const tzName = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+00:00";
+  const offset = tzName.replace("GMT", "") || "+00:00"; // e.g. "-04:00" or "+05:30"
+  return {
+    start: `${date}T00:00:00${offset}`,
+    end:   `${date}T23:59:59${offset}`,
+  };
+}
 
 function isCronAuthed(req: NextRequest): boolean {
   return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
@@ -26,7 +43,7 @@ async function getUidFromToken(req: NextRequest): Promise<string | null> {
   }
 }
 
-async function collectContext(uid: string, today: string) {
+async function collectContext(uid: string, today: string, tz: string) {
   const db = getAdminDb();
   const todayDow = getDay(new Date(today + "T12:00:00")); // 0=Sun
 
@@ -71,8 +88,7 @@ async function collectContext(uid: string, today: string) {
           await tokenDoc.ref.update({ access_token: accessToken, expires_at: Date.now() + 3600 * 1000 });
         }
       }
-      const startOfDay = `${today}T00:00:00Z`;
-      const endOfDay = `${today}T23:59:59Z`;
+      const { start: startOfDay, end: endOfDay } = localDayBounds(today, tz);
       const calRes = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${startOfDay}&timeMax=${endOfDay}&singleEvents=true&orderBy=startTime&maxResults=10`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -108,13 +124,13 @@ async function collectContext(uid: string, today: string) {
   return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines };
 }
 
-async function generateBriefing(uid: string, today: string): Promise<{
+async function generateBriefing(uid: string, today: string, tz: string): Promise<{
   content: string;
   calendar_events: number;
   tasks_flagged: number;
   habits_due: number;
 }> {
-  const ctx = await collectContext(uid, today);
+  const ctx = await collectContext(uid, today, tz);
   const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
   const taskLines = ctx.tasks.length
@@ -130,7 +146,7 @@ async function generateBriefing(uid: string, today: string): Promise<{
     : "No calendar events today";
 
   const healthLine = ctx.latestHealth
-    ? `Last logged: ${ctx.latestHealth.date} — Sleep ${ctx.latestHealth.sleep_hours}h, Energy ${ctx.latestHealth.energy_level}/10${ctx.latestHealth.exercise_done ? ", exercised" : ""}`
+    ? `${ctx.latestHealth.date === today ? "Today" : `Last logged ${ctx.latestHealth.date}`}: Sleep ${ctx.latestHealth.sleep_hours}h, Energy ${ctx.latestHealth.energy_level}/10${ctx.latestHealth.exercise_done ? ", exercised" : ""}`
     : "No recent health log";
 
   const goalLines = ctx.goals.length
@@ -208,13 +224,11 @@ export async function POST(req: NextRequest) {
   if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Use the timezone from the request header (set by the client) so "today" matches the user's local date
-  const clientTz = req.headers.get("X-Timezone");
-  const today = clientTz
-    ? new Date().toLocaleDateString("en-CA", { timeZone: clientTz })
-    : format(new Date(), "yyyy-MM-dd");
+  const clientTz = req.headers.get("X-Timezone") ?? "UTC";
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: clientTz });
 
   try {
-    const result = await generateBriefing(uid, today);
+    const result = await generateBriefing(uid, today, clientTz);
     return NextResponse.json(result);
   } catch (err) {
     console.error("Daily briefing error:", err);
@@ -234,7 +248,9 @@ export async function GET(req: NextRequest) {
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
     try {
-      const today = await getUserLocalDate(uid);
+      const timeInfo = await getLocalTimeInfo(uid);
+      const today = timeInfo.localDate;
+      const tz = timeInfo.tz;
 
       // Skip if briefing already generated for today in user's local timezone
       const existing = await db.doc(`users/${uid}/daily_briefings/${today}`).get();
@@ -243,7 +259,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      await generateBriefing(uid, today);
+      await generateBriefing(uid, today, tz);
       results[uid] = `ok (${today})`;
     } catch (err) {
       results[uid] = `error: ${err}`;
