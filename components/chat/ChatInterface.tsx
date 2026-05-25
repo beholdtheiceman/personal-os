@@ -16,10 +16,11 @@ import SkillPicker from "./SkillPicker";
 import ActiveSkillBadge from "./ActiveSkillBadge";
 import { useSkills } from "@/hooks/useSkills";
 import type { Skill } from "@/lib/skills";
+import { useTTS } from "@/hooks/useTTS";
 import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiCameraLine, RiCloseLine, RiAddLine, RiChat1Line,
-  RiEditLine, RiMenuLine,
+  RiEditLine, RiMenuLine, RiVolumeUpLine, RiVolumeMuteLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 import type { ChatMessage } from "@/types";
@@ -252,6 +253,9 @@ export default function ChatInterface() {
     return ref;
   };
 
+  // ── TTS ───────────────────────────────────────────────────────────────────
+  const tts = useTTS();
+
   // ── Skills ───────────────────────────────────────────────────────────────
   const skills = useSkills(systemPrompt);
 
@@ -305,6 +309,7 @@ export default function ChatInterface() {
   const sendMessage = async (text: string) => {
     if ((!text.trim() && !capturedImage) || !user || loading) return;
     if (text.trim() === "/end") { skills.dismissSkill(); setInput(""); return; }
+    tts.stop();
 
     // Create a new chat if none is active
     let chatId = activeChatId;
@@ -384,6 +389,7 @@ export default function ChatInterface() {
       };
 
       setMessages((prev) => prev.map((m) => m.id === placeholderId ? assistantMsg : m));
+      tts.speakResponse(assistantMsg.content);
       await saveMessage(chatId, {
         role: "assistant",
         content: assistantMsg.content,
@@ -707,6 +713,15 @@ export default function ChatInterface() {
               }`}
             >
               {recording ? <RiMicOffLine className="w-5 h-5" /> : <RiMicLine className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={tts.toggle}
+              className={`p-2.5 rounded-lg border transition-colors ${
+                tts.enabled ? "bg-accent/20 text-accent border-accent/30" : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
+              }`}
+              title={tts.enabled ? "Voice on — click to mute" : "Enable voice responses"}
+            >
+              {tts.enabled ? <RiVolumeUpLine className="w-5 h-5" /> : <RiVolumeMuteLine className="w-5 h-5" />}
             </button>
             <button
               onClick={() => sendMessage(input)}

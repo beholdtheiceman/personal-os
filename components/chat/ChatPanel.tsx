@@ -14,7 +14,7 @@ import LoadingDots from "@/components/ui/LoadingDots";
 import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiAddLine, RiChat1Line, RiArrowRightSLine, RiCloseLine,
-  RiExternalLinkLine,
+  RiExternalLinkLine, RiVolumeUpLine, RiVolumeMuteLine,
 } from "react-icons/ri";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -23,6 +23,7 @@ import SkillPicker from "./SkillPicker";
 import ActiveSkillBadge from "./ActiveSkillBadge";
 import { useSkills } from "@/hooks/useSkills";
 import type { Skill } from "@/lib/skills";
+import { useTTS } from "@/hooks/useTTS";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 import { useIsTouch } from "@/hooks/useIsTouch";
 import type { ChatMessage } from "@/types";
@@ -158,6 +159,9 @@ export default function ChatPanel() {
     });
   };
 
+  // ── TTS ───────────────────────────────────────────────────────────────────
+  const tts = useTTS();
+
   // ── Skills ───────────────────────────────────────────────────────────────
   const skills = useSkills(systemPrompt);
 
@@ -210,6 +214,7 @@ export default function ChatPanel() {
   const sendMessage = async (text: string) => {
     if (!text.trim() || !user || loading) return;
     if (text.trim() === "/end") { skills.dismissSkill(); setInput(""); return; }
+    tts.stop();
 
     let chatId = activeChatId;
     if (!chatId) {
@@ -279,6 +284,7 @@ export default function ChatPanel() {
       };
 
       setMessages((prev) => prev.map((m) => (m.id === placeholderId ? assistantMsg : m)));
+      tts.speakResponse(assistantMsg.content);
       await saveMessage(chatId, {
         role: "assistant",
         content: assistantMsg.content,
@@ -498,6 +504,17 @@ export default function ChatPanel() {
                 title={recording ? "Stop recording" : "Voice input"}
               >
                 {recording ? <RiMicOffLine className="w-4 h-4" /> : <RiMicLine className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={tts.toggle}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  tts.enabled
+                    ? "text-accent bg-accent/20"
+                    : "text-text-secondary hover:text-text-primary hover:bg-white/10"
+                }`}
+                title={tts.enabled ? "Voice on — click to mute" : "Enable voice responses"}
+              >
+                {tts.enabled ? <RiVolumeUpLine className="w-4 h-4" /> : <RiVolumeMuteLine className="w-4 h-4" />}
               </button>
               <button
                 onClick={() => sendMessage(input)}
