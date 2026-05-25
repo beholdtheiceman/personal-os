@@ -12,7 +12,7 @@ import {
   RiMoreLine, RiLogoutBoxLine, RiSettings3Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
   RiTimeLine, RiFocusLine, RiLightbulbLine,
-  RiMicLine, RiBook2Line,
+  RiMicLine, RiBook2Line, RiTrophyLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -65,8 +65,9 @@ const MORE_SECTIONS = [
   {
     label: "Tools",
     items: [
-      { href: "/chat",   label: "Chat (Full)", icon: RiRobot2Line },
-      { href: "/memory", label: "Memory",      icon: RiDatabase2Line },
+      { href: "/chat",         label: "Chat (Full)",  icon: RiRobot2Line },
+      { href: "/memory",       label: "Memory",       icon: RiDatabase2Line },
+      { href: "/achievements", label: "Achievements", icon: RiTrophyLine },
     ],
   },
 ];

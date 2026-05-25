@@ -59,14 +59,104 @@
 - **Grocery Price Checker** — "Price Check" button on meal planner shopping list tab; store picker (6 quick-select + custom); Claude + Tavily agentic loop searches for current prices; results shown inline per item with store total banner; supports side-by-side comparison of up to 2 stores
 - **PWA Share Target** — `share_target` in `manifest.json`; `/share` page receives URL/title/text and routes to reading list, Second Brain, task, or chat; appears in Android share sheet when PWA is installed
 - **Browser Extension** — `extension/` folder: Chrome MV3, reads active tab URL+title, opens `/share` as a 500×620 popup window; reuses existing browser session (no separate auth); load unpacked at `chrome://extensions`
-- **Dashboard customization** — Show/hide and reorder 19 dashboard widgets; `useDashboardSettings` hook persists `widgetOrder` + `hiddenWidgets` to `users/{uid}/settings/dashboard`; slide-in `DashboardCustomizer` panel with eye-icon toggles + ↑↓ reorder arrows; "Customize" button in dashboard header; new widgets auto-appended to saved order
+- **Dashboard customization** — Show/hide and reorder 20 dashboard widgets; `useDashboardSettings` hook persists `widgetOrder` + `hiddenWidgets` to `users/{uid}/settings/dashboard`; slide-in `DashboardCustomizer` panel with eye-icon toggles + ↑↓ reorder arrows; "Customize" button in dashboard header; new widgets auto-appended to saved order
+
+- **Achievements** — Xbox-style milestone system (35 achievements, ~740G Gamerscore); 3 point tiers (10/25/50G); static definitions in `lib/achievements.ts` across 9 categories (Tasks, Habits, Health, Journal, Goals & Finance, Reading, People, AI & App, Secret); unlock state in `users/{uid}/achievements/{achievementId}`; shared `checkAndAward(uid, id)` helper with Firestore dedup, Web Audio unlock sound (`/sounds/achievement-unlock.mp3`), and toast notification; 3 secret achievements (Night Owl, Early Bird, The Completionist — auto-checked after every unlock); `/achievements` page with full category grid (locked = dimmed + lock icon, secret+locked = ???); dashboard widget showing last 3 unlocks + running Gamerscore; wired into Tasks, Habits, Health, Journal, Chat (ChatInterface + ChatPanel), Hydration, Workouts
 
 ---
 
 ## 📋 Roadmap
 
+### Gamification (Beyond XP)
+- **Streak XP multipliers** — habit streaks that reach 7 days apply a 1.5× XP multiplier on that habit; 30-day streaks apply 2×; multipliers stack with the existing streak bonus toasts and tie directly into the `Week One` / `The Long Game` / `Unbreakable` achievement milestones (hitting the achievement threshold also flips on the multiplier)
+- **Daily & weekly challenges** — 3 rotating daily challenges generated each morning (e.g. "Complete 2 tasks", "Hit your water goal", "Log a meal before noon"); weekly challenges are larger ("4 workouts this week", "Finish a book"); challenges are surfaced on the dashboard and in the morning briefing; completing them awards bonus XP and can drive progress toward existing achievements (e.g. daily challenges nudge toward `Perfect Day`)
+- **Boss Days** — monthly "Boss Day" challenge that appears on the 1st; harder composite goal (full morning routine + 3 tasks + all habits + journal all in one day); completing it gives a large XP burst + a unique achievement; fills the motivation gap between the 30-day and 100-day habit streak achievements
+- **Life Balance Score** — composite score (0–100) across 5 domains: Health, Productivity, Relationships, Finance, Creativity; calculated from recent activity in each area (e.g. workouts logged, tasks completed, interactions logged, budget status, content/reading entries); shown on the dashboard as a ring or bar; low scores in a domain surface a gentle nudge; rewards you for whole-life awareness not just grinding one area
+- **Personal best leaderboard** — "Your best week: 2,340 XP — this week: 1,890"; shown in the weekly AI review and on the XP/level card; competes only against your own history; no external comparison
+- **Cosmetic rewards** — unlock new dashboard accent colors or UI themes at Gamerscore milestones (250G, 500G, 750G, 1,100G); purely visual, no functional impact; gives the Gamerscore total a destination and makes the `/achievements` page feel more rewarding to check
+- **Titles / Prestige labels** — domain-earned titles shown on the dashboard profile header (e.g. "Athlete" at 50 workouts, "Scholar" at 10 books finished, "Chronicler" at 30 journal entries); titles change dynamically as activity patterns shift; personality-driven alternative to purely numeric level display
+- **D&D Character Sheet** *(needs scoping before implementation)* — full RPG-style character sheet at `/character`; 6 core stats (STR, DEX, CON, INT, WIS, CHA) each fed by specific app activity; derived skills under each stat that level semi-independently; class auto-assigned from top two stats (Warrior, Wizard, Ranger, Monk, Bard, Cleric, Rogue, Paladin); HP as a CON-driven resilience score (sleep + hydration + mood); feats unlocked at stat milestones that grant temporary bonuses; background chosen at setup for flavor bonuses; existing achievements slot in as the feats section of the sheet; radar/hexagon chart as the ability score overview; dark glass layout styled like a real D&D sheet. Architecture: runs alongside (not replacing) the existing global XP/level system — every action awards global XP as today and also increments the relevant stat(s); a stat weight map in a single config file (e.g. `lib/character.ts`) routes each activity type to one or more stats with weighted increments (e.g. workout → STR +3, CON +1; journal → WIS +2; Bible/church → WIS +2, CHA +1); multi-stat activities are intentional and encouraged. Progression: logarithmic curve — early gains come quickly, later gains require sustained long-term effort; no hard cap; designed to still feel meaningful at year 10 and year 25, not just the first few months. Onboarding: short character creation screen (6–8 questions) at first launch establishes honest base stats so starting values reflect who you actually are today rather than resetting everyone to 1. Scoping questions still to answer: (1) do stats decay during extended inactivity — lean toward no but the Life OS framing (decades-long, not a campaign) makes permanent gains feel more appropriate; a visual "inactive domain" warning may be sufficient instead of actual decay; (2) feat design — what bonuses make sense for a life OS without feeling arbitrary; (3) how the /character page integrates into nav given ongoing consolidation efforts
+
+### Subscriptions — Enhancement Pass
+See [`SUBSCRIPTION_ENHANCEMENTS.md`](./SUBSCRIPTION_ENHANCEMENTS.md) for the full implementation plan with file-by-file details and code structure.
+
+- **`lib/streaming-services.ts`** — Registry of known streaming services (Netflix, Disney+, Apple TV+, Prime Video, Max, Peacock, Paramount+, Hulu) with TMDb provider IDs, cancel URLs, and account quick links; auto-populates `tmdbProviderId` and `url` on the subscription form when a known service name is entered
+- **Auto-advance renewal dates** — On load, active subscriptions with a past `next_billing_date` are silently advanced by one billing cycle via `updateDoc`; extends `lib/recurrence.ts` with `nextSubscriptionDate` and `advancedBillingDate` helpers covering weekly/monthly/quarterly/yearly cycles
+- **Renewal push notifications** — New `subscription_renewal` category in `NotificationSettings` (15th notification type) with configurable `time` and `days_before`; `subscriptionRenewalHandler` in `lib/notification-handlers.ts`; wired into the daily notification cron alongside existing 14 categories
+- **TMDb content API** — `app/api/subscriptions/content/route.ts`; fetches movies and TV shows currently available on a streaming provider via The Movie Database discover endpoints; interleaved results sorted by popularity; no date filter (shows full catalog depth, not just new releases); requires `TMDB_API_KEY` env var
+- **Watchlist** — New Firestore collection `users/{uid}/watchlist`; `WatchlistItem` type in `types/index.ts`; `useWatchlist` hook with `toggleWatchlistItem`, `isOnWatchlist`, `getCountForSubscription`; watchlist count badge surfaced on subscription cards in `SubscriptionTracker`
+- **Content Browser** — `components/subscriptions/ContentBrowser.tsx`; poster grid with hover overlay (plot summary + watchlist toggle); "Worth keeping?" verdict card showing cost-per-interested-title with categorical verdict (great value / decent / consider cancelling); opens from a Browse button on streaming subscription rows
+- **Account quick links** — Per-service links (Account, Billing, Cancel) from `lib/streaming-services.ts` surfaced in the subscription form and/or row detail view
+
 ### Finance
 - **Plaid Production approval** — Sandbox works; applying for Plaid Development/Production so live bank data flows automatically
+- **Spending trend predictions** — AI mid-month alert ("you're on pace to overspend dining by $80") using current transactions vs. budget limits
+
+### Extension
+- **Right-click context menu** — capture selected text directly to Second Brain, journal, or task without opening the popup; uses Chrome `contextMenus` API (requires background service worker + `contextMenus` permission)
+- **Keyboard shortcut** — trigger capture without clicking the toolbar icon (e.g. `Alt+Shift+C`); declared in `manifest.json` `commands`
+- **Badge count** — show tasks due today or a live unread count on the toolbar icon; keeps the extension useful even when you're not capturing
+
+### People / Relationships CRM
+- **Relationship health score** — numeric score derived from interaction frequency vs. contact frequency target; surfaced per-contact and as a dashboard summary; replaces binary "needs attention" flag
+- **AI gift suggestions** — Claude generates gift ideas from the notes, interests, and interaction history you've logged for a person; accessible from the person detail view and via chat
+
+### Tasks / Productivity
+- **Eisenhower matrix view** — 2×2 urgent/important grid as an alternate view on the Tasks page; mapped from existing priority score + due date
+- **Task dependencies** — mark one task as blocked by another; blocked tasks visually suppressed until prerequisite is complete
+- **Context tags** — home / work / errands / etc. tags with a one-tap filtered view; complements existing tag system
+
+### Voice & Speech
+See [`docs/VOICE_TTS.md`](./docs/VOICE_TTS.md) and [`docs/REALTIME_API.md`](./docs/REALTIME_API.md) for full implementation details.
+
+- **Voice responses / TTS** *(quick win — 2–4 hours)* — Speak Claude's text responses back to the user using browser `SpeechSynthesis` (Option A, zero cost) or OpenAI TTS API (Option B, better quality). Add a speaker toggle to the chat toolbar. Strip markdown before speaking. Store preference in Firestore settings alongside notification prefs. See `docs/VOICE_TTS.md`.
+- **OpenAI Realtime API** *(3–5 days, depends on TTS first)* — Replace the Web Speech API → text → Claude pipeline with a true bidirectional audio WebSocket. Enables sub-300ms response latency, natural interruptions, and VAD (voice activity detection — no button needed, just talk). Requires: ephemeral session token endpoint at `/api/realtime/session`; `AudioWorklet` for PCM16 audio capture; streaming audio playback; `/api/tools/execute` endpoint so the browser can fire Firestore-writing tools server-side; extract `lib/chat-tools.ts` and `lib/tool-executor.ts` from the monolithic `/api/chat/route.ts` to share tools across routes. Note: voice sessions run on GPT-4o (OpenAI); text chat stays on Claude. See `docs/REALTIME_API.md`.
+- **Real-time translation mode** *(1 day, depends on Realtime API)* — Travel interpreter that runs inside the Realtime API session with a different system prompt. Two modes: one-way (you speak English → target language comes out) and two-way (full conversation interpreter). Supports 16 languages with quality ratings. Language picker UI, accessible as a tab in the voice panel or via `/translate [language]` skill command. Personal OS context stays available in translation mode (health profile for allergy situations, budget data, etc.). See `docs/TRANSLATION_MODE.md`.
+
+### Agent Skills System
+See [`docs/AGENT_SKILLS.md`](./docs/AGENT_SKILLS.md) for full implementation details.
+
+- **Slash-command skills** *(1–2 days)* — Type `/skill-name` in chat to switch the agent into a focused expert mode. The skill injects a specialized system prompt and auto-fetches relevant data on activation. Skills are pure data objects in `lib/skills.ts` — adding a new skill requires no new API routes or components. A `/` button or "Skills" menu in the chat input shows all available skills. Active skill shown as a badge below the chat input; `/end` returns to default mode.
+  - `/financial-advisor` — auto-pulls transactions, budget, net worth, savings goals; delivers structured financial snapshot + top concerns + specific recommendations
+  - `/health-coach` — auto-pulls health logs, workouts, nutrition, hydration, mood, body metrics; surfaces cross-domain correlations
+  - `/weekly-review` — auto-pulls 7 days of data across all domains; structured Wins / Gaps / Patterns / Next Week output
+  - `/goal-check` — auto-pulls all active goals; traffic-light status (🟢/🟡/🔴) per goal; identifies stalled goals; ends with one concrete action for today
+  - `/relationship-check` — auto-pulls contacts + interaction history; surfaces overdue contacts, upcoming birthdays, drifting relationships
+  - `/meal-planner` — auto-pulls recipe library + current week's plan; fills gaps, suggests recipes by macro targets, offers shopping list
+  - `/focus` — auto-pulls open tasks + active goals; decides 1–3 things to work on; starts a Pomodoro timer
+  - Future: `/bible-study`, `/decision-helper`, `/content-planner`, `/supplement-review`
+
+### Ambient Capture
+See [`docs/TRANSCRIPT_INGESTION.md`](./docs/TRANSCRIPT_INGESTION.md) and [`docs/MEETING_INGESTION.md`](./docs/MEETING_INGESTION.md) for full implementation details.
+
+- **Transcript ingestion endpoint** *(1–2 days)* — `POST /api/ingest/transcript` accepts any block of text (voice debrief, pasted notes, meeting transcript) with a context type and uses Claude to extract structured data and fire the appropriate existing tools automatically. Context types: `doctor_visit` (→ health log, supplements, follow-up tasks), `workout_debrief` (→ workout log), `financial_conversation` (→ transactions, decisions), `relationship_debrief` (→ interaction log, CRM updates), `general_debrief` (catch-all). UI: a "Quick Capture" modal with context dropdown and voice input. Requires extracting `lib/tool-executor.ts` from `/api/chat/route.ts`. See `docs/TRANSCRIPT_INGESTION.md`.
+- **Meeting bot integration — Recall.ai** *(1 week)* — A bot joins any Zoom, Google Meet, or Teams call via a link. Audio is transcribed by AssemblyAI and sent to a webhook when the meeting ends. Webhook processes the transcript through the ingestion pipeline and files action items → Tasks, decisions → Decisions, people mentions → People CRM, etc. UI: "Send bot to meeting" panel with meeting URL input and context selector. Push notification when notes are ready. See `docs/MEETING_INGESTION.md`.
+- **Phone call integration — Twilio** *(3–4 days, after meeting bot)* — A Twilio number bridges phone call audio to the OpenAI Realtime API in real time. The agent listens, transcribes, and files the results when the call ends. Can also be conferenced into any existing call. Simplest alternative: record via Twilio + post-call transcription processing without real-time agent. See `docs/MEETING_INGESTION.md`.
+
+### Newsfeed
+See [`docs/NEWSFEED.md`](./docs/NEWSFEED.md) for full implementation details.
+
+- **Personal newsfeed aggregator** *(2–3 days)* — Pull from RSS feeds and the Reddit JSON API; Claude Haiku classifies each item by topic and scores relevance (1–10); unread items stored in Firestore with dedup by content hash. Category tabs (World, Tech, Finance, Faith, Sports), relevance-sorted list, save-to-reading-list, and a "Top Stories" dashboard widget showing the 3 highest-relevance unread items from the past 6 hours. Cron runs hourly. Starter feed list includes BBC, NPR, TechCrunch, The Verge, Hacker News, Yahoo Finance, and category-specific options. Add/remove/toggle feeds in Settings. Chat tools: `get_news_feed`, `save_article`, `add_news_feed`. Cost: ~$0.15/month in Haiku calls.
+
+### Weather
+See [`docs/WEATHER.md`](./docs/WEATHER.md) for full implementation details.
+
+- **Weather integration** *(1 day)* — Live conditions and 7-day forecast via Open-Meteo (free, no API key). User sets home location in Settings via browser geolocation + Nominatim reverse geocode; lat/lon stored in Firestore so cron and server-side code can access it without browser. Dashboard widget shows current conditions, feels-like, high/low, and 5-day strip. Full `/weather` page with hourly scroll and UV index. Weather injected into morning briefing prompt so Claude can naturally factor conditions into workout/outdoor suggestions. Chat tool: `get_weather`. Total cost: $0. Phase 2 option: add OpenWeatherMap for severe weather push alerts (freeze warnings, storm alerts).
+
+### Password Vault
+See [`docs/PASSWORD_VAULT.md`](./docs/PASSWORD_VAULT.md) for full implementation details.
+
+- **Bitwarden integration** *(1–2 days)* — Secure interface into your Bitwarden vault: search credentials, copy username/password to clipboard (auto-clears after 60 seconds), and generate strong passwords — without storing any secrets in Firestore. Two implementation paths: (A) `bw serve` CLI wrapper running as a persistent sidecar (recommended for self-hosted/Railway deployment), or (B) Bitwarden cloud API for serverless. The LLM (Claude) never sees actual passwords — chat tools return metadata only (username + URL). Vault health check surfaces reused, weak, and old passwords as counts. Audit log writes every vault access (item name only) to Firestore. Requires a persistent server process — not Vercel-native; deploy the vault bridge on Render or Railway.
+
+### Financial Rate & Promotion Tracker
+See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation details.
+
+- **Rate & offer aggregator** *(3–4 days)* — Pulls from Doctor of Credit RSS, DepositAccounts RSS, and r/churning / r/personalfinance / r/CreditCards (Reddit JSON API). Claude Haiku parses each item into structured offer data: `{institution, apy, bonus_amount, spend_requirement, spend_timeframe_days, new_customer_only, expires_at, ...}`. A personal rate profile (existing institutions, cards opened in last 24 months, current cards, avg monthly spend from Plaid, available balance to deploy) drives an eligibility layer that flags which offers you can actually get and estimates their dollar value for your situation. The `/rate-tracker` page shows offers sorted by eligible-and-highest-value first, with eligibility warnings ("you're over Chase 5/24") and freshness indicators. FRED API adds benchmark rates (Fed Funds, T-bills) as context. Push alerts fire when a new high-value eligible offer is found. No affiliate links, no "one-tap apply" — links open the offer page for you to apply manually. Chat tools: `get_rate_offers`, `get_benchmark_rates`, `mark_offer_taken`. Cron: every 6 hours. Cost: free (FRED key is free; no other keys needed for v1).
+
+### AI / Automation
+- **Natural language one-off reminders** — set a timed push notification from chat ("remind me to call Dr. Smith next Thursday"); stored separately from recurring tasks, fires once via the notification cron
+- **Weekly email digest** — Sunday summary email (wins, gaps, upcoming week) as an alternative/complement to the push notification weekly review
+- **Auto-tag journal entries** — Claude Haiku post-processes new journal entries to extract mood, topics, and people mentioned; stored as searchable tags
 
 ---
 

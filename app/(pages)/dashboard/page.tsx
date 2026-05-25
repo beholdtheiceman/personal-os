@@ -20,7 +20,7 @@ import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { useToday } from "@/hooks/useToday";
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
-import { habitXP, taskXP } from "@/lib/xp";
+import { habitXP, streakMultiplier, taskXP } from "@/lib/xp";
 import { useDashboardSettings } from "@/hooks/useDashboardSettings";
 import XPWidget from "@/components/xp/XPWidget";
 import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
@@ -36,6 +36,7 @@ import MoodDashboardWidget from "@/components/dashboard/MoodDashboardWidget";
 import BirthdayWidget from "@/components/dashboard/BirthdayWidget";
 import SavingsDashboardWidget from "@/components/dashboard/SavingsDashboardWidget";
 import InsightsWidget from "@/components/dashboard/InsightsWidget";
+import AchievementsWidget from "@/components/achievements/AchievementsWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -212,7 +213,9 @@ export default function DashboardPage() {
         if (habit.completions.includes(prev.toLocaleDateString("en-CA"))) streak++;
         else break;
       }
-      await awardXP(user.uid, habitXP(streak), "habit_complete", `Habit: ${habit.name}`, totalXP);
+      const newStreak = streak + 1;
+      const mult = streakMultiplier(newStreak);
+      await awardXP(user.uid, habitXP(newStreak), "habit_complete", `Habit: ${habit.name}${mult > 1 ? ` (${mult}× streak)` : ""}`, totalXP);
     }
   };
 
@@ -622,6 +625,9 @@ export default function DashboardPage() {
 
       case "unsubscribe":
         return gmailConnected ? <UnsubscribeWidget key="unsubscribe" /> : null;
+
+      case "achievements":
+        return <AchievementsWidget key="achievements" />;
 
       case "gmail":
         return gmailConnected ? (

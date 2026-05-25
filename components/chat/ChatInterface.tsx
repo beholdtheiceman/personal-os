@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
+import { checkAndAward } from "@/lib/checkAndAward";
 import ReactMarkdown from "react-markdown";
 import LoadingDots from "@/components/ui/LoadingDots";
 import CameraCapture from "./CameraCapture";
@@ -278,6 +279,9 @@ export default function ChatInterface() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const savedUserRef = await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
+
+    await checkAndAward(user.uid, "hello_world");
+    if (messages.length + 1 >= 500) await checkAndAward(user.uid, "power_user");
 
     const history = [...messages.slice(-19), userMsg].map((m) => ({
       role: m.role,

@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
+import { checkAndAward } from "@/lib/checkAndAward";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import type { Exercise, WorkoutSession, WorkoutExercise, ExerciseCategory } from "@/types";
@@ -91,6 +92,11 @@ export function useWorkout() {
       // XP: 50 base + 10 per exercise
       const xp = 50 + workoutExercises.length * 10;
       await awardXP(user.uid, xp, "workout_complete", `Workout: ${name} (${workoutExercises.length} exercises)`, totalXP);
+
+      await checkAndAward(user.uid, "sweat_equity");
+      if (newPRs.length > 0) await checkAndAward(user.uid, "pr_breaker");
+      const workoutCount = sessions.length + 1;
+      if (workoutCount >= 50) await checkAndAward(user.uid, "century_club");
 
       // Toasts
       if (newPRs.length > 0) {

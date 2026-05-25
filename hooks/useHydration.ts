@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToday } from "@/hooks/useToday";
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
+import { checkAndAward } from "@/lib/checkAndAward";
 import type { HydrationLog } from "@/types";
 
 const DEFAULT_GOAL = 8;
@@ -57,6 +58,7 @@ export function useHydration() {
     // Award 10 XP exactly when the goal is first hit
     if (current + 1 === goal) {
       await awardXP(user.uid, 10, "hydration_goal", `Hydration goal hit: ${goal} glasses`, totalXP);
+      await checkAndAward(user.uid, "full_tank");
     }
   }, [user, today, data, totalXP]);
 

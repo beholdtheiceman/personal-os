@@ -47,11 +47,20 @@ export function getLevelInfo(totalXP: number): LevelInfo {
   return { level, title: getLevelTitle(level), xpStart, xpEnd, xpIntoLevel, xpNeeded, progress };
 }
 
+// Habit streak XP multipliers — applied to the per-completion award.
+export function streakMultiplier(streak: number): number {
+  if (streak >= 365) return 3;
+  if (streak >= 120) return 2.5;
+  if (streak >= 30)  return 2;
+  if (streak >= 7)   return 1.5;
+  return 1;
+}
+
 // ── XP award amounts ──────────────────────────────────────────────────────────
 export function habitXP(streakLength: number): number {
   const base = 10;
   const bonus = Math.min(streakLength * 2, 20); // up to +20 bonus for long streaks
-  return base + bonus;
+  return Math.round((base + bonus) * streakMultiplier(streakLength));
 }
 
 export function taskXP(priorityScore: number): number {

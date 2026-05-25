@@ -14,7 +14,8 @@ import { useToday } from "@/hooks/useToday";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
-import { habitXP } from "@/lib/xp";
+import { habitXP, streakMultiplier } from "@/lib/xp";
+import { checkAndAward } from "@/lib/checkAndAward";
 import toast from "react-hot-toast";
 import type { Habit } from "@/types";
 
@@ -90,8 +91,24 @@ export default function HabitsTracker() {
 
     if (completing) {
       const streak = calcStreak(habit.completions, todayStr);
-      const xp = habitXP(streak);
-      await awardXP(user.uid, xp, "habit_complete", `Habit: ${habit.name}`, totalXP);
+      const newStreak = streak + 1;
+      const mult = streakMultiplier(newStreak);
+      const xp = habitXP(newStreak);
+      await awardXP(user.uid, xp, "habit_complete", `Habit: ${habit.name}${mult > 1 ? ` (${mult}× streak)` : ""}`, totalXP);
+      if (mult > 1) toast(`🔥 ${mult}× streak bonus!`, { duration: 2000 });
+      await checkAndAward(user.uid, "creature_of_habit");
+      if (newStreak >= 7)   await checkAndAward(user.uid, "week_one");
+      if (newStreak >= 30)  await checkAndAward(user.uid, "the_long_game");
+      if (newStreak >= 100) await checkAndAward(user.uid, "unbreakable");
+      // Perfect day: all habits scheduled today are now completed
+      const updatedCompletions = [...habit.completions, todayStr];
+      const todayDow = new Date().getDay();
+      const todayScheduled = habits
+        .map((h) => (h.id === id ? { ...h, completions: updatedCompletions } : h))
+        .filter((h) => h.target_days.includes(todayDow));
+      if (todayScheduled.length > 0 && todayScheduled.every((h) => h.completions.includes(todayStr))) {
+        await checkAndAward(user.uid, "perfect_day");
+      }
     }
   };
 

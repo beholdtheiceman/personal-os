@@ -15,6 +15,7 @@ import LoadingDots from "@/components/ui/LoadingDots";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { useToday } from "@/hooks/useToday";
+import { checkAndAward } from "@/lib/checkAndAward";
 import type { HealthLog } from "@/types";
 
 interface FitData {
@@ -56,6 +57,12 @@ export default function HealthTracker() {
   const [formPrefill, setFormPrefill] = useState<Partial<HealthLog> | undefined>();
   const today = useToday();
   const todayLog = logs.find((l) => l.date === today);
+
+  // Award 10K Club when Google Health reports 10k+ steps
+  useEffect(() => {
+    if (!user || !fitData?.steps) return;
+    if (fitData.steps >= 10000) checkAndAward(user.uid, "ten_k_club");
+  }, [user, fitData]);
 
   useEffect(() => {
     if (!user) return;
@@ -150,6 +157,8 @@ export default function HealthTracker() {
         logged_at: new Date().toISOString(),
       });
       toast.success("Health log saved");
+      await checkAndAward(user.uid, "body_check");
+      if (new Date().getHours() < 6) await checkAndAward(user.uid, "early_bird");
     } catch {
       toast.error("Failed to save log");
     }

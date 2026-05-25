@@ -5,7 +5,7 @@ import LoadingDots from "@/components/ui/LoadingDots";
 import toast from "react-hot-toast";
 
 interface Props {
-  onSave: (text: string) => Promise<void>;
+  onSave: (text: string, isVoice?: boolean) => Promise<void>;
   onClose: () => void;
 }
 
@@ -14,6 +14,7 @@ export default function JournalForm({ onSave, onClose }: Props) {
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const usedVoiceRef = useRef(false);
 
   const startRecording = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +50,7 @@ export default function JournalForm({ onSave, onClose }: Props) {
     recognition.onend = () => setRecording(false);
     recognition.start();
     recognitionRef.current = recognition;
+    usedVoiceRef.current = true;
     setRecording(true);
   };
 
@@ -61,7 +63,7 @@ export default function JournalForm({ onSave, onClose }: Props) {
     if (!text.trim()) return;
     setSaving(true);
     try {
-      await onSave(text.trim());
+      await onSave(text.trim(), usedVoiceRef.current);
     } finally {
       setSaving(false);
     }

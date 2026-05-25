@@ -14,6 +14,7 @@ import {
 import { useXP } from "@/hooks/useXP";
 import { awardXP } from "@/lib/awardXP";
 import { taskXP } from "@/lib/xp";
+import { checkAndAward } from "@/lib/checkAndAward";
 import { computeNextDue, isWithinRecurrence } from "@/lib/recurrence";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -101,6 +102,14 @@ export default function TasksManager() {
     if (newStatus === "completed") {
       await awardXP(user.uid, xp, "task_complete", `Task: ${task.title}`, totalXP);
       await spawnNextOccurrence(task);
+      const completedCount = tasks.filter((t) => t.status === "completed").length + 1;
+      await checkAndAward(user.uid, "first_blood");
+      if (completedCount >= 100) await checkAndAward(user.uid, "triple_digits");
+      if (completedCount >= 500) await checkAndAward(user.uid, "the_machine");
+      if (task.due_date) {
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        if (todayStr < task.due_date) await checkAndAward(user.uid, "ahead_of_the_curve");
+      }
     } else {
       await awardXP(user.uid, -xp, "task_complete", `Task uncompleted: ${task.title}`, totalXP);
     }

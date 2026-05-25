@@ -170,6 +170,15 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - XP for tasks, habits, journal, health logs, goal milestones, hydration goals
 - Streak bonuses, level-up toasts
 
+### 🏆 Achievements
+- 35 Xbox-style milestone achievements across 9 categories (~740G Gamerscore)
+- 3 point tiers: 10G / 25G / 50G
+- Unlock sound + toast notification on every unlock
+- 3 secret achievements: Night Owl, Early Bird, The Completionist (auto-awarded at 40 unlocks)
+- `/achievements` page — full category grid; locked = dimmed + lock icon; secret+locked = `???`
+- Dashboard widget showing last 3 unlocks and running Gamerscore
+- Wired into: Tasks, Habits, Health, Journal, Chat, Hydration, Workouts
+
 ### 🔔 Smart Notifications (14 categories)
 All configurable per-category with enable/time controls in Settings:
 
@@ -197,8 +206,8 @@ All configurable per-category with enable/time controls in Settings:
 - Background playback persists across navigation
 
 ### 🌸 Dashboard
-- **Customizable layout** — show/hide and reorder all 19 widgets; persisted to Firestore; "Customize" button opens a slide-in panel with eye toggles and ↑↓ reorder
-- Widgets: XP/Level, Quick Links, AI Briefing, AI Insights, Decision Reviews, Birthdays, Bible Verse, Tasks+Habits, Hydration+Mood, Calendar+Nutrition, Health+Journal, Goals+Projects, Finance Summary, Budget+Savings, Weekly Review, API Usage, Email Agent, Unsubscribe Manager, Gmail Inbox
+- **Customizable layout** — show/hide and reorder all 20 widgets; persisted to Firestore; "Customize" button opens a slide-in panel with eye toggles and ↑↓ reorder
+- Widgets: XP/Level, Quick Links, AI Briefing, AI Insights, Decision Reviews, Birthdays, Bible Verse, Tasks+Habits, Hydration+Mood, Calendar+Nutrition, Health+Journal, Goals+Projects, Finance Summary, Budget+Savings, Weekly Review, API Usage, Email Agent, Unsubscribe Manager, Gmail Inbox, Achievements
 
 ### 📱 PWA & Browser Extension
 - **PWA** — installable on Android home screen, FCM push notifications, offline-capable service worker
@@ -225,6 +234,7 @@ personal-os/
 ├── app/
 │   ├── (pages)/              # App pages (protected by auth layout)
 │   │   ├── dashboard/        # Main dashboard
+│   │   ├── achievements/     # Full achievements grid + Gamerscore total
 │   │   ├── tasks/
 │   │   ├── habits/
 │   │   ├── health/
@@ -268,6 +278,7 @@ personal-os/
 │   │   └── bible/            # Verse of the day, passage lookup
 │   └── globals.css           # Design tokens (dark glass palette)
 ├── components/
+│   ├── achievements/         # AchievementsWidget (dashboard)
 │   ├── chat/                 # ChatInterface, ChatPanel, CameraCapture
 │   ├── dashboard/            # All dashboard widgets + DashboardCustomizer
 │   ├── habits/               # HabitCard, HabitStats (heatmap), HabitForm
@@ -283,6 +294,7 @@ personal-os/
 │   ├── layout/               # TopNav, MobileNav, ParallaxBackground
 │   └── xp/                   # XPWidget, level system
 ├── hooks/
+│   ├── useAchievements       # Real-time unlock listener + Gamerscore totals
 │   ├── useDashboardSettings  # Widget order + visibility persistence
 │   ├── useMealPlanner        # Recipes, meal plan, shopping list
 │   ├── useWorkout            # Workout logs, PRs
@@ -301,6 +313,8 @@ personal-os/
 │   ├── firebase.ts           # Client SDK
 │   ├── firebase-admin.ts     # Admin SDK
 │   ├── env.ts                # Env var accessors (Turbopack-safe)
+│   ├── achievements.ts       # 35 achievement definitions + ACHIEVEMENT_MAP
+│   ├── checkAndAward.ts      # Shared unlock helper (Firestore dedup, sound, toast)
 │   ├── awardXP.ts            # XP award helper
 │   ├── recurrence.ts         # Recurring task date math
 │   ├── second-brain.ts       # PARA vault Firestore helpers
@@ -319,6 +333,7 @@ personal-os/
 ├── public/
 │   ├── manifest.json         # PWA manifest (includes share_target)
 │   ├── icons/
+│   ├── sounds/               # achievement-unlock.mp3
 │   └── cherry-blossom/       # Pixel art parallax layers
 └── types/index.ts            # All shared TypeScript interfaces
 ```
@@ -460,6 +475,7 @@ users/{uid}/
 ├── second_brain/{path}
 ├── inbox/{itemId}            # Second Brain quick capture
 ├── weekly_reviews/latest
+├── achievements/{achievementId} # { id, unlockedAt, gamerscore }
 ├── xp/summary
 ├── xp_events/{eventId}
 ├── api_usage/{YYYY-MM-DD}

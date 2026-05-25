@@ -8,6 +8,7 @@ import JournalEntryCard from "./JournalEntryCard";
 import { RiAddLine, RiBookLine } from "react-icons/ri";
 import LoadingDots from "@/components/ui/LoadingDots";
 import toast from "react-hot-toast";
+import { checkAndAward } from "@/lib/checkAndAward";
 import type { JournalEntry } from "@/types";
 
 export default function JournalManager() {
@@ -30,7 +31,7 @@ export default function JournalManager() {
     return unsub;
   }, [user]);
 
-  const handleSave = async (text: string) => {
+  const handleSave = async (text: string, isVoice?: boolean) => {
     if (!user) return;
     setAnalyzing(true);
     setShowForm(false);
@@ -52,6 +53,12 @@ export default function JournalManager() {
         created_at: new Date().toISOString(),
       });
       toast.success("Entry saved");
+
+      await checkAndAward(user.uid, "dear_diary");
+      if (entries.length + 1 >= 30) await checkAndAward(user.uid, "thirty_days_of_truth");
+      if (isVoice) await checkAndAward(user.uid, "stream_of_consciousness");
+      const hour = new Date().getHours();
+      if (hour >= 23 || hour < 4) await checkAndAward(user.uid, "night_owl");
     } catch {
       toast.error("Failed to save entry");
     } finally {
