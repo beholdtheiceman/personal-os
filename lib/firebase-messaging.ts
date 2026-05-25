@@ -1,5 +1,5 @@
 "use client";
-import { doc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db, app } from "./firebase";
 
 export async function requestAndSaveToken(uid: string): Promise<string | null> {
@@ -23,8 +23,22 @@ export async function requestAndSaveToken(uid: string): Promise<string | null> {
 
     if (token) {
       const tokenId = token.slice(-24);
+
+      // The push subscription endpoint is stable per browser even when FCM rotates
+      // the token (e.g. after toggling notifications off/on). Delete any stale docs
+      // for this endpoint before writing so the same device never holds two tokens.
+      const subscription = await registration.pushManager.getSubscription();
+      const endpoint = subscription?.endpoint ?? null;
+      if (endpoint) {
+        const stale = await getDocs(
+          query(collection(db, `users/${uid}/fcm_tokens`), where("endpoint", "==", endpoint))
+        );
+        await Promise.all(stale.docs.map((d) => deleteDoc(d.ref)));
+      }
+
       await setDoc(doc(db, `users/${uid}/fcm_tokens`, tokenId), {
         token,
+        endpoint,
         createdAt: new Date().toISOString(),
         userAgent: navigator.userAgent.slice(0, 200),
       });

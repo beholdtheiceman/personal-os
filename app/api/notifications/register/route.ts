@@ -3,17 +3,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
-  const { uid, token } = await req.json();
+  const body = await req.json();
+  const { uid, token } = body;
   if (!uid || !token) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
   try {
     const db = getAdminDb();
+    // If the caller supplies the push subscription endpoint, delete any stale token
+    // docs for that endpoint first — prevents the same browser accumulating multiple
+    // valid tokens after toggling notifications off/on.
+    const endpoint: string | null = body.endpoint ?? null;
+    if (endpoint) {
+      const stale = await db.collection(`users/${uid}/fcm_tokens`)
+        .where("endpoint", "==", endpoint)
+        .get();
+      await Promise.all(stale.docs.map((d) => d.ref.delete()));
+    }
     // Persist the token where the senders read it: the fcm_tokens collection.
     // Doc id = last 24 chars of the token so re-registering the same device de-dupes
     // (matches lib/firebase-messaging.ts).
     const tokenId = String(token).slice(-24);
     await db.doc(`users/${uid}/fcm_tokens/${tokenId}`).set({
       token,
+      endpoint,
       createdAt: new Date().toISOString(),
       userAgent: req.headers.get("user-agent")?.slice(0, 200) ?? null,
     });
