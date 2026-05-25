@@ -12,6 +12,10 @@ import { checkAndAward } from "@/lib/checkAndAward";
 import ReactMarkdown from "react-markdown";
 import LoadingDots from "@/components/ui/LoadingDots";
 import CameraCapture from "./CameraCapture";
+import SkillPicker from "./SkillPicker";
+import ActiveSkillBadge from "./ActiveSkillBadge";
+import { useSkills } from "@/hooks/useSkills";
+import type { Skill } from "@/lib/skills";
 import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiCameraLine, RiCloseLine, RiAddLine, RiChat1Line,
@@ -248,9 +252,59 @@ export default function ChatInterface() {
     return ref;
   };
 
+  // ── Skills ───────────────────────────────────────────────────────────────
+  const skills = useSkills(systemPrompt);
+
+  const sendOpeningMessage = async (skill: Skill) => {
+    if (!user) return;
+    let chatId = activeChatId;
+    if (!chatId) { chatId = await createChat(); if (!chatId) return; }
+    const placeholderId = `skill-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: placeholderId, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
+    setLoading(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: skill.openingPrompt }],
+          systemPrompt: `${systemPrompt}\n\n${skill.systemPromptAddition}`,
+          uid: user.uid,
+          chatId,
+          localDate: format(new Date(), "yyyy-MM-dd"),
+          isFirstMessage: messages.length === 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Request failed");
+      const assistantMsg: AssistantMessage = {
+        id: placeholderId,
+        role: "assistant",
+        content: data.text ?? "",
+        actions: data.actions?.length ? data.actions : undefined,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => prev.map((m) => m.id === placeholderId ? assistantMsg : m));
+      await saveMessage(chatId, { role: "assistant", content: assistantMsg.content, timestamp: assistantMsg.timestamp, ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}) });
+    } catch {
+      toast.error("Failed to load skill context");
+      setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectSkill = (skill: Skill) => {
+    skills.activateSkill(skill);
+    setInput("");
+    sendOpeningMessage(skill);
+  };
+
   // ── Send message ─────────────────────────────────────────────────────────
   const sendMessage = async (text: string) => {
     if ((!text.trim() && !capturedImage) || !user || loading) return;
+    if (text.trim() === "/end") { skills.dismissSkill(); setInput(""); return; }
 
     // Create a new chat if none is active
     let chatId = activeChatId;
@@ -304,7 +358,7 @@ export default function ChatInterface() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           messages: history,
-          systemPrompt,
+          systemPrompt: skills.effectiveSystemPrompt,
           uid: user.uid,
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
@@ -594,7 +648,17 @@ export default function ChatInterface() {
               </button>
             </div>
           )}
-          <div className="flex items-end gap-2 max-w-4xl mx-auto">
+          {skills.activeSkill && (
+            <ActiveSkillBadge skill={skills.activeSkill} onDismiss={skills.dismissSkill} />
+          )}
+          <div className="relative flex items-end gap-2 max-w-4xl mx-auto">
+            <SkillPicker
+              open={skills.pickerOpen}
+              skills={skills.filteredSkills}
+              highlightedIndex={skills.highlightedIndex}
+              onSelect={handleSelectSkill}
+              onClose={skills.closePicker}
+            />
             <textarea
               ref={textareaRef}
               className="input-base flex-1 resize-none min-h-[44px] py-2.5 text-sm overflow-y-auto"
@@ -607,13 +671,18 @@ export default function ChatInterface() {
               placeholder={capturedImage ? "Ask about this image…" : "Message your AI assistant…"}
               value={input}
               onChange={(e) => {
-                setInput(e.target.value);
+                const val = e.target.value;
+                skills.onInputChange(val);
+                setInput(val);
                 // Auto-resize: reset then grow to content
                 const el = e.target;
                 el.style.height = "auto";
                 el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
               }}
               onKeyDown={(e) => {
+                const skillResult = skills.onPickerKeyDown(e);
+                if (skillResult === "consumed") return;
+                if (skillResult && typeof skillResult === "object") { handleSelectSkill(skillResult); return; }
                 if (e.key === "Enter" && !e.shiftKey) {
                   // On touch devices, Enter inserts a newline — send with the button instead.
                   if (isTouch) return;

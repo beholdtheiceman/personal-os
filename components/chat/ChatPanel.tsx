@@ -19,6 +19,10 @@ import {
 import Link from "next/link";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
+import SkillPicker from "./SkillPicker";
+import ActiveSkillBadge from "./ActiveSkillBadge";
+import { useSkills } from "@/hooks/useSkills";
+import type { Skill } from "@/lib/skills";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 import { useIsTouch } from "@/hooks/useIsTouch";
 import type { ChatMessage } from "@/types";
@@ -154,8 +158,58 @@ export default function ChatPanel() {
     });
   };
 
+  // ── Skills ───────────────────────────────────────────────────────────────
+  const skills = useSkills(systemPrompt);
+
+  const sendOpeningMessage = async (skill: Skill) => {
+    if (!user) return;
+    let chatId = activeChatId;
+    if (!chatId) { chatId = await createChat(); if (!chatId) return; }
+    const placeholderId = `skill-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: placeholderId, role: "assistant", content: "", timestamp: new Date().toISOString() }]);
+    setLoading(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: skill.openingPrompt }],
+          systemPrompt: `${systemPrompt}\n\n${skill.systemPromptAddition}`,
+          uid: user.uid,
+          chatId,
+          localDate: format(new Date(), "yyyy-MM-dd"),
+          isFirstMessage: messages.length === 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Request failed");
+      const assistantMsg: AssistantMessage = {
+        id: placeholderId,
+        role: "assistant",
+        content: data.text ?? "",
+        actions: data.actions?.length ? data.actions : undefined,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => prev.map((m) => m.id === placeholderId ? assistantMsg : m));
+      await saveMessage(chatId, { role: "assistant", content: assistantMsg.content, timestamp: assistantMsg.timestamp, ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}) });
+    } catch {
+      toast.error("Failed to load skill context");
+      setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectSkill = (skill: Skill) => {
+    skills.activateSkill(skill);
+    setInput("");
+    sendOpeningMessage(skill);
+  };
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || !user || loading) return;
+    if (text.trim() === "/end") { skills.dismissSkill(); setInput(""); return; }
 
     let chatId = activeChatId;
     if (!chatId) {
@@ -201,7 +255,7 @@ export default function ChatPanel() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           messages: history,
-          systemPrompt,
+          systemPrompt: skills.effectiveSystemPrompt,
           uid: user.uid,
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
@@ -241,6 +295,9 @@ export default function ChatPanel() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const skillResult = skills.onPickerKeyDown(e);
+    if (skillResult === "consumed") return;
+    if (skillResult && typeof skillResult === "object") { handleSelectSkill(skillResult); return; }
     if (e.key === "Enter" && !e.shiftKey) {
       // On touch devices, Enter inserts a newline — send with the button instead.
       if (isTouch) return;
@@ -396,19 +453,31 @@ export default function ChatPanel() {
           className="shrink-0 px-3 py-2.5 border-t"
           style={{ borderColor: "rgba(255,255,255,0.10)" }}
         >
+          {skills.activeSkill && (
+            <ActiveSkillBadge skill={skills.activeSkill} onDismiss={skills.dismissSkill} />
+          )}
           <div
-            className="flex items-end gap-2 rounded-xl px-3 py-2"
+            className="relative flex items-end gap-2 rounded-xl px-3 py-2"
             style={{
               background: "rgba(255,255,255,0.07)",
               border: "1px solid rgba(255,255,255,0.12)",
             }}
           >
+            <SkillPicker
+              open={skills.pickerOpen}
+              skills={skills.filteredSkills}
+              highlightedIndex={skills.highlightedIndex}
+              onSelect={handleSelectSkill}
+              onClose={skills.closePicker}
+            />
             <textarea
               ref={textareaRef}
               rows={1}
               value={input}
               onChange={(e) => {
-                setInput(e.target.value);
+                const val = e.target.value;
+                skills.onInputChange(val);
+                setInput(val);
                 e.target.style.height = "auto";
                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
               }}
