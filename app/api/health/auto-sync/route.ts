@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
+import { getUserLocalDate } from "@/lib/timezone";
 
 const baseUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -30,8 +31,6 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getAdminDb();
-  const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in UTC
-
   let checked = 0;
   let synced = 0;
   let skipped = 0;
@@ -42,6 +41,8 @@ export async function GET(req: NextRequest) {
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id;
       checked++;
+      // Compute today in the user's local timezone — server runs UTC on Vercel.
+      const today = await getUserLocalDate(uid);
 
       // ── Check google_fit integration ───────────────────────────────────────
       const fitDoc = await db.doc(`users/${uid}/integrations/google_fit`).get();

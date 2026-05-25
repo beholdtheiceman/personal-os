@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, getEnv } from "@/lib/env";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { getLocalTimeInfo } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 import type { NotificationSettings } from "@/types";
@@ -21,16 +22,14 @@ export async function GET(req: NextRequest) {
   const notified: string[] = [];
   const INACTIVE_DAYS = 14;
 
-  // Week key: Monday's date (YYYY-MM-DD) — dedup fires at most once per week per user
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sun
-  const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + daysToMonday);
-  const weekKey = monday.toLocaleDateString("en-CA"); // YYYY-MM-DD
-
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
+    // Compute week key in user's local timezone — server runs UTC on Vercel.
+    const timeInfo = await getLocalTimeInfo(uid);
+    const daysToMonday = timeInfo.localDayOfWeek === 0 ? -6 : 1 - timeInfo.localDayOfWeek;
+    const monday = new Date(timeInfo.localDate + "T12:00:00Z");
+    monday.setUTCDate(monday.getUTCDate() + daysToMonday);
+    const weekKey = monday.toISOString().slice(0, 10);
 
     // Skip users with no push tokens
     const tokensSnap = await db.collection(`users/${uid}/fcm_tokens`).get();

@@ -109,7 +109,7 @@ export async function goalDeadlineHandler(uid: string, tz: string, daysBefore = 
   const approaching = snap.docs.filter((d) => {
     const target = d.data().target_date as string | undefined;
     if (!target) return false;
-    const daysUntil = Math.ceil((new Date(target + "T00:00:00").getTime() - now.getTime()) / 86400000);
+    const daysUntil = Math.ceil((new Date(target + "T00:00:00Z").getTime() - now.getTime()) / 86400000);
     return daysUntil >= 0 && daysUntil <= daysBefore;
   });
 
@@ -128,7 +128,7 @@ export async function goalDeadlineHandler(uid: string, tz: string, daysBefore = 
 
   const lines = newOnes.slice(0, 2).map((d) => {
     const target = d.data().target_date as string;
-    const daysUntil = Math.ceil((new Date(target + "T00:00:00").getTime() - now.getTime()) / 86400000);
+    const daysUntil = Math.ceil((new Date(target + "T00:00:00Z").getTime() - now.getTime()) / 86400000);
     return `${d.data().title as string} (${daysUntil === 0 ? "today" : `${daysUntil}d left`})`;
   });
   return {
@@ -254,12 +254,13 @@ export async function weeklyReviewHandler(uid: string, tz: string): Promise<Noti
 // ─── Birthday Reminder ────────────────────────────────────────────────────────
 export async function birthdayReminderHandler(
   uid: string,
+  tz: string,
   daysBefore: number
 ): Promise<NotifPayload | null> {
   const db = getAdminDb();
-  const today = new Date();
+  const todayStr = todayLocal(tz);
+  const today = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
   today.setHours(0, 0, 0, 0);
-  const todayStr = today.toLocaleDateString("en-CA");
 
   const peopleSnap = await db.collection(`users/${uid}/people`).get();
   const upcoming: { name: string; daysUntil: number; giftIdeas: string[] }[] = [];
