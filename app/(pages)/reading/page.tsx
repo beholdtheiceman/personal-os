@@ -94,10 +94,10 @@ export default function ReadingPage() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all border backdrop-blur-sm ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all border ${
                 isActive
-                  ? "bg-accent/20 border-accent/40 text-accent"
-                  : "bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20"
+                  ? "bg-bg-card border-accent/50 text-accent"
+                  : "bg-bg-card/90 border-white/15 hover:border-white/30"
               }`}
             >
               <span className={isActive ? "text-accent" : color}>{label}</span>
