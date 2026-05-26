@@ -78,3 +78,13 @@ ${articleList}`,
   await briefRef.set(brief);
   return NextResponse.json({ brief });
 }
+
+export async function DELETE(req: NextRequest) {
+  const uid = await getUid(req);
+  if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const db    = getAdminDb();
+  await db.doc(`users/${uid}/news_brief/${today}`).delete();
+  return NextResponse.json({ ok: true });
+}
