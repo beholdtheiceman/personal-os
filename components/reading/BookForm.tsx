@@ -31,16 +31,20 @@ export default function BookForm({ initial, onSave, onCancel }: Props) {
     if (!title.trim())  return toast.error("Title is required");
     if (!author.trim()) return toast.error("Author is required");
     setSaving(true);
-    await onSave({
-      title:     title.trim(),
-      author:    author.trim(),
-      status,
-      rating:    rating ? parseInt(rating) : undefined,
-      cover_url: coverUrl || undefined,
-      tags:      tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-      takeaways: takeaways || undefined,
-    });
-    setSaving(false);
+    try {
+      await onSave({
+        title:     title.trim(),
+        author:    author.trim(),
+        status,
+        rating:    rating ? parseInt(rating) : undefined,
+        cover_url: coverUrl || undefined,
+        tags:      tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        takeaways: takeaways || undefined,
+      });
+    } catch {
+      toast.error("Failed to save. Please try again.");
+      setSaving(false);
+    }
   };
 
   return (
