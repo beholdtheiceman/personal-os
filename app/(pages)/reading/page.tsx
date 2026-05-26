@@ -82,23 +82,26 @@ export default function ReadingPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
         {TABS.map(({ key, label, color }) => {
           const count = key === "reading" ? reading.length
                       : key === "want_to_read" ? wantToRead.length
                       : key === "finished" ? finished.length
                       : key === "abandoned" ? abandoned.length
                       : books.length;
+          const isActive = tab === key;
           return (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                tab === key ? `bg-accent/15 text-accent` : "text-text-muted hover:text-text-primary"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all border backdrop-blur-sm ${
+                isActive
+                  ? "bg-accent/20 border-accent/40 text-accent"
+                  : "bg-black/40 border-white/10 hover:bg-black/60 hover:border-white/20"
               }`}
             >
-              <span className={tab === key ? "text-accent" : color}>{label}</span>
-              <span className="text-xs bg-bg-tertiary px-1.5 py-0.5 rounded-full">{count}</span>
+              <span className={isActive ? "text-accent" : color}>{label}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-accent/20 text-accent" : "bg-white/10 text-text-muted"}`}>{count}</span>
             </button>
           );
         })}
