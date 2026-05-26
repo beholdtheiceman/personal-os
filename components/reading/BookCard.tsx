@@ -2,7 +2,7 @@
 import { useState } from "react";
 import {
   RiEditLine, RiDeleteBinLine, RiAddLine, RiStarFill,
-  RiArrowRightLine, RiFileTextLine, RiPriceTag3Line, RiDeleteBin2Line,
+  RiArrowRightLine, RiFileTextLine, RiPriceTag3Line, RiDeleteBin2Line, RiDraggable,
 } from "react-icons/ri";
 import Image from "next/image";
 import type { Book, BookStatus } from "@/types";
@@ -36,10 +36,13 @@ interface Props {
   onStatusAdvance: () => void;
   onAddHighlight: (text: string) => void;
   onRemoveHighlight: (index: number) => void;
+  dragHandleListeners?: Record<string, unknown>;
+  dragHandleAttributes?: Record<string, unknown>;
 }
 
 export default function BookCard({
   book, onEdit, onDelete, onStatusAdvance, onAddHighlight, onRemoveHighlight,
+  dragHandleListeners, dragHandleAttributes,
 }: Props) {
   const [expanded,     setExpanded]     = useState(false);
   const [newHighlight, setNewHighlight] = useState("");
@@ -59,6 +62,16 @@ export default function BookCard({
     <div className="card p-3 space-y-2">
       {/* Header */}
       <div className="flex gap-3">
+        {dragHandleListeners && (
+          <button
+            {...(dragHandleListeners as React.HTMLAttributes<HTMLButtonElement>)}
+            {...(dragHandleAttributes as React.HTMLAttributes<HTMLButtonElement>)}
+            className="shrink-0 text-text-muted hover:text-text-secondary cursor-grab active:cursor-grabbing self-start pt-0.5"
+            title="Drag to reorder"
+          >
+            <RiDraggable className="w-4 h-4" />
+          </button>
+        )}
         {book.cover_url && (
           <div className="relative w-10 h-14 shrink-0 rounded overflow-hidden">
             <Image src={book.cover_url} alt={book.title} fill className="object-cover" unoptimized />

@@ -591,6 +591,7 @@ export interface Book {
   cover_url?: string;
   url?: string;
   tags?: string[];
+  order?: number;
   created_at: string;
   updated_at: string;
 }

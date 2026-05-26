@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import {
-  collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy,
+  collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -99,7 +99,29 @@ export function useBooks() {
     [user, books]
   );
 
-  const byStatus = (status: BookStatus) => books.filter((b) => b.status === status);
+  const reorderBooks = useCallback(
+    async (orderedIds: string[]) => {
+      if (!user) return;
+      const batch = writeBatch(db);
+      orderedIds.forEach((id, index) => {
+        batch.update(doc(db, `users/${user.uid}/books/${id}`), { order: index });
+      });
+      await batch.commit();
+    },
+    [user]
+  );
+
+  const byStatus = (status: BookStatus) => {
+    const list = books.filter((b) => b.status === status);
+    if (status === "want_to_read") {
+      return list.slice().sort((a, b) => {
+        const ao = a.order ?? Infinity;
+        const bo = b.order ?? Infinity;
+        return ao !== bo ? ao - bo : (a.created_at < b.created_at ? -1 : 1);
+      });
+    }
+    return list;
+  };
 
   return {
     books,
@@ -113,5 +135,6 @@ export function useBooks() {
     deleteBook,
     addHighlight,
     removeHighlight,
+    reorderBooks,
   };
 }

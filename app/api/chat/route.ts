@@ -1061,6 +1061,21 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "reorder_books",
+    description: "Reorder the user's 'Want to Read' list by priority. Provide book titles in the desired order (highest priority first). Only affects want_to_read books.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        ordered_titles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Book titles in desired priority order (index 0 = highest priority). Use get_reading_list first to see current titles.",
+        },
+      },
+      required: ["ordered_titles"],
+    },
+  },
+  {
     name: "get_daily_briefing",
     description: "Retrieve today's morning briefing (or a recent one). Returns the AI-generated briefing content and stats.",
     input_schema: {
@@ -3862,6 +3877,21 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         }
       }
       return lines.join("\n");
+    }
+
+    case "reorder_books": {
+      const orderedTitles = input.ordered_titles as string[];
+      const wtrSnap = await db.collection(`users/${uid}/books`).where("status", "==", "want_to_read").get();
+      if (wtrSnap.empty) return "No 'Want to Read' books to reorder.";
+      const batch = db.batch();
+      let matched = 0;
+      orderedTitles.forEach((title, index) => {
+        const titleQ = title.toLowerCase();
+        const match = wtrSnap.docs.find((d) => (d.data().title as string).toLowerCase().includes(titleQ));
+        if (match) { batch.update(match.ref, { order: index }); matched++; }
+      });
+      await batch.commit();
+      return `Reordered ${matched} of ${orderedTitles.length} books in your Want to Read list.`;
     }
 
     case "get_daily_briefing": {

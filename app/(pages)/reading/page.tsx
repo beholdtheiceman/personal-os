@@ -5,6 +5,12 @@ import BookCard from "@/components/reading/BookCard";
 import BookForm from "@/components/reading/BookForm";
 import type { Book, BookStatus } from "@/types";
 import { RiAddLine, RiBookLine, RiSearchLine } from "react-icons/ri";
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Tab = "reading" | "want_to_read" | "finished" | "abandoned" | "all";
 
@@ -16,11 +22,39 @@ const TABS: { key: Tab; label: string; color: string }[] = [
   { key: "all",          label: "All",           color: "text-text-primary" },
 ];
 
+function SortableBookCard(props: React.ComponentProps<typeof BookCard>) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: props.book.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 }}
+    >
+      <BookCard
+        {...props}
+        dragHandleListeners={listeners as Record<string, unknown>}
+        dragHandleAttributes={attributes as unknown as Record<string, unknown>}
+      />
+    </div>
+  );
+}
+
 export default function ReadingPage() {
   const {
     books, reading, wantToRead, finished, abandoned, loading,
-    addBook, updateBook, deleteBook, addHighlight, removeHighlight,
+    addBook, updateBook, deleteBook, addHighlight, removeHighlight, reorderBooks,
   } = useBooks();
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = wantToRead.findIndex((b) => b.id === active.id);
+    const newIndex = wantToRead.findIndex((b) => b.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    reorderBooks(arrayMove(wantToRead, oldIndex, newIndex).map((b) => b.id));
+  };
 
   const [tab,     setTab]     = useState<Tab>("reading");
   const [search,  setSearch]  = useState("");
@@ -131,6 +165,24 @@ export default function ReadingPage() {
             </button>
           )}
         </div>
+      ) : tab === "want_to_read" && !search ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={displayBooks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+            <div className="flex flex-col gap-3">
+              {displayBooks.map((book) => (
+                <SortableBookCard
+                  key={book.id}
+                  book={book}
+                  onEdit={() => setEditing(book)}
+                  onDelete={() => deleteBook(book.id)}
+                  onStatusAdvance={() => handleStatusAdvance(book)}
+                  onAddHighlight={(text) => addHighlight(book.id, text)}
+                  onRemoveHighlight={(i) => removeHighlight(book.id, i)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {displayBooks.map((book) => (
