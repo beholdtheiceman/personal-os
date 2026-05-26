@@ -132,7 +132,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   journal_reminder:  { enabled: false, time: "21:00" },
   health_reminder:   { enabled: false, time: "20:00" },
   weekly_review:     { enabled: false, time: "09:00", day_of_week: 0 },
-  birthday_reminder: { enabled: false, days_before: 7 },
+  birthday_reminder: { enabled: false, time: "08:00", days_before: 7 },
   savings_milestone: { enabled: false },
   progress_midday:   { enabled: false, time: "13:00" },
   progress_evening:  { enabled: false, time: "18:00" },

@@ -29,12 +29,20 @@ export async function requestAndSaveToken(uid: string): Promise<string | null> {
       // for this endpoint before writing so the same device never holds two tokens.
       const subscription = await registration.pushManager.getSubscription();
       const endpoint = subscription?.endpoint ?? null;
-      if (endpoint) {
-        const stale = await getDocs(
-          query(collection(db, `users/${uid}/fcm_tokens`), where("endpoint", "==", endpoint))
-        );
-        await Promise.all(stale.docs.map((d) => deleteDoc(d.ref)));
-      }
+
+      // Clean up tokens sharing this endpoint (rotated token, same browser) and
+      // tokens with no endpoint — saved before endpoint dedup existed, guaranteed stale.
+      const staleByEndpoint = endpoint
+        ? getDocs(query(collection(db, `users/${uid}/fcm_tokens`), where("endpoint", "==", endpoint)))
+        : Promise.resolve({ docs: [] as { ref: ReturnType<typeof doc> }[] });
+      const staleNullEndpoint = getDocs(
+        query(collection(db, `users/${uid}/fcm_tokens`), where("endpoint", "==", null))
+      );
+      const [byEndpoint, byNull] = await Promise.all([staleByEndpoint, staleNullEndpoint]);
+      await Promise.all([
+        ...byEndpoint.docs.map((d) => deleteDoc(d.ref)),
+        ...byNull.docs.map((d) => deleteDoc(d.ref)),
+      ]);
 
       await setDoc(doc(db, `users/${uid}/fcm_tokens`, tokenId), {
         token,

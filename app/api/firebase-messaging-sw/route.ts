@@ -14,6 +14,10 @@ export async function GET() {
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
+// Take over immediately so the updated SW activates without requiring a PWA restart.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(clients.claim()));
+
 firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();
 

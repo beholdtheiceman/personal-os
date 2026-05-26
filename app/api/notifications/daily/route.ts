@@ -76,8 +76,8 @@ export async function GET(req: NextRequest) {
       if (n) await send(n.title, n.body, n.tag ?? "weekly-review");
     }
 
-    // Birthday reminder — fires once per day at morning hour
-    if (settings.birthday_reminder.enabled && isHour(timeInfo, settings.morning_briefing.time ?? "07:00")) {
+    // Birthday reminder — fires at its own configured time (defaults 08:00)
+    if (settings.birthday_reminder.enabled && settings.birthday_reminder.time && isHour(timeInfo, settings.birthday_reminder.time)) {
       const n = await birthdayReminderHandler(uid, timeInfo.tz, settings.birthday_reminder.days_before ?? 7);
       if (n) await send(n.title, n.body, n.tag ?? "birthday-reminder");
     }

@@ -77,7 +77,7 @@ const CATEGORIES: {
     label: "Birthday Reminders",
     description: "Notifies you when a contact's birthday is approaching (based on days_before setting)",
     icon: <RiCake2Line className="w-4 h-4" />,
-    hasTime: false,
+    hasTime: true,
   },
   {
     key: "savings_milestone",
