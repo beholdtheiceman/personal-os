@@ -55,11 +55,11 @@ export function useBooks() {
       if (book && data.status === "finished" && !book.finish_date) {
         extra.finish_date = new Date().toLocaleDateString("en-CA");
       }
-      await updateDoc(doc(db, `users/${user.uid}/books/${id}`), {
-        ...data,
-        ...extra,
-        updated_at: new Date().toISOString(),
-      });
+      const payload = Object.fromEntries(
+        Object.entries({ ...data, ...extra, updated_at: new Date().toISOString() })
+          .filter(([, v]) => v !== undefined)
+      );
+      await updateDoc(doc(db, `users/${user.uid}/books/${id}`), payload);
     },
     [user, books]
   );
