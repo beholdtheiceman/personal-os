@@ -8,6 +8,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 import { format, getDay } from "date-fns";
 import { getLocalTimeInfo } from "@/lib/timezone";
+import { fetchWeatherData } from "@/lib/weather";
+import { getConstitutionContext } from "@/lib/constitution";
 
 // Returns RFC 3339 start/end-of-day strings in the user's local timezone so the
 // Google Calendar query covers exactly the user's local day, not UTC midnight→midnight.
@@ -121,7 +123,24 @@ async function collectContext(uid: string, today: string, tz: string) {
     return `${data.key}: ${data.value}`;
   });
 
-  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines };
+  // Weather (optional — skip gracefully if not configured)
+  let weatherLine: string | null = null;
+  try {
+    const weatherSnap = await db.doc(`users/${uid}/settings/weather`).get();
+    if (weatherSnap.exists) {
+      const w = weatherSnap.data()!;
+      const wd = await fetchWeatherData(w.latitude, w.longitude, w.units ?? "fahrenheit", w.city ?? "");
+      const deg = wd.units === "celsius" ? "°C" : "°F";
+      weatherLine = `${wd.current.condition}, ${wd.current.temp}${deg} (feels ${wd.current.feels_like}${deg}). Today: High ${wd.daily[0].temp_max}${deg}, Low ${wd.daily[0].temp_min}${deg}.`;
+    }
+  } catch {
+    // Weather is optional — continue without it
+  }
+
+  // Constitution (optional — inject into system prompt if present)
+  const constitutionCtx = await getConstitutionContext(uid).catch(() => null);
+
+  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx };
 }
 
 async function generateBriefing(uid: string, today: string, tz: string): Promise<{
@@ -157,9 +176,14 @@ async function generateBriefing(uid: string, today: string, tz: string): Promise
       }).join("\n")
     : "No active goals";
 
-  const systemPrompt = ctx.memoryLines.length
-    ? `You are a personal productivity assistant. User context:\n${ctx.memoryLines.slice(0, 20).join("\n")}`
-    : "You are a personal productivity assistant.";
+  const memoryCtx = ctx.memoryLines.length
+    ? `User context:\n${ctx.memoryLines.slice(0, 20).join("\n")}`
+    : "";
+  const systemPrompt = [
+    "You are a personal productivity assistant.",
+    memoryCtx,
+    ctx.constitutionCtx ?? "",
+  ].filter(Boolean).join("\n\n");
 
   const userPrompt = `Today is ${today} (${format(new Date(today + "T12:00:00"), "EEEE, MMMM d, yyyy")}).
 
@@ -185,6 +209,9 @@ ${calLines}
 
 HEALTH:
 ${healthLine}
+
+WEATHER:
+${ctx.weatherLine ?? "Not configured"}
 
 ACTIVE GOALS:
 ${goalLines}`;

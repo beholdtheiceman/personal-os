@@ -167,6 +167,32 @@ A personal AI-powered life dashboard built with Next.js 15, Firebase, and Claude
 - **Dashboard widget** — displays the brief summary + 3 source links; falls back to top 3 unread articles if no brief exists yet
 - Chat tools: `get_news_feed`, `save_article`, `add_news_feed`
 
+### ⚡ Agent Skill Modes
+- Type `/` in chat to open a floating skill picker above the input
+- 7 built-in skills: `/financial-advisor` 💰, `/health-coach` 🏃, `/weekly-review` 📋, `/goal-check` 🎯, `/relationship-check` 👥, `/meal-planner` 🥗, `/focus` 🎧
+- Activating a skill silently sends an opening message and injects a specialized system prompt — no visible user bubble
+- Active skill shown as a purple badge below the input; type `/end` or click × to exit and return to default mode
+- Skills are pure data objects in `lib/skills.ts` — no new API routes or components needed to add a skill
+
+### 🔊 Voice Responses (TTS)
+- Speaker toggle button in the chat toolbar (between mic and send)
+- Claude's responses are read aloud using browser `SpeechSynthesis` (free, no API key required)
+- Markdown stripped before speaking — headings, bold, bullets, code blocks all cleaned up automatically
+- Text chunked at sentence boundaries for natural pausing; smart voice picker prefers Google / Samantha / Alex voices
+- Toggle persisted to `localStorage`; survives page reload
+- **OpenAI TTS upgrade planned** — swap to `tts-1` for higher quality; `lib/tts.ts` already contains the Option B implementation in commented code; only needs `OPENAI_API_KEY` + `app/api/tts/route.ts` to activate
+
+### 🌤️ Weather
+- Live conditions and 7-day forecast via **Open-Meteo** (free, no API key)
+- Set home location in Settings — browser geolocation + Nominatim reverse geocode stores lat/lon + city name in Firestore
+- °F / °C toggle persisted per user
+- **Dashboard widget** — current temp + weather emoji + condition + feels-like + high/low + 5-day strip
+- **`/weather` page** — full current conditions (temp, feels-like, humidity, wind, UV index) + 24h hourly scroll + 7-day forecast rows
+- UV index shown as a color-coded bar (Low → Extreme)
+- Weather automatically injected into morning briefing so Claude can suggest outdoor workouts, dress recommendations, etc.
+- Chat tool: `get_weather` — current conditions + today's high/low + 3-day outlook
+- Total cost: $0
+
 ### 📊 Proactive AI Insights
 - Daily cron uses Claude Opus to analyze 30 days of cross-domain data
 - Surfaces correlations across mood, health, hydration, habits, workouts, nutrition, time, body metrics
@@ -497,6 +523,7 @@ users/{uid}/
 │   ├── notifications         # 14 notification category preferences
 │   ├── quick_links
 │   ├── dashboard             # Widget order + hidden widgets
+│   ├── weather               # { latitude, longitude, city, units }
 │   └── chat_migration
 └── integrations/
     ├── gmail

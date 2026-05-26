@@ -38,6 +38,7 @@ import SavingsDashboardWidget from "@/components/dashboard/SavingsDashboardWidge
 import InsightsWidget from "@/components/dashboard/InsightsWidget";
 import AchievementsWidget from "@/components/achievements/AchievementsWidget";
 import NewsBriefWidget from "@/components/dashboard/NewsBriefWidget";
+import WeatherWidget from "@/components/dashboard/WeatherWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -632,6 +633,9 @@ export default function DashboardPage() {
 
       case "news_feed":
         return <NewsBriefWidget key="news_feed" />;
+
+      case "weather":
+        return <WeatherWidget key="weather" />;
 
       case "gmail":
         return gmailConnected ? (

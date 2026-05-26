@@ -753,3 +753,63 @@ export interface NewsBrief {
   generated_at: string;     // ISO
   article_count: number;
 }
+
+// ─── Weather ──────────────────────────────────────────────────────────────────
+export interface WeatherSettings {
+  latitude: number;
+  longitude: number;
+  city: string;
+  units: "fahrenheit" | "celsius";
+  updated_at: string;
+}
+
+export interface WeatherCurrent {
+  temp: number;
+  feels_like: number;
+  humidity: number;
+  wind_speed: number;
+  weather_code: number;
+  condition: string;
+  uv_index: number;
+}
+
+export interface WeatherHourly {
+  time: string;
+  temp: number;
+  weather_code: number;
+  condition: string;
+  precip_probability: number;
+}
+
+export interface WeatherDay {
+  date: string;
+  weather_code: number;
+  condition: string;
+  temp_max: number;
+  temp_min: number;
+  precip_sum: number;
+  uv_index_max: number;
+}
+
+export interface WeatherResponse {
+  city: string;
+  units: "fahrenheit" | "celsius";
+  current: WeatherCurrent;
+  hourly: WeatherHourly[];
+  daily: WeatherDay[];
+  fetched_at: string;
+}
+
+// ─── Personal Constitution ────────────────────────────────────────────────────
+export interface ConstitutionMessage {
+  role: "guide" | "user";
+  content: string;
+}
+
+export interface PersonalConstitution {
+  content: string;                      // Full formatted text injected into chat context
+  interview_messages: ConstitutionMessage[]; // Full conversation history
+  interview_complete: boolean;
+  created_at: string;
+  updated_at: string;
+}

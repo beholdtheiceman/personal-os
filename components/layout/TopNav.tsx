@@ -13,6 +13,7 @@ import {
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
   RiTimeLine, RiFocusLine, RiLightbulbLine,
   RiMicLine, RiBook2Line, RiTrophyLine, RiNewspaperLine,
+  RiSunLine, RiShieldLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -33,8 +34,9 @@ const MORE_SECTIONS = [
       { href: "/journal",   label: "Journal",   icon: RiBookLine },
       { href: "/bible",     label: "Bible",     icon: RiBookReadLine },
       { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
-      { href: "/decisions", label: "Decisions", icon: RiLightbulbLine },
-      { href: "/people",    label: "People",    icon: RiContactsBook2Line },
+      { href: "/decisions",    label: "Decisions",  icon: RiLightbulbLine },
+      { href: "/people",       label: "People",     icon: RiContactsBook2Line },
+      { href: "/constitution", label: "Constitution", icon: RiShieldLine },
     ],
   },
   {
@@ -44,6 +46,7 @@ const MORE_SECTIONS = [
       { href: "/workout",      label: "Workout",      icon: RiRunLine },
       { href: "/nutrition",    label: "Nutrition",    icon: RiBowlLine },
       { href: "/meal-planner", label: "Meal Planner", icon: RiRestaurantLine },
+      { href: "/weather",      label: "Weather",      icon: RiSunLine },
     ],
   },
   {

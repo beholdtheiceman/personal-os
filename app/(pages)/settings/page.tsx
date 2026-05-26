@@ -1,5 +1,6 @@
 import NotificationSettings from "@/components/notifications/NotificationSettings";
 import TimezoneSettings from "@/components/settings/TimezoneSettings";
+import WeatherSettings from "@/components/settings/WeatherSettings";
 
 export default function SettingsPage() {
   return (
@@ -9,6 +10,7 @@ export default function SettingsPage() {
         <p className="text-xs text-text-secondary mt-0.5">Manage your preferences and notifications</p>
       </div>
       <TimezoneSettings />
+      <WeatherSettings />
       <NotificationSettings />
     </div>
   );
