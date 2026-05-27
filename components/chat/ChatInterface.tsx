@@ -569,8 +569,8 @@ export default function ChatInterface() {
           </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
+        {/* Messages — explicit dark bg so the input's backdrop-filter blurs dark, not browser-white */}
+        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4" style={{ background: "rgba(8,3,5,0.55)" }}>
           {!activeChatId ? (
             <div className="text-center py-16 text-text-secondary">
               <RiChat1Line className="w-10 h-10 text-text-muted mx-auto mb-3" />
