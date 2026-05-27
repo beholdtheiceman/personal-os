@@ -16,11 +16,12 @@ const nextConfig = {
             // Tighten to nonces in a future pass once CSP reporting is wired up.
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com",
+              "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://cdn.plaid.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https:",
-              "connect-src 'self' https://*.googleapis.com https://*.anthropic.com https://*.firebaseio.com https://*.firebase.google.com wss://*.firebaseio.com https://discord.com",
+              "frame-src https://cdn.plaid.com",
+              "connect-src 'self' https://*.googleapis.com https://*.anthropic.com https://*.firebaseio.com https://*.firebase.google.com wss://*.firebaseio.com https://discord.com https://*.plaid.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "object-src 'none'",
