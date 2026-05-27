@@ -112,6 +112,6 @@ For the unsubscribe list: identify senders that appear to be newsletters, market
     return NextResponse.json(parsed);
   } catch (err) {
     console.error("[gmail/analyze] error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
   }
 }

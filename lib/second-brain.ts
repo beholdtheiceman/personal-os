@@ -6,7 +6,12 @@ const SECOND_BRAIN_PATH = process.env.SECOND_BRAIN_PATH || "C:\\Users\\Larry\\Do
 const IS_AVAILABLE = (() => { try { return fs.existsSync(SECOND_BRAIN_PATH); } catch { return false; } })();
 
 export function getSecondBrainPath(...parts: string[]) {
-  return path.join(SECOND_BRAIN_PATH, ...parts);
+  const resolved = path.resolve(path.join(SECOND_BRAIN_PATH, ...parts));
+  const root = path.resolve(SECOND_BRAIN_PATH);
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    throw new Error(`Path traversal attempt blocked: "${parts.join("/")}" escapes the Second Brain vault`);
+  }
+  return resolved;
 }
 
 export function readFile(relativePath: string): string {

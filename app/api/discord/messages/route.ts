@@ -1,9 +1,17 @@
 // GET /api/discord/messages?channelId=...&before=... — fetch messages from a channel
 import { NextRequest, NextResponse } from "next/server";
+import { getAdminAuth } from "@/lib/firebase-admin";
 
 const BASE = "https://discord.com/api/v10";
 
 export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  try {
+    await getAdminAuth().verifyIdToken(authHeader.replace("Bearer ", ""));
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const channelId = req.nextUrl.searchParams.get("channelId");
   const before = req.nextUrl.searchParams.get("before");
   if (!channelId) return NextResponse.json({ error: "Missing channelId" }, { status: 400 });
@@ -43,6 +51,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(messages);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[discord/messages]", err);
+    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
   }
 }

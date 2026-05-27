@@ -9,18 +9,24 @@ export async function POST(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
   const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
+  let verifiedUid: string | null = null;
   if (!isCron) {
     const idToken = authHeader.replace("Bearer ", "");
     try {
-      await getAdminAuth().verifyIdToken(idToken);
+      const decoded = await getAdminAuth().verifyIdToken(idToken);
+      verifiedUid = decoded.uid;
     } catch {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
 
   const { uid, title, body, tag, data } = await req.json();
-  if (!uid || !title) return NextResponse.json({ error: "Missing uid or title" }, { status: 400 });
+  if (!title) return NextResponse.json({ error: "Missing title" }, { status: 400 });
 
-  const result = await sendPushToUser(uid, { title, body, tag, data });
+  // Non-cron callers can only push to their own UID — prevents targeting other users
+  const targetUid = isCron ? uid : verifiedUid!;
+  if (!targetUid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+
+  const result = await sendPushToUser(targetUid, { title, body, tag, data });
   return NextResponse.json(result);
 }

@@ -58,6 +58,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ name: meta.name, mimeType: meta.mimeType, content: trimmed });
   } catch (err) {
     console.error("Drive file error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to read file" }, { status: 500 });
   }
 }

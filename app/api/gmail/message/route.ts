@@ -44,6 +44,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error("Gmail message error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch message" }, { status: 500 });
   }
 }

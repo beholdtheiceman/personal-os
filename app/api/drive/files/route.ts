@@ -46,6 +46,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error("Drive files error:", err);
-    return NextResponse.json({ connected: false, files: [], error: String(err) });
+    return NextResponse.json({ connected: false, files: [], error: "Failed to load files" });
   }
 }

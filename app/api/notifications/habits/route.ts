@@ -12,7 +12,7 @@ import { sendPushToUser } from "@/lib/send-push";
 export async function GET(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
   const authHeader = req.headers.get("Authorization") ?? "";
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

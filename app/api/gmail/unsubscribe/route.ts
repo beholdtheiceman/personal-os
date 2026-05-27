@@ -76,6 +76,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not parse unsubscribe method from header", header: listUnsub }, { status: 422 });
   } catch (err) {
     console.error("Unsubscribe error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Unsubscribe failed" }, { status: 500 });
   }
 }

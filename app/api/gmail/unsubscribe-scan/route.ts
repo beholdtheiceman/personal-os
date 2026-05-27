@@ -93,6 +93,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ candidates, scanned: ids.length });
   } catch (err) {
     console.error("Unsubscribe scan error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Scan failed" }, { status: 500 });
   }
 }

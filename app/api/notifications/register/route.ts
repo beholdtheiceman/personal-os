@@ -1,11 +1,21 @@
 // POST /api/notifications/register — save FCM token for a user
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
+  // Verify Firebase ID token — uid comes from the token, not the body
+  const authHeader = req.headers.get("Authorization") ?? "";
+  let uid: string;
+  try {
+    const decoded = await getAdminAuth().verifyIdToken(authHeader.replace("Bearer ", ""));
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
-  const { uid, token } = body;
-  if (!uid || !token) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+  const { token } = body;
+  if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
   try {
     const db = getAdminDb();
@@ -36,14 +46,23 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("Notification register error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[notifications/register] POST error:", err);
+    return NextResponse.json({ error: "Failed to register token" }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const { uid, token } = await req.json();
-  if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+  // Verify Firebase ID token — uid comes from the token, not the body
+  const authHeader = req.headers.get("Authorization") ?? "";
+  let uid: string;
+  try {
+    const decoded = await getAdminAuth().verifyIdToken(authHeader.replace("Bearer ", ""));
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { token } = await req.json();
 
   try {
     const db = getAdminDb();
@@ -61,6 +80,7 @@ export async function DELETE(req: NextRequest) {
     );
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[notifications/register] DELETE error:", err);
+    return NextResponse.json({ error: "Failed to unregister token" }, { status: 500 });
   }
 }

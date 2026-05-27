@@ -1,13 +1,29 @@
 // POST /api/transcribe — receives audio blob, returns text via OpenAI Whisper
 import { NextRequest, NextResponse } from "next/server";
+import { getAdminAuth } from "@/lib/firebase-admin";
+
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: NextRequest) {
+  // Require authenticated user
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const idToken = authHeader.replace("Bearer ", "");
+  try {
+    await getAdminAuth().verifyIdToken(idToken);
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;
 
     if (!audioFile) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
+    }
+
+    if (audioFile.size > MAX_AUDIO_BYTES) {
+      return NextResponse.json({ error: "Audio file too large (max 10 MB)" }, { status: 413 });
     }
 
     // Forward to OpenAI Whisper

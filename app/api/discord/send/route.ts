@@ -1,9 +1,17 @@
 // POST /api/discord/send — send a message to a channel
 import { NextRequest, NextResponse } from "next/server";
+import { getAdminAuth } from "@/lib/firebase-admin";
 
 const BASE = "https://discord.com/api/v10";
 
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  try {
+    await getAdminAuth().verifyIdToken(authHeader.replace("Bearer ", ""));
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { channelId, content } = await req.json();
   if (!channelId || !content) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
@@ -23,6 +31,7 @@ export async function POST(req: NextRequest) {
     if (!res.ok) throw new Error(data.message ?? "Failed to send message");
     return NextResponse.json({ ok: true, id: data.id });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[discord/send]", err);
+    return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
   }
 }

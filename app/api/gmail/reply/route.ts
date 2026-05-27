@@ -75,6 +75,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, id: result.id });
   } catch (err) {
     console.error("Gmail reply error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Failed to send reply" }, { status: 500 });
   }
 }

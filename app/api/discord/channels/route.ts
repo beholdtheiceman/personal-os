@@ -1,5 +1,6 @@
 // GET /api/discord/channels?guildId=... — list text channels in a guild
 import { NextRequest, NextResponse } from "next/server";
+import { getAdminAuth } from "@/lib/firebase-admin";
 
 const BASE = "https://discord.com/api/v10";
 
@@ -12,6 +13,13 @@ interface DiscordChannel {
 }
 
 export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  try {
+    await getAdminAuth().verifyIdToken(authHeader.replace("Bearer ", ""));
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const guildId = req.nextUrl.searchParams.get("guildId");
   if (!guildId) return NextResponse.json({ error: "Missing guildId" }, { status: 400 });
 
@@ -51,6 +59,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(grouped);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error("[discord/channels]", err);
+    return NextResponse.json({ error: "Failed to fetch channels" }, { status: 500 });
   }
 }

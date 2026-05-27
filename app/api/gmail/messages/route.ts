@@ -65,6 +65,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ connected: true, messages });
   } catch (err) {
     console.error("Gmail messages error:", err);
-    return NextResponse.json({ connected: false, messages: [], error: String(err) });
+    return NextResponse.json({ connected: false, messages: [], error: "Failed to load messages" });
   }
 }

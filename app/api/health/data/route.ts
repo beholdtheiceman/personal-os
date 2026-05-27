@@ -361,6 +361,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     console.error("Google Health data error:", err);
-    return NextResponse.json({ connected: false, error: String(err) });
+    return NextResponse.json({ connected: false, error: "Failed to load health data" });
   }
 }
