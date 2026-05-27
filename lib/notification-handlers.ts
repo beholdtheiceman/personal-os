@@ -627,6 +627,41 @@ export async function spendingTrendHandler(uid: string, tz: string): Promise<Not
   };
 }
 
+// ── Season Check-In Nudge ────────────────────────────────────────────────────
+export async function seasonCheckinHandler(uid: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const seasonDoc = await db.doc(`users/${uid}/season/current`).get();
+  if (!seasonDoc.exists) return null;
+
+  const season = seasonDoc.data()!;
+  if (!season.checkin_complete) return null;
+
+  const weeks = Math.floor(
+    (Date.now() - new Date(season.started_at as string).getTime()) / (1000 * 60 * 60 * 24 * 7)
+  );
+  if (weeks < 4) return null;
+
+  // Dedup: only fire once per 7-day window
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const dedupSnap = await db.collection(`users/${uid}/notifications`)
+    .where("type", "==", "season_checkin")
+    .where("sent_at", ">=", cutoff)
+    .limit(1)
+    .get();
+  if (!dedupSnap.empty) return null;
+
+  await db.collection(`users/${uid}/notifications`).add({
+    type: "season_checkin",
+    sent_at: new Date().toISOString(),
+  });
+
+  return {
+    title: "Season Check-In",
+    body: `You've been in "${season.name as string}" for ${weeks} weeks. Worth a moment to reflect — is this season still accurate?`,
+    tag: "season-checkin",
+  };
+}
+
 // ── End-of-Day Time Summary ───────────────────────────────────────────────────
 export async function timeSummaryHandler(uid: string, tz: string): Promise<NotifPayload | null> {
   const db = getAdminDb();

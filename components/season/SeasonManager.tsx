@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, deleteDoc, collection, getDocs } from "firebase/firestore";
 import { RiLeafLine, RiSendPlane2Line, RiRefreshLine, RiDeleteBin7Line } from "react-icons/ri";
 import type { SeasonMessage, LifeSeason } from "@/types";
 
@@ -30,6 +30,7 @@ export default function SeasonManager() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [closingMode, setClosingMode] = useState(false);
+  const [pastSeasons, setPastSeasons] = useState<(LifeSeason & { closed_at: string })[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,6 +58,15 @@ export default function SeasonManager() {
       }
     });
     return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    getDocs(collection(db, `users/${user.uid}/seasons`)).then((snap) => {
+      const docs = snap.docs.map((d) => d.data() as LifeSeason & { closed_at: string });
+      docs.sort((a, b) => (b.closed_at ?? "").localeCompare(a.closed_at ?? ""));
+      setPastSeasons(docs);
+    });
   }, [user]);
 
   useEffect(() => {
@@ -488,6 +498,43 @@ export default function SeasonManager() {
           Close This Season
         </button>
       </div>
+
+      {pastSeasons.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-pink-400/70 uppercase tracking-wider">Past Seasons</p>
+          {pastSeasons.map((s, i) => {
+            const durationWeeks = s.closed_at && s.started_at
+              ? Math.round((new Date(s.closed_at).getTime() - new Date(s.started_at).getTime()) / (1000 * 60 * 60 * 24 * 7))
+              : null;
+            return (
+              <div
+                key={i}
+                className="rounded-xl px-5 py-4 space-y-2 border border-white/10"
+                style={{ background: "rgba(10, 4, 16, 0.82)", backdropFilter: "blur(12px)" }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-block bg-white/10 border border-white/15 text-gray-200 text-sm font-medium px-3 py-1 rounded-full">
+                    {s.name}
+                  </span>
+                  {durationWeeks !== null && (
+                    <span className="text-xs text-gray-500 shrink-0">
+                      {durationWeeks} {durationWeeks === 1 ? "week" : "weeks"}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">
+                  {formatDate(s.started_at)} → {formatDate(s.closed_at)}
+                </p>
+                {s.reflection && (
+                  <p className="text-xs text-gray-500 italic leading-relaxed line-clamp-3">
+                    {s.reflection}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

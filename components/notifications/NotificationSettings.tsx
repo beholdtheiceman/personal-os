@@ -11,7 +11,7 @@ import {
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
   RiCake2Line, RiSaveLine, RiTimeLine, RiMoonLine,
   RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine, RiZzzLine, RiRefreshLine,
-  RiRepeatLine, RiLineChartLine,
+  RiRepeatLine, RiLineChartLine, RiLeafLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -141,6 +141,13 @@ const CATEGORIES: {
     label: "Spending Trend Alert",
     description: "Mid-month alert when your spending pace is on track to exceed a budget category limit — only fires between the 10th and 25th",
     icon: <RiLineChartLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "season_checkin",
+    label: "Season Check-In",
+    description: "Nudge when your active season is 4+ weeks old — prompts you to reflect and confirm it still fits (fires at most once per week)",
+    icon: <RiLeafLine className="w-4 h-4" />,
     hasTime: true,
   },
 ];

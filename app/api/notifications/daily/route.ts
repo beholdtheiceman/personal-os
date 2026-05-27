@@ -9,7 +9,7 @@ import {
   goalDeadlineHandler, journalReminderHandler, healthReminderHandler, weeklyReviewHandler,
   birthdayReminderHandler, savingsMilestoneHandler, progressReminderHandler,
   decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
-  subscriptionRenewalHandler, spendingTrendHandler,
+  subscriptionRenewalHandler, spendingTrendHandler, seasonCheckinHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
@@ -135,6 +135,12 @@ export async function GET(req: NextRequest) {
     if (settings.spending_trend.enabled && isHour(timeInfo, settings.spending_trend.time ?? "12:00")) {
       const n = await spendingTrendHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "spending-trend");
+    }
+
+    // Season check-in — nudge when active season is 4+ weeks old
+    if (settings.season_checkin?.enabled && settings.season_checkin.time && isHour(timeInfo, settings.season_checkin.time)) {
+      const n = await seasonCheckinHandler(uid);
+      if (n) await send(n.title, n.body, n.tag ?? "season-checkin");
     }
 
     results[uid] = fired;
