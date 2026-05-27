@@ -144,25 +144,41 @@ async function collectWeekData(uid: string, weekStart: string, weekEnd: string) 
     }
   } catch { /* time tracker not used */ }
 
-  // Spending this week (by category, expenses only)
+  // Spending this week — merge manual + Plaid transactions
   let spendSummary: string | null = null;
   let totalWeekSpend: number | null = null;
   try {
-    const txSnap = await db
-      .collection(`users/${uid}/transactions`)
-      .where("date", ">=", weekStart)
-      .where("date", "<=", weekEnd)
-      .get();
-    if (!txSnap.empty) {
-      const byCategory: Record<string, number> = {};
-      txSnap.docs.forEach((d) => {
-        const tx = d.data();
-        if (tx.type === "expense") {
-          const cat = (tx.category as string) || "Uncategorized";
-          byCategory[cat] = (byCategory[cat] ?? 0) + ((tx.amount as number) ?? 0);
-        }
-      });
-      const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+    const PLAID_LABELS: Record<string, string> = {
+      INCOME: "Income", TRANSFER_IN: "Transfer In", TRANSFER_OUT: "Transfer Out",
+      LOAN_PAYMENTS: "Loan Payments", BANK_FEES: "Bank Fees", ENTERTAINMENT: "Entertainment",
+      FOOD_AND_DRINK: "Food & Drink", GENERAL_MERCHANDISE: "Shopping", HOME_IMPROVEMENT: "Home",
+      MEDICAL: "Medical", PERSONAL_CARE: "Personal Care", GENERAL_SERVICES: "Services",
+      GOVERNMENT_AND_NON_PROFIT: "Government", TRANSPORTATION: "Transportation",
+      TRAVEL: "Travel", RENT_AND_UTILITIES: "Utilities",
+    };
+    const byCategory: Record<string, number> = {};
+    const [txSnap, plaidSnap] = await Promise.all([
+      db.collection(`users/${uid}/transactions`)
+        .where("date", ">=", weekStart).where("date", "<=", weekEnd).get(),
+      db.collection(`users/${uid}/plaid_transactions`)
+        .where("date", ">=", weekStart).where("date", "<=", weekEnd).get(),
+    ]);
+    txSnap.docs.forEach((d) => {
+      const tx = d.data();
+      if (tx.type === "expense") {
+        const cat = (tx.category as string) || "Uncategorized";
+        byCategory[cat] = (byCategory[cat] ?? 0) + ((tx.amount as number) ?? 0);
+      }
+    });
+    plaidSnap.docs.forEach((d) => {
+      const tx = d.data();
+      if ((tx.amount as number) > 0) {
+        const cat = PLAID_LABELS[tx.category as string] ?? (tx.category as string) ?? "Uncategorized";
+        byCategory[cat] = (byCategory[cat] ?? 0) + (tx.amount as number);
+      }
+    });
+    const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+    if (entries.length) {
       totalWeekSpend = entries.reduce((s, [, v]) => s + v, 0);
       spendSummary = entries.map(([cat, amt]) => `${cat}: $${amt.toFixed(0)}`).join(", ");
     }
