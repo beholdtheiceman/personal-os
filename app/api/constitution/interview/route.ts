@@ -71,12 +71,19 @@ export async function POST(req: NextRequest) {
       content: m.content,
     }));
 
+    // Anthropic requires at least one message — seed with a starter when the
+    // interview is just beginning and the history is empty.
+    const apiMessages: Anthropic.MessageParam[] =
+      anthropicMessages.length === 0
+        ? [{ role: "user", content: "Let's begin." }]
+        : anthropicMessages;
+
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1500,
       system: GUIDE_SYSTEM,
-      messages: anthropicMessages,
+      messages: apiMessages,
     });
 
     const text = response.content[0].type === "text" ? response.content[0].text : "";
