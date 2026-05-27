@@ -77,7 +77,7 @@
 
 > These are not features — they are the foundation. Every system already built, and everything on the roadmap below, becomes more valuable once this layer exists. The Personal Constitution is the first thing to build.
 
-### Personal Constitution ⭐ Priority #1
+### Personal Constitution ✅ Complete
 - **The "why" layer the entire app is missing.** Right now the app knows everything about what you do and almost nothing about why. The Constitution is a structured document stored in Firestore at `users/{uid}/constitution` and injected into Claude's chat context on every session — load-bearing context, not a page you visit occasionally.
 - **What it contains:**
   - **Core values** — 3–7 values with personal definitions (not dictionary definitions — what *this value* means to *you*, how you'd know you were living it, how you'd know you weren't)
@@ -104,7 +104,7 @@
   - Quarterly review prompt asks how the season served your Constitution, not just your metrics
 - **Living document.** Prompted review each quarter (alongside OKR review) and annually (alongside the Annual Report). Claude notes which sections haven't been updated in over a year and asks if they still hold.
 
-### Alignment Gap Detection
+### Alignment Gap Detection 🧪 Pending Testing
 - **The most powerful thing the Constitution unlocks.** Claude already has visibility into almost everything you do — time logs, habits, spending, journal entries, goals, workouts, interactions. Once it knows what you said matters most, it can notice when your actions don't match. Not harshly — honestly.
 - **Weekly alignment section in the AI Review** — sits above all domain-specific metrics. Two questions: (1) How aligned was this week with your stated values? (2) Where was the biggest gap? Examples:
   - "You've listed faith as your top value, but this is the third week without a logged quiet time or church attendance."
@@ -115,20 +115,21 @@
 - **Role-level check-ins** — beyond overall alignment, Claude can surface role-specific gaps: "Looking at your [key role], here's what excellent looks like by your own definition — and here's what last week actually looked like."
 
 ### Life Season System
-- **Life has chapters. The app should know which one you're in.** A Season is a named period with an intention, a start date, and an expected duration. You define your current season and what it calls for. Claude adjusts how everything operates to match.
-- **Season types (user-defined, these are starting points):**
-  - **Push** — heads-down on a major goal; high output, high accountability; Claude leads with progress and gaps
-  - **Rest & Recovery** — intentional deceleration; Claude monitors whether you're *actually* resting, not just telling yourself you are
-  - **Transition** — major life change in progress (new job, move, relationship shift, loss); goals held loosely; Claude asks more and advises less
-  - **Maintenance** — sustaining what's built; steady state; Claude flags drift rather than pushing growth
-  - **Exploration** — deliberately trying new things, gathering inputs; low optimization pressure; Claude encourages range over depth
-- **How the app adjusts by season:**
-  - Morning briefing tone and emphasis shifts
-  - Weekly review framing changes — "grinding through a Rest season is a failure, not a success"
-  - Notification pressure adjusts (Push season = higher accountability; Rest season = lower friction)
-  - Dashboard widget prominence shifts to season-relevant metrics
-  - Claude's proactive check-ins change in frequency and depth
-- **Season transitions** — when a season ends, Claude runs a short closing ritual: what did this season produce, what did you learn, what season comes next? Seasons are archived and visible as a timeline of your life's chapters.
+- **The key insight: seasons are recognized, not declared.** You don't always know what kind of period you're entering until you're already in it. A deliberate sprint toward a goal can be named in advance — but burnout, grief, uncertainty, and transition tend to arrive uninvited. The system shouldn't ask you to pick a season from a list. It should help you *notice* what's actually happening and name it so you can be intentional about it rather than just reactive.
+- **Two scales that matter:**
+  - **Life chapters** — the long arcs, years in length. Building a career. Early marriage. A period of significant loss. Raising young kids. These shape the backdrop against which everything else happens and don't change quickly.
+  - **Seasons** — the medium-term periods within those chapters, weeks to months long. A focused sprint. A recovery stretch. A window of uncertainty. A period of exploration. These are what the system actively tracks and responds to.
+  - *(Daily modes — the micro level — are already handled by the Life Scenes system.)*
+- **How seasons surface — through conversation, not configuration.** Every few weeks Claude checks in with a simple, open question: "How would you describe where you are right now?" You answer in whatever language feels true. Claude helps you articulate it if you're not sure, reflects back what it's been observing in your data, and you arrive at a shared understanding together. No dropdown, no forced category.
+- **Claude notices before you do.** Beyond the periodic check-in, Claude watches for patterns that suggest a season is shifting: energy levels dropping across multiple weeks, workouts being skipped, journal tone changing, a widening gap between what you planned and what actually happened. When patterns accumulate, Claude surfaces them gently — "I've been noticing some things over the last few weeks. It feels less like a Push period and more like something that might need a different gear. Does that land?" You confirm, correct, or reframe. The observation comes from the data; the meaning comes from the conversation.
+- **The value isn't the label — it's the permission.** Naming a recovery season gives you permission to not push hard without feeling like you're failing. Naming a transition season gives you permission to hold your goals loosely. Without the name, most people keep running their Push-season playbook through a period that's calling for something completely different — and then wonder why everything feels off. The naming makes the implicit explicit so you can actually respond to where you are rather than where you think you should be.
+- **How the app adjusts once a season is recognized:**
+  - Morning briefing tone and emphasis shifts to match what the season calls for
+  - Weekly review framing changes — what counts as a good week in a Recovery season looks nothing like a good week in a Push season
+  - Notification pressure and accountability intensity adjust accordingly
+  - Claude's proactive check-ins shift in frequency, depth, and what they're watching for
+  - The "What Actually Matters" signal is recalibrated to the season's reality
+- **Season transitions and archives** — when a season closes, Claude runs a short reflection: what did this period produce, what did you learn, what does the next season seem to be calling for? Seasons are archived chronologically as a timeline of your life's chapters — something genuinely worth looking back on over years.
 
 ### Longitudinal Memory & Pattern Recognition
 - **Advisors know your history. Claude should too.** Right now each week is relatively fresh context. This builds a living "life context" document that accumulates what Claude has learned about you over months and years — distinct from the PARA vault (which is your knowledge) and the Constitution (which is your values). This is Claude's understanding of *your patterns*.

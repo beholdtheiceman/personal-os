@@ -814,3 +814,19 @@ export interface PersonalConstitution {
   created_at: string;
   updated_at: string;
 }
+
+// ─── Life Season ──────────────────────────────────────────────────────────────
+export interface SeasonMessage {
+  role: "guide" | "user";
+  content: string;
+}
+
+export interface LifeSeason {
+  name: string;
+  intention: string;
+  claude_framing: string;
+  messages: SeasonMessage[];
+  checkin_complete: boolean;
+  started_at: string;    // YYYY-MM-DD
+  status: "active" | "closing";
+}

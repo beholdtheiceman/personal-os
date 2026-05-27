@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 import { format, startOfWeek, subDays } from "date-fns";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
+import { getSeasonContext } from "@/lib/season";
 import type { NotificationSettings } from "@/types";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 
@@ -201,7 +202,10 @@ async function generateReview(uid: string, weekStart: string): Promise<string> {
     return d.toISOString().slice(0, 10);
   })();
 
-  const data = await collectWeekData(uid, weekStart, weekEnd);
+  const [data, seasonCtx] = await Promise.all([
+    collectWeekData(uid, weekStart, weekEnd),
+    getSeasonContext(uid),
+  ]);
 
   const context = `
 WEEK: ${weekStart} to ${weekEnd}
@@ -231,6 +235,7 @@ ${data.spendSummary ? `\nSPENDING THIS WEEK (${data.totalWeekSpend != null ? `$$
 
 ABOUT ME:
 ${data.memoryLines.slice(0, 15).join("\n")}
+${seasonCtx ? `\nCURRENT LIFE SEASON:\n${seasonCtx}` : ""}
 `.trim();
 
   const alignmentInstructions = data.constitutionContent
@@ -285,7 +290,7 @@ Rules for the alignment section:
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1200,
-    system: `You are a personal AI coach writing a weekly review for the user. Be warm, direct, and honest. Reference specific data points. Don't be generic or sycophantic. Keep the whole review under 500 words.`,
+    system: `You are a personal AI coach writing a weekly review for the user. Be warm, direct, and honest. Reference specific data points. Don't be generic or sycophantic. Keep the whole review under 500 words.${seasonCtx ? " The user has named their current life season — let that context shape the framing and tone of the review. What counts as a good week in a recovery season looks nothing like a good week in a focused sprint." : ""}`,
     messages: [
       {
         role: "user",
