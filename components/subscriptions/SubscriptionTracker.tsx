@@ -62,11 +62,15 @@ export default function SubscriptionTracker() {
 
   const handleSave = async (data: Omit<Subscription, "id">) => {
     if (!user) return;
+    // Firestore rejects `undefined` values — strip them before writing
+    const clean = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined)
+    );
     if (editing) {
-      await updateDoc(doc(db, "users", user.uid, "subscriptions", editing.id), data as object);
+      await updateDoc(doc(db, "users", user.uid, "subscriptions", editing.id), clean);
       toast.success("Subscription updated");
     } else {
-      await addDoc(collection(db, "users", user.uid, "subscriptions"), data);
+      await addDoc(collection(db, "users", user.uid, "subscriptions"), clean);
       toast.success("Subscription added");
     }
     setEditing(null);
