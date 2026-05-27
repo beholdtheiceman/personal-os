@@ -5265,7 +5265,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate, imageBase64, chatId, isFirstMessage } = await req.json();
+    const { messages, systemPrompt, uid, localDate, imageBase64, fileText, fileName, chatId, isFirstMessage } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -5304,6 +5304,22 @@ export async function POST(req: NextRequest) {
               { type: "text", text: textContent },
             ],
           },
+        ];
+      }
+    }
+
+    // If a text file was attached, prepend its content to the last user message
+    if (fileText) {
+      const lastIdx = currentMessages.length - 1;
+      const lastMsg = currentMessages[lastIdx];
+      if (lastMsg?.role === "user") {
+        const existingText = typeof lastMsg.content === "string"
+          ? lastMsg.content
+          : (lastMsg.content as { type: string; text?: string }[]).find((b) => b.type === "text")?.text ?? "";
+        const combined = `[Attached file: ${fileName ?? "file"}]\n\n${fileText}\n\n---\n\n${existingText}`;
+        currentMessages = [
+          ...currentMessages.slice(0, lastIdx),
+          { role: "user", content: combined },
         ];
       }
     }

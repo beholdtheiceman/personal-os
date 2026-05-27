@@ -15,6 +15,7 @@ import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiAddLine, RiChat1Line, RiArrowRightSLine, RiCloseLine,
   RiExternalLinkLine, RiVolumeUpLine, RiVolumeMuteLine,
+  RiAttachmentLine,
 } from "react-icons/ri";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -79,10 +80,13 @@ export default function ChatPanel() {
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; text: string } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Build system prompt once
   useEffect(() => {
@@ -211,8 +215,45 @@ export default function ChatPanel() {
     sendOpeningMessage(skill);
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => setCapturedImage(reader.result as string);
+      reader.readAsDataURL(file);
+      e.target.value = "";
+      return;
+    }
+
+    const textTypes = ["text/plain", "text/csv", "text/markdown", "application/json"];
+    const isTextFile = textTypes.includes(file.type) || file.name.endsWith(".md") || file.name.endsWith(".csv") || file.name.endsWith(".txt");
+
+    if (isTextFile) {
+      const reader = new FileReader();
+      reader.onload = () => setAttachedFile({ name: file.name, text: reader.result as string });
+      reader.readAsText(file);
+      e.target.value = "";
+      return;
+    }
+
+    if (file.type === "application/pdf") {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedFile({ name: file.name, text: `[PDF content — ${file.name}, ${(file.size / 1024).toFixed(0)}KB. Note: text extraction from PDFs is limited in the browser. For best results, copy and paste the PDF text directly.]` });
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+      return;
+    }
+
+    toast.error("Unsupported file type. Supported: images, .txt, .csv, .md, .json, .pdf");
+    e.target.value = "";
+  };
+
   const sendMessage = async (text: string) => {
-    if (!text.trim() || !user || loading) return;
+    if ((!text.trim() && !capturedImage && !attachedFile) || !user || loading) return;
     if (text.trim() === "/end") { skills.dismissSkill(); setInput(""); return; }
     tts.stop();
 
@@ -223,12 +264,18 @@ export default function ChatPanel() {
     }
 
     const isFirstMessage = messages.length === 0;
+    const displayText = text.trim() || (capturedImage ? "What's in this image?" : "");
+    const imageToSend = capturedImage;
+    const fileToSend = attachedFile;
+    setCapturedImage(null);
+    setAttachedFile(null);
 
     const userMsg: AssistantMessage = {
       id: Date.now().toString(),
       role: "user",
-      content: text.trim(),
+      content: displayText,
       timestamp: new Date().toISOString(),
+      image: imageToSend ?? undefined,
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -236,7 +283,7 @@ export default function ChatPanel() {
     setLoading(true);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
+    await saveMessage(chatId, { role: "user", content: displayText, timestamp: userMsg.timestamp });
 
     await checkAndAward(user.uid, "hello_world");
     if (messages.length + 1 >= 500) await checkAndAward(user.uid, "power_user");
@@ -255,6 +302,10 @@ export default function ChatPanel() {
 
     try {
       const idToken = await user.getIdToken();
+      const imageBase64 = imageToSend
+        ? imageToSend.replace(/^data:image\/\w+;base64,/, "")
+        : undefined;
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
@@ -264,6 +315,9 @@ export default function ChatPanel() {
           uid: user.uid,
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
+          imageBase64,
+          fileText: fileToSend?.text,
+          fileName: fileToSend?.name,
           isFirstMessage,
         }),
       });
@@ -459,6 +513,27 @@ export default function ChatPanel() {
           className="shrink-0 px-3 py-2.5 border-t"
           style={{ borderColor: "rgba(255,255,255,0.10)" }}
         >
+          {attachedFile && (
+            <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-xl bg-white/5 border border-white/10 text-xs text-text-secondary">
+              <RiAttachmentLine className="w-3.5 h-3.5 shrink-0 text-accent" />
+              <span className="truncate flex-1">{attachedFile.name}</span>
+              <button onClick={() => setAttachedFile(null)} className="shrink-0 text-text-muted hover:text-text-primary">
+                <RiCloseLine className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          {capturedImage && (
+            <div className="relative inline-block mb-2 ml-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={capturedImage} alt="Captured" className="h-12 w-12 rounded-xl object-cover border-2 border-accent/30" />
+              <button
+                onClick={() => setCapturedImage(null)}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-danger text-white flex items-center justify-center"
+              >
+                <RiCloseLine className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
           {skills.activeSkill && (
             <ActiveSkillBadge skill={skills.activeSkill} onDismiss={skills.dismissSkill} />
           )}
@@ -494,6 +569,21 @@ export default function ChatPanel() {
               disabled={loading}
             />
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.txt,.csv,.md,.json,.pdf"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                title="Attach file"
+                className="p-1.5 rounded-lg transition-colors text-text-secondary hover:text-text-primary hover:bg-white/10"
+              >
+                <RiAttachmentLine className="w-4 h-4" />
+              </button>
               <button
                 onClick={recording ? stopRecording : startRecording}
                 className={`p-1.5 rounded-lg transition-colors ${
@@ -518,7 +608,7 @@ export default function ChatPanel() {
               </button>
               <button
                 onClick={() => sendMessage(input)}
-                disabled={!input.trim() || loading}
+                disabled={(!input.trim() && !capturedImage && !attachedFile) || loading}
                 className="p-1.5 rounded-lg bg-accent text-white disabled:opacity-40 hover:bg-accent/90 transition-colors"
                 title="Send"
               >

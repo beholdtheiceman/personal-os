@@ -21,6 +21,7 @@ import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiCameraLine, RiCloseLine, RiAddLine, RiChat1Line,
   RiEditLine, RiMenuLine, RiVolumeUpLine, RiVolumeMuteLine,
+  RiAttachmentLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 import type { ChatMessage } from "@/types";
@@ -91,12 +92,14 @@ export default function ChatInterface() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; text: string } | null>(null);
   const [chatsLoaded, setChatsLoaded] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Build system prompt once ─────────────────────────────────────────────
   useEffect(() => {
@@ -305,9 +308,47 @@ export default function ChatInterface() {
     sendOpeningMessage(skill);
   };
 
+  // ── File attachment ──────────────────────────────────────────────────────
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => setCapturedImage(reader.result as string);
+      reader.readAsDataURL(file);
+      e.target.value = "";
+      return;
+    }
+
+    const textTypes = ["text/plain", "text/csv", "text/markdown", "application/json"];
+    const isTextFile = textTypes.includes(file.type) || file.name.endsWith(".md") || file.name.endsWith(".csv") || file.name.endsWith(".txt");
+
+    if (isTextFile) {
+      const reader = new FileReader();
+      reader.onload = () => setAttachedFile({ name: file.name, text: reader.result as string });
+      reader.readAsText(file);
+      e.target.value = "";
+      return;
+    }
+
+    if (file.type === "application/pdf") {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedFile({ name: file.name, text: `[PDF content — ${file.name}, ${(file.size / 1024).toFixed(0)}KB. Note: text extraction from PDFs is limited in the browser. For best results, copy and paste the PDF text directly.]` });
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+      return;
+    }
+
+    toast.error("Unsupported file type. Supported: images, .txt, .csv, .md, .json, .pdf");
+    e.target.value = "";
+  };
+
   // ── Send message ─────────────────────────────────────────────────────────
   const sendMessage = async (text: string) => {
-    if ((!text.trim() && !capturedImage) || !user || loading) return;
+    if ((!text.trim() && !capturedImage && !attachedFile) || !user || loading) return;
     if (text.trim() === "/end") { skills.dismissSkill(); setInput(""); return; }
     tts.stop();
 
@@ -320,6 +361,8 @@ export default function ChatInterface() {
 
     const displayText = text.trim() || (capturedImage ? "What's in this image?" : "");
     const imageToSend = capturedImage;
+    const fileToSend = attachedFile;
+    setAttachedFile(null);
     const isFirstMessage = messages.length === 0;
 
     const userMsg: AssistantMessage = {
@@ -368,6 +411,8 @@ export default function ChatInterface() {
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
           imageBase64,
+          fileText: fileToSend?.text,
+          fileName: fileToSend?.name,
           isFirstMessage,
         }),
       });
@@ -642,6 +687,15 @@ export default function ChatInterface() {
 
         {/* Input bar */}
         <div className="border-t border-white/10 px-4 py-3 shrink-0" style={{ background: "rgba(20, 8, 18, 0.90)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
+          {attachedFile && (
+            <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-xl bg-white/5 border border-white/10 text-xs text-text-secondary">
+              <RiAttachmentLine className="w-3.5 h-3.5 shrink-0 text-accent" />
+              <span className="truncate flex-1">{attachedFile.name}</span>
+              <button onClick={() => setAttachedFile(null)} className="shrink-0 text-text-muted hover:text-text-primary">
+                <RiCloseLine className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {capturedImage && (
             <div className="relative inline-block mb-2 ml-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -698,6 +752,21 @@ export default function ChatInterface() {
               }}
               rows={1}
             />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.txt,.csv,.md,.json,.pdf"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              title="Attach file"
+              className="p-2.5 rounded-lg border transition-colors bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
+            >
+              <RiAttachmentLine className="w-5 h-5" />
+            </button>
             <button
               onClick={() => setShowCamera(true)}
               disabled={loading}
@@ -725,7 +794,7 @@ export default function ChatInterface() {
             </button>
             <button
               onClick={() => sendMessage(input)}
-              disabled={(!input.trim() && !capturedImage) || loading}
+              disabled={(!input.trim() && !capturedImage && !attachedFile) || loading}
               className="btn-primary p-2.5 disabled:opacity-50"
             >
               <RiSendPlane2Line className="w-5 h-5" />
