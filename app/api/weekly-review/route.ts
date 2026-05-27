@@ -113,6 +113,60 @@ async function collectWeekData(uid: string, weekStart: string, weekEnd: string) 
     return `${data.key}: ${data.value}`;
   });
 
+  // Personal Constitution (for alignment analysis)
+  let constitutionContent: string | null = null;
+  try {
+    const constitutionSnap = await db.doc(`users/${uid}/constitution/main`).get();
+    if (constitutionSnap.exists && constitutionSnap.data()?.interview_complete) {
+      constitutionContent = (constitutionSnap.data()?.content as string) ?? null;
+    }
+  } catch { /* no constitution yet */ }
+
+  // Time entries this week (by category)
+  let timeSummary: string | null = null;
+  try {
+    const timeSnap = await db
+      .collection(`users/${uid}/time_entries`)
+      .where("date", ">=", weekStart)
+      .where("date", "<=", weekEnd)
+      .get();
+    if (!timeSnap.empty) {
+      const byCategory: Record<string, number> = {};
+      timeSnap.docs.forEach((d) => {
+        const cat = (d.data().category as string) || "Uncategorized";
+        byCategory[cat] = (byCategory[cat] ?? 0) + ((d.data().duration_min as number) ?? 0);
+      });
+      timeSummary = Object.entries(byCategory)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cat, mins]) => `${cat}: ${(mins / 60).toFixed(1)}h`)
+        .join(", ");
+    }
+  } catch { /* time tracker not used */ }
+
+  // Spending this week (by category, expenses only)
+  let spendSummary: string | null = null;
+  let totalWeekSpend: number | null = null;
+  try {
+    const txSnap = await db
+      .collection(`users/${uid}/transactions`)
+      .where("date", ">=", weekStart)
+      .where("date", "<=", weekEnd)
+      .get();
+    if (!txSnap.empty) {
+      const byCategory: Record<string, number> = {};
+      txSnap.docs.forEach((d) => {
+        const tx = d.data();
+        if (tx.type === "expense") {
+          const cat = (tx.category as string) || "Uncategorized";
+          byCategory[cat] = (byCategory[cat] ?? 0) + ((tx.amount as number) ?? 0);
+        }
+      });
+      const entries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+      totalWeekSpend = entries.reduce((s, [, v]) => s + v, 0);
+      spendSummary = entries.map(([cat, amt]) => `${cat}: $${amt.toFixed(0)}`).join(", ");
+    }
+  } catch { /* no transactions */ }
+
   return {
     weekDates,
     completedTasks: completedTasks.slice(0, 20).map((t) => t.title as string),
@@ -130,6 +184,10 @@ async function collectWeekData(uid: string, weekStart: string, weekEnd: string) 
       return `${g.title}: ${done}/${total} milestones`;
     }),
     memoryLines,
+    constitutionContent,
+    timeSummary,
+    spendSummary,
+    totalWeekSpend,
   };
 }
 
@@ -168,20 +226,37 @@ ${data.avgCals ? `- Avg calories: ${data.avgCals} kcal/day` : "- Nutrition: not 
 
 GOALS PROGRESS:
 ${data.activeGoals.length ? data.activeGoals.join("\n") : "No active goals"}
+${data.timeSummary ? `\nTIME LOGGED BY CATEGORY:\n${data.timeSummary}` : ""}
+${data.spendSummary ? `\nSPENDING THIS WEEK (${data.totalWeekSpend != null ? `$${data.totalWeekSpend.toFixed(0)} total` : ""}):\n${data.spendSummary}` : ""}
 
 ABOUT ME:
 ${data.memoryLines.slice(0, 15).join("\n")}
 `.trim();
 
-  const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: `You are a personal AI coach writing a weekly review for the user. Be warm, direct, and honest. Reference specific data points. Don't be generic or sycophantic. Keep the whole review under 400 words.`,
-    messages: [
-      {
-        role: "user",
-        content: `Here's my data for the week. Write my weekly review with these four sections using markdown:
+  const alignmentInstructions = data.constitutionContent
+    ? `
+PERSONAL CONSTITUTION (the user's stated values, mission, and non-negotiables):
+---
+${data.constitutionContent.slice(0, 3000)}
+---
+
+ALIGNMENT SECTION INSTRUCTIONS:
+Before the other sections, write an alignment analysis. Cross-reference the Personal Constitution above against this week's actual behavioral data (habits, health, time logged, spending, tasks, journal). Ask two questions: (1) How aligned was this week with the stated values? (2) Where was the biggest gap?
+
+Rules for the alignment section:
+- Start with an alignment score on its own line: 🟢 Well-aligned, 🟡 Some drift, or 🔴 Significant gap
+- Then 1–3 specific, honest observations referencing actual data (e.g. "You listed faith as a top value, but no spiritual habits were logged this week" or "Your mission includes financial health — your spending data shows dining at $X, worth watching")
+- Frame as honest observations from someone who wants you to win, not as judgment or a score to optimize
+- If the data genuinely supports alignment, say so — don't manufacture criticism
+- If insufficient data exists to make a specific observation about a value, skip it
+- Keep the whole alignment section to 3–6 lines
+
+`
+    : "";
+
+  const sectionFormat = data.constitutionContent
+    ? `## ⚖️ Alignment
+[alignment score and observations]
 
 ## ✅ Wins
 2–4 bullet points of genuine wins — tasks completed, habit streaks, health, anything positive. Be specific.
@@ -193,7 +268,30 @@ ${data.memoryLines.slice(0, 15).join("\n")}
 1–2 sentences: one meaningful observation about the week — a pattern, connection, or thing worth reflecting on.
 
 ## 🎯 Focus for Next Week
-3 bullet points: specific, actionable priorities for the coming week based on what's open and what matters.
+3 bullet points: specific, actionable priorities for the coming week based on what's open and what matters.`
+    : `## ✅ Wins
+2–4 bullet points of genuine wins — tasks completed, habit streaks, health, anything positive. Be specific.
+
+## ⚠️ Gaps
+2–3 bullet points of honest gaps or patterns to watch. Don't soften it, but don't pile on.
+
+## 💡 Insight
+1–2 sentences: one meaningful observation about the week — a pattern, connection, or thing worth reflecting on.
+
+## 🎯 Focus for Next Week
+3 bullet points: specific, actionable priorities for the coming week based on what's open and what matters.`;
+
+  const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+  const message = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1200,
+    system: `You are a personal AI coach writing a weekly review for the user. Be warm, direct, and honest. Reference specific data points. Don't be generic or sycophantic. Keep the whole review under 500 words.`,
+    messages: [
+      {
+        role: "user",
+        content: `Here's my data for the week. Write my weekly review with these sections using markdown:
+${alignmentInstructions}
+${sectionFormat}
 
 ---
 ${context}`,
