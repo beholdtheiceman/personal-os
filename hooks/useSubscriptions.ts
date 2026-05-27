@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import { format } from "date-fns";
+import { advancedBillingDate } from "@/lib/recurrence";
 import type { Subscription, BillingCycle } from "@/types";
 
 export function monthlyEquivalent(amount: number, cycle: BillingCycle): number {
@@ -28,6 +30,18 @@ export function useSubscriptions() {
     return onSnapshot(q, (snap) => {
       setSubscriptions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Subscription)));
       setLoading(false);
+
+      // Silently advance any active subscription with a past next_billing_date
+      const today = format(new Date(), 'yyyy-MM-dd');
+      snap.docs.forEach((d) => {
+        const sub = d.data() as Omit<Subscription, 'id'>;
+        if (sub.status === 'active' && sub.next_billing_date < today) {
+          const advanced = advancedBillingDate(sub.billing_cycle, sub.next_billing_date);
+          updateDoc(doc(db, 'users', user.uid, 'subscriptions', d.id), {
+            next_billing_date: advanced,
+          });
+        }
+      });
     });
   }, [user]);
 

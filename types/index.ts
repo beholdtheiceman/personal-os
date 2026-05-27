@@ -122,6 +122,8 @@ export interface NotificationSettings {
   networth_reminder: NotificationCategory;  // fires on 1st of month if no snapshot logged yet
   time_summary: NotificationCategory;       // end-of-day summary of tracked time
   goal_inactivity: NotificationCategory;    // weekly nudge when an active goal has had no activity in 14+ days
+  subscription_renewal: NotificationCategory; // fires days_before next_billing_date
+  spending_trend: NotificationCategory;     // mid-month alert when pace projects overspend on a budget category
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -138,8 +140,10 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   progress_evening:  { enabled: false, time: "18:00" },
   decision_review:   { enabled: false, time: "09:00" },
   networth_reminder: { enabled: false },
-  time_summary:      { enabled: false, time: "21:00" },
-  goal_inactivity:   { enabled: false },
+  time_summary:         { enabled: false, time: "21:00" },
+  goal_inactivity:      { enabled: false },
+  subscription_renewal: { enabled: false, time: "09:00", days_before: 3 },
+  spending_trend:       { enabled: false, time: "12:00" },
 };
 
 // Deep-merges a stored settings doc onto the defaults. A shallow spread
@@ -303,7 +307,19 @@ export interface Subscription {
   notes?: string;
   plaid_stream_id?: string;    // linked Plaid recurring stream
   source?: "manual" | "email-agent";
+  tmdbProviderId?: number;     // Set for known streaming services; drives content browsing
   created_at: string;
+}
+
+// ─── Subscription Watchlist ───────────────────────────────────────────────────
+export interface WatchlistItem {
+  id: string;
+  titleId: number;           // TMDb ID
+  subscriptionId: string;    // links back to users/{uid}/subscriptions/{id}
+  title: string;
+  poster: string | null;     // full TMDb image URL (pre-resolved, not just path)
+  media_type: 'movie' | 'tv';
+  added_at: string;          // ISO timestamp
 }
 
 // ─── Email Agent ──────────────────────────────────────────────────────────────

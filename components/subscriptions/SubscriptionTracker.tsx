@@ -6,9 +6,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscriptions, monthlyEquivalent } from "@/hooks/useSubscriptions";
 import { usePlaid } from "@/hooks/usePlaid";
 import SubscriptionForm from "./SubscriptionForm";
+import { getStreamingMeta } from "@/lib/streaming-services";
 import {
   RiAddLine, RiEditLine, RiDeleteBinLine, RiRefreshLine,
   RiCalendarLine, RiCheckLine, RiPauseLine, RiCloseLine,
+  RiLinksLine, RiArrowDownSLine, RiArrowUpSLine,
 } from "react-icons/ri";
 import { format, differenceInDays } from "date-fns";
 import toast from "react-hot-toast";
@@ -48,10 +50,11 @@ export default function SubscriptionTracker() {
   const { user } = useAuth();
   const { subscriptions, active, loading, monthlyTotal, yearlyTotal } = useSubscriptions();
   const { recurring: plaidRecurring } = usePlaid();
-  const [showForm, setShowForm]     = useState(false);
-  const [editing, setEditing]       = useState<Subscription | null>(null);
-  const [filter, setFilter]         = useState<"all" | "active" | "cancelled">("active");
-  const [importing, setImporting]   = useState(false);
+  const [showForm, setShowForm]       = useState(false);
+  const [editing, setEditing]         = useState<Subscription | null>(null);
+  const [filter, setFilter]           = useState<"all" | "active" | "cancelled">("active");
+  const [importing, setImporting]     = useState(false);
+  const [expandedLinks, setExpandedLinks] = useState<string | null>(null);
 
   const handleSave = async (data: Omit<Subscription, "id">) => {
     if (!user) return;
@@ -186,51 +189,84 @@ export default function SubscriptionTracker() {
           {filtered.map((sub) => (
             <div
               key={sub.id}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl group"
+              className="rounded-xl"
               style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-text-primary truncate">{sub.name}</span>
-                  <StatusBadge status={sub.status} />
-                  {sub.plaid_stream_id && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">Plaid</span>
+              {/* Row */}
+              <div className="flex items-center gap-3 px-4 py-3 group">
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-text-primary truncate">{sub.name}</span>
+                    <StatusBadge status={sub.status} />
+                    {sub.plaid_stream_id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">Plaid</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-text-muted">{sub.category}</span>
+                    <span className="text-text-muted">·</span>
+                    <RiCalendarLine className="w-3 h-3 text-text-muted" />
+                    <DueBadge dateStr={sub.next_billing_date} />
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold text-text-primary">
+                    {fmt(sub.amount)}<span className="text-xs font-normal text-text-muted">{cycleSuffix(sub.billing_cycle)}</span>
+                  </p>
+                  {sub.billing_cycle !== "monthly" && (
+                    <p className="text-[10px] text-text-muted">{fmt(monthlyEquivalent(sub.amount, sub.billing_cycle))}/mo</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-text-muted">{sub.category}</span>
-                  <span className="text-text-muted">·</span>
-                  <RiCalendarLine className="w-3 h-3 text-text-muted" />
-                  <DueBadge dateStr={sub.next_billing_date} />
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {getStreamingMeta(sub.name) && (
+                    <button
+                      onClick={() => setExpandedLinks(expandedLinks === sub.id ? null : sub.id)}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
+                      title="Quick links"
+                    >
+                      <RiLinksLine className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setEditing(sub); setShowForm(true); }}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
+                  >
+                    <RiEditLine className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(sub)}
+                    className="p-1.5 rounded-lg hover:bg-danger/20 text-text-muted hover:text-danger transition-colors"
+                  >
+                    <RiDeleteBinLine className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 
-              {/* Amount */}
-              <div className="text-right shrink-0">
-                <p className="text-sm font-semibold text-text-primary">
-                  {fmt(sub.amount)}<span className="text-xs font-normal text-text-muted">{cycleSuffix(sub.billing_cycle)}</span>
-                </p>
-                {sub.billing_cycle !== "monthly" && (
-                  <p className="text-[10px] text-text-muted">{fmt(monthlyEquivalent(sub.amount, sub.billing_cycle))}/mo</p>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button
-                  onClick={() => { setEditing(sub); setShowForm(true); }}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
-                >
-                  <RiEditLine className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => handleDelete(sub)}
-                  className="p-1.5 rounded-lg hover:bg-danger/20 text-text-muted hover:text-danger transition-colors"
-                >
-                  <RiDeleteBinLine className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              {/* Quick Links panel — shown when expanded */}
+              {expandedLinks === sub.id && getStreamingMeta(sub.name) && (
+                <div className="px-4 pb-3 pt-2 border-t border-white/[0.07]">
+                  <p className="text-[10px] text-text-muted uppercase tracking-wide mb-1.5">Quick Links</p>
+                  <div className="flex flex-wrap gap-2">
+                    {getStreamingMeta(sub.name)!.quickLinks.map((link) => (
+                      <a
+                        key={link.url}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={link.description}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-white/[0.07] hover:bg-white/[0.12] text-text-secondary hover:text-text-primary transition-colors"
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

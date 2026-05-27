@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { RiCloseLine } from "react-icons/ri";
+import { getStreamingMeta } from "@/lib/streaming-services";
 import type { Subscription, SubscriptionCategory, BillingCycle, SubscriptionStatus } from "@/types";
 
 const CATEGORIES: SubscriptionCategory[] = [
@@ -24,16 +25,26 @@ interface Props {
 export default function SubscriptionForm({ initial, onSave, onClose }: Props) {
   const today = new Date().toLocaleDateString("en-CA");
 
-  const [name, setName]           = useState(initial?.name ?? "");
-  const [category, setCategory]   = useState<SubscriptionCategory>(initial?.category ?? "Entertainment");
-  const [amount, setAmount]       = useState(String(initial?.amount ?? ""));
-  const [cycle, setCycle]         = useState<BillingCycle>(initial?.billing_cycle ?? "monthly");
-  const [nextDate, setNextDate]   = useState(initial?.next_billing_date ?? today);
-  const [startDate, setStartDate] = useState(initial?.start_date ?? today);
-  const [status, setStatus]       = useState<SubscriptionStatus>(initial?.status ?? "active");
-  const [url, setUrl]             = useState(initial?.url ?? "");
-  const [notes, setNotes]         = useState(initial?.notes ?? "");
-  const [saving, setSaving]       = useState(false);
+  const [name, setName]                   = useState(initial?.name ?? "");
+  const [category, setCategory]           = useState<SubscriptionCategory>(initial?.category ?? "Entertainment");
+  const [amount, setAmount]               = useState(String(initial?.amount ?? ""));
+  const [cycle, setCycle]                 = useState<BillingCycle>(initial?.billing_cycle ?? "monthly");
+  const [nextDate, setNextDate]           = useState(initial?.next_billing_date ?? today);
+  const [startDate, setStartDate]         = useState(initial?.start_date ?? today);
+  const [status, setStatus]               = useState<SubscriptionStatus>(initial?.status ?? "active");
+  const [url, setUrl]                     = useState(initial?.url ?? "");
+  const [notes, setNotes]                 = useState(initial?.notes ?? "");
+  const [tmdbProviderId, setTmdbProviderId] = useState<number | undefined>(initial?.tmdbProviderId);
+  const [saving, setSaving]               = useState(false);
+
+  const handleNameChange = (value: string) => {
+    setName(value);
+    const meta = getStreamingMeta(value);
+    if (meta) {
+      setTmdbProviderId(meta.tmdbProviderId);
+      setUrl(meta.cancelUrl);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +61,7 @@ export default function SubscriptionForm({ initial, onSave, onClose }: Props) {
       url: url.trim() || undefined,
       notes: notes.trim() || undefined,
       plaid_stream_id: initial?.plaid_stream_id,
+      tmdbProviderId,
       created_at: initial?.created_at ?? new Date().toISOString(),
     });
     setSaving(false);
@@ -70,7 +82,7 @@ export default function SubscriptionForm({ initial, onSave, onClose }: Props) {
           {/* Name */}
           <div>
             <label className="text-xs text-text-muted mb-1 block">Service name *</label>
-            <input className="input-base" placeholder="Netflix, Spotify…" value={name} onChange={(e) => setName(e.target.value)} required />
+            <input className="input-base" placeholder="Netflix, Spotify…" value={name} onChange={(e) => handleNameChange(e.target.value)} required />
           </div>
 
           {/* Category + Status */}

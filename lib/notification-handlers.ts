@@ -1,6 +1,8 @@
 // Notification handler functions — one per category.
 // Each returns { title, body } or null if nothing to send.
 import { getAdminDb } from "./firebase-admin";
+import { format, parseISO, differenceInDays } from "date-fns";
+import type { Subscription, BillingCycle } from "@/types";
 
 interface NotifPayload { title: string; body: string; tag?: string; }
 
@@ -463,6 +465,165 @@ export async function netWorthReminderHandler(uid: string, tz: string): Promise<
     title: "💰 Net worth check-in",
     body: "Time to log your monthly net worth snapshot",
     tag: "networth-reminder",
+  };
+}
+
+// ── Subscription Renewal ──────────────────────────────────────────────────────
+function cycleSuffix(cycle: BillingCycle): string {
+  const map: Record<BillingCycle, string> = { weekly: '/wk', monthly: '/mo', quarterly: '/qtr', yearly: '/yr' };
+  return map[cycle] ?? '';
+}
+
+function monthlyEquivalent(amount: number, cycle: BillingCycle): number {
+  switch (cycle) {
+    case 'weekly':    return amount * 4.33;
+    case 'monthly':   return amount;
+    case 'quarterly': return amount / 3;
+    case 'yearly':    return amount / 12;
+  }
+}
+
+export async function subscriptionRenewalHandler(
+  uid: string,
+  daysBefore: number
+): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const snap = await db.collection(`users/${uid}/subscriptions`)
+    .where('status', '==', 'active')
+    .get();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() + daysBefore);
+  const cutoffStr = format(cutoff, 'yyyy-MM-dd');
+  const todayStr = format(today, 'yyyy-MM-dd');
+
+  const due = snap.docs
+    .map(d => d.data() as Subscription)
+    .filter(s => s.next_billing_date >= todayStr && s.next_billing_date <= cutoffStr);
+
+  if (due.length === 0) return null;
+
+  if (due.length === 1) {
+    const s = due[0];
+    const days = differenceInDays(parseISO(s.next_billing_date), today);
+    return {
+      title: `${s.name} renews ${days === 0 ? 'today' : `in ${days}d`}`,
+      body: `$${s.amount}${cycleSuffix(s.billing_cycle)} — tap to review`,
+      tag: 'subscription-renewal',
+    };
+  }
+
+  const total = due.reduce((sum, s) => sum + monthlyEquivalent(s.amount, s.billing_cycle), 0);
+  return {
+    title: `${due.length} subscriptions renewing soon`,
+    body: `${due.map(s => s.name).join(', ')} · ~$${total.toFixed(2)}/mo`,
+    tag: 'subscription-renewal',
+  };
+}
+
+// ── Spending Trend Predictions ────────────────────────────────────────────────
+const PLAID_TO_BUDGET: Record<string, string> = {
+  FOOD_AND_DRINK:       "Food & Drink",
+  GENERAL_MERCHANDISE:  "Shopping",
+  ENTERTAINMENT:        "Entertainment",
+  TRANSPORTATION:       "Transportation",
+  RENT_AND_UTILITIES:   "Utilities",
+  MEDICAL:              "Medical",
+  PERSONAL_CARE:        "Personal Care",
+  TRAVEL:               "Travel",
+  HOME_IMPROVEMENT:     "Home",
+  LOAN_PAYMENTS:        "Loan Payments",
+  GENERAL_SERVICES:     "Services",
+  BANK_FEES:            "Bank Fees",
+};
+
+export async function spendingTrendHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const now = localNow(tz);
+  const today = todayLocal(tz);
+  const currentDay = now.getDate();
+
+  // Only fire between the 10th and 25th of the month
+  if (currentDay < 10 || currentDay > 25) return null;
+
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const paceMultiplier = daysInMonth / currentDay;
+  const currentMonth = today.slice(0, 7); // YYYY-MM
+
+  const budgetDoc = await db.doc(`users/${uid}/budgets/${currentMonth}`).get();
+  if (!budgetDoc.exists) return null;
+  const categories = (budgetDoc.data()?.categories ?? {}) as Record<string, { limit: number }>;
+  if (Object.keys(categories).length === 0) return null;
+
+  const monthStart = `${currentMonth}-01`;
+  const monthEnd = `${currentMonth}-31`;
+
+  const [manualSnap, plaidSnap] = await Promise.all([
+    db.collection(`users/${uid}/transactions`)
+      .where("date", ">=", monthStart)
+      .where("date", "<=", monthEnd)
+      .get(),
+    db.collection(`users/${uid}/plaid_transactions`)
+      .where("date", ">=", monthStart)
+      .where("date", "<=", monthEnd)
+      .get(),
+  ]);
+
+  const actuals: Record<string, number> = {};
+  for (const d of manualSnap.docs) {
+    const tx = d.data();
+    if (tx.type !== "expense") continue;
+    const cat = tx.category as string;
+    actuals[cat] = (actuals[cat] ?? 0) + (tx.amount as number);
+  }
+  for (const d of plaidSnap.docs) {
+    const tx = d.data();
+    if ((tx.amount as number) <= 0) continue;
+    const cat = PLAID_TO_BUDGET[tx.category as string] ?? (tx.category as string);
+    actuals[cat] = (actuals[cat] ?? 0) + (tx.amount as number);
+  }
+
+  const atRisk: { category: string; overage: number }[] = [];
+  for (const [cat, { limit }] of Object.entries(categories)) {
+    if (limit <= 0) continue;
+    const actual = actuals[cat] ?? 0;
+    if (actual < limit * 0.4) continue; // avoid false alarms early in month
+    const projected = actual * paceMultiplier;
+    if (projected <= limit) continue;
+    atRisk.push({ category: cat, overage: Math.round(projected - limit) });
+  }
+
+  if (atRisk.length === 0) return null;
+
+  // Deduplicate — only fire once per category per day
+  const dedupRef = db.doc(`users/${uid}/notification_sent/spending_trend_${today}`);
+  const dedupSnap = await dedupRef.get();
+  const alreadySent: string[] = dedupSnap.exists ? (dedupSnap.data()?.categories as string[]) ?? [] : [];
+  const newRisks = atRisk.filter((r) => !alreadySent.includes(r.category));
+  if (newRisks.length === 0) return null;
+
+  await dedupRef.set(
+    { categories: [...alreadySent, ...newRisks.map((r) => r.category)] },
+    { merge: true }
+  );
+
+  if (newRisks.length === 1) {
+    const { category, overage } = newRisks[0];
+    return {
+      title: "📈 Spending pace alert",
+      body: `You're on pace to overspend ${category} by $${overage} this month`,
+      tag: "spending-trend",
+    };
+  }
+
+  const summary = newRisks.slice(0, 3).map((r) => `${r.category} (+$${r.overage})`).join(", ");
+  const more = newRisks.length > 3 ? ` +${newRisks.length - 3} more` : "";
+  return {
+    title: "📈 Budget pace alert",
+    body: `On pace to overspend: ${summary}${more}`,
+    tag: "spending-trend",
   };
 }
 

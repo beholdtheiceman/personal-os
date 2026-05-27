@@ -9,6 +9,7 @@ import {
   goalDeadlineHandler, journalReminderHandler, healthReminderHandler, weeklyReviewHandler,
   birthdayReminderHandler, savingsMilestoneHandler, progressReminderHandler,
   decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
+  subscriptionRenewalHandler, spendingTrendHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
@@ -115,6 +116,25 @@ export async function GET(req: NextRequest) {
     if (settings.time_summary.enabled && settings.time_summary.time && isHour(timeInfo, settings.time_summary.time)) {
       const n = await timeSummaryHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "time-summary");
+    }
+
+    // Subscription renewal reminder
+    if (
+      settings.subscription_renewal.enabled &&
+      settings.subscription_renewal.time &&
+      isHour(timeInfo, settings.subscription_renewal.time)
+    ) {
+      const n = await subscriptionRenewalHandler(
+        uid,
+        settings.subscription_renewal.days_before ?? 3
+      );
+      if (n) await send(n.title, n.body, n.tag ?? "subscription-renewal");
+    }
+
+    // Spending trend — mid-month alert when pace projects overspend on a budget category
+    if (settings.spending_trend.enabled && isHour(timeInfo, settings.spending_trend.time ?? "12:00")) {
+      const n = await spendingTrendHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "spending-trend");
     }
 
     results[uid] = fired;

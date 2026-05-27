@@ -11,6 +11,7 @@ import {
   RiCheckboxLine, RiFlag2Line, RiBookLine, RiHeartPulseLine, RiBarChartLine,
   RiCake2Line, RiSaveLine, RiTimeLine, RiMoonLine,
   RiBrainLine, RiMoneyDollarCircleLine, RiTimerLine, RiZzzLine, RiRefreshLine,
+  RiRepeatLine, RiLineChartLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 
@@ -127,6 +128,20 @@ const CATEGORIES: {
     description: "Weekly reminder when an active goal hasn't had any progress in 14+ days — fires at most once per week",
     icon: <RiZzzLine className="w-4 h-4" />,
     hasTime: false,
+  },
+  {
+    key: "subscription_renewal",
+    label: "Subscription Renewal",
+    description: "Notifies you when a subscription is renewing soon (based on days_before setting)",
+    icon: <RiRepeatLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "spending_trend",
+    label: "Spending Trend Alert",
+    description: "Mid-month alert when your spending pace is on track to exceed a budget category limit — only fires between the 10th and 25th",
+    icon: <RiLineChartLine className="w-4 h-4" />,
+    hasTime: true,
   },
 ];
 
