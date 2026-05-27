@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RiCloseLine } from "react-icons/ri";
 import { getStreamingMeta } from "@/lib/streaming-services";
+import toast from "react-hot-toast";
 import type { Subscription, SubscriptionCategory, BillingCycle, SubscriptionStatus } from "@/types";
 
 const CATEGORIES: SubscriptionCategory[] = [
@@ -50,22 +51,28 @@ export default function SubscriptionForm({ initial, onSave, onClose }: Props) {
     e.preventDefault();
     if (!name.trim() || !amount) return;
     setSaving(true);
-    await onSave({
-      name: name.trim(),
-      category,
-      amount: parseFloat(amount),
-      billing_cycle: cycle,
-      next_billing_date: nextDate,
-      start_date: startDate,
-      status,
-      url: url.trim() || undefined,
-      notes: notes.trim() || undefined,
-      plaid_stream_id: initial?.plaid_stream_id,
-      tmdbProviderId,
-      created_at: initial?.created_at ?? new Date().toISOString(),
-    });
-    setSaving(false);
-    onClose();
+    try {
+      await onSave({
+        name: name.trim(),
+        category,
+        amount: parseFloat(amount),
+        billing_cycle: cycle,
+        next_billing_date: nextDate,
+        start_date: startDate,
+        status,
+        url: url.trim() || undefined,
+        notes: notes.trim() || undefined,
+        plaid_stream_id: initial?.plaid_stream_id,
+        tmdbProviderId,
+        created_at: initial?.created_at ?? new Date().toISOString(),
+      });
+      onClose();
+    } catch (err) {
+      console.error("Subscription save failed:", err);
+      toast.error("Failed to save — check console for details");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -132,7 +139,7 @@ export default function SubscriptionForm({ initial, onSave, onClose }: Props) {
           {/* URL */}
           <div>
             <label className="text-xs text-text-muted mb-1 block">Website (optional)</label>
-            <input className="input-base" type="url" placeholder="https://netflix.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input className="input-base" type="text" placeholder="https://netflix.com" value={url} onChange={(e) => setUrl(e.target.value)} />
           </div>
 
           {/* Notes */}
