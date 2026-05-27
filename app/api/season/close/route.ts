@@ -43,11 +43,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { messages, seasonName, startedAt } = (await req.json()) as {
+    const { messages, currentSeason } = (await req.json()) as {
       messages: SeasonMessage[];
-      seasonName: string;
-      startedAt: string;
+      currentSeason: { name: string; started_at: string };
     };
+    const seasonName = currentSeason?.name ?? "this season";
+    const startedAt = currentSeason?.started_at ?? "";
 
     const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => ({
       role: m.role === "guide" ? "assistant" : "user",
