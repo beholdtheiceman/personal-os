@@ -278,7 +278,8 @@ export interface Transaction {
   category: string;
   amount: number;
   description: string;
-  source: "manual" | "google-sheets" | "email-agent";
+  source: "manual" | "google-sheets" | "email-agent" | "plaid";
+  pending?: boolean;
 }
 
 // ─── Subscriptions ────────────────────────────────────────────────────────────

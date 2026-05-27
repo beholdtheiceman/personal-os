@@ -4,6 +4,17 @@ import { collection, onSnapshot, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 
+export interface PlaidTransaction {
+  transaction_id: string;
+  merchant_name: string;
+  amount: number;      // positive = expense, negative = income (Plaid convention)
+  currency: string;
+  date: string;
+  category: string;
+  pending: boolean;
+  institution: string;
+}
+
 export interface PlaidRecurring {
   stream_id: string;
   institution: string;
@@ -33,6 +44,7 @@ export function usePlaid() {
   const { user } = useAuth();
   const [items, setItems] = useState<PlaidItem[]>([]);
   const [recurring, setRecurring] = useState<PlaidRecurring[]>([]);
+  const [plaidTransactions, setPlaidTransactions] = useState<PlaidTransaction[]>([]);
   const [settings, setSettings] = useState<PlaidSettings>({ last_synced: null, item_count: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +64,11 @@ export function usePlaid() {
       (snap) => setRecurring(snap.docs.map((d) => d.data() as PlaidRecurring))
     );
 
+    const unsubTransactions = onSnapshot(
+      collection(db, `users/${user.uid}/plaid_transactions`),
+      (snap) => setPlaidTransactions(snap.docs.map((d) => d.data() as PlaidTransaction))
+    );
+
     const unsubSettings = onSnapshot(
       doc(db, `users/${user.uid}/settings/plaid`),
       (snap) => {
@@ -59,7 +76,7 @@ export function usePlaid() {
       }
     );
 
-    return () => { unsubItems(); unsubRecurring(); unsubSettings(); };
+    return () => { unsubItems(); unsubRecurring(); unsubTransactions(); unsubSettings(); };
   }, [user]);
 
   const monthlyTotal = recurring
@@ -76,5 +93,5 @@ export function usePlaid() {
       }
     }, 0);
 
-  return { items, recurring, settings, loading, monthlyTotal };
+  return { items, recurring, plaidTransactions, settings, loading, monthlyTotal };
 }

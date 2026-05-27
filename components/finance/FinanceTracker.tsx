@@ -5,8 +5,18 @@ import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval } from "da
 import { RiAddLine, RiDeleteBinLine, RiEditLine, RiArrowUpLine, RiArrowDownLine, RiMoneyDollarCircleLine } from "react-icons/ri";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlaid } from "@/hooks/usePlaid";
 import TransactionForm from "./TransactionForm";
 import type { Transaction } from "@/types";
+
+const PLAID_CATEGORY_LABELS: Record<string, string> = {
+  INCOME: "Income", TRANSFER_IN: "Transfer In", TRANSFER_OUT: "Transfer Out",
+  LOAN_PAYMENTS: "Loan Payments", BANK_FEES: "Bank Fees", ENTERTAINMENT: "Entertainment",
+  FOOD_AND_DRINK: "Food & Drink", GENERAL_MERCHANDISE: "Shopping", HOME_IMPROVEMENT: "Home",
+  MEDICAL: "Medical", PERSONAL_CARE: "Personal Care", GENERAL_SERVICES: "Services",
+  GOVERNMENT_AND_NON_PROFIT: "Government", TRANSPORTATION: "Transportation",
+  TRAVEL: "Travel", RENT_AND_UTILITIES: "Utilities",
+};
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -14,18 +24,37 @@ function fmt(n: number) {
 
 export default function FinanceTracker() {
   const { user } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [manualTransactions, setManualTransactions] = useState<Transaction[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [viewMonth, setViewMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const { plaidTransactions } = usePlaid();
 
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, "users", user.uid, "transactions"), orderBy("date", "desc"), limit(200));
     return onSnapshot(q, (snap) => {
-      setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Transaction)));
+      setManualTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Transaction)));
     });
   }, [user]);
+
+  // Normalize Plaid transactions into the shared Transaction shape
+  const normalizedPlaid = useMemo<Transaction[]>(() =>
+    plaidTransactions.map((p) => ({
+      id: p.transaction_id,
+      date: p.date,
+      type: (p.amount < 0 ? "income" : "expense") as Transaction["type"],
+      category: PLAID_CATEGORY_LABELS[p.category] ?? p.category,
+      amount: Math.abs(p.amount),
+      description: p.merchant_name || p.institution || "Unknown",
+      source: "plaid" as const,
+      pending: p.pending,
+    })),
+  [plaidTransactions]);
+
+  const transactions = useMemo(() =>
+    [...manualTransactions, ...normalizedPlaid].sort((a, b) => b.date.localeCompare(a.date)),
+  [manualTransactions, normalizedPlaid]);
 
   const handleSave = async (data: Partial<Transaction>) => {
     if (!user) return;
@@ -137,20 +166,27 @@ export default function FinanceTracker() {
                     <div className="flex items-baseline gap-2">
                       <span className="text-xs font-medium text-text-primary truncate">{t.description || t.category}</span>
                       <span className="text-[10px] text-text-muted shrink-0">{t.category}</span>
+                      {t.source === "plaid" && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-accent/20 text-accent shrink-0">
+                          {t.pending ? "Pending" : "Plaid"}
+                        </span>
+                      )}
                     </div>
                     <span className="text-[11px] text-text-muted">{format(parseISO(t.date), "MMM d")}</span>
                   </div>
                   <span className={`text-sm font-semibold tabular-nums ${t.type === "income" ? "text-success" : "text-text-primary"}`}>
                     {t.type === "expense" ? "−" : "+"}{fmt(t.amount)}
                   </span>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => { setEditing(t); setShowForm(true); }} className="p-1 text-text-muted hover:text-accent">
-                      <RiEditLine className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleDelete(t.id)} className="p-1 text-text-muted hover:text-danger">
-                      <RiDeleteBinLine className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {t.source !== "plaid" && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditing(t); setShowForm(true); }} className="p-1 text-text-muted hover:text-accent">
+                        <RiEditLine className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(t.id)} className="p-1 text-text-muted hover:text-danger">
+                        <RiDeleteBinLine className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
