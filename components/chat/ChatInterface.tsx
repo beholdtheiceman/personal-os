@@ -359,7 +359,7 @@ export default function ChatInterface() {
       if (!chatId) return;
     }
 
-    const displayText = text.trim() || (capturedImage ? "What's in this image?" : "");
+    const displayText = text.trim() || (capturedImage ? "What's in this image?" : attachedFile ? `Please analyze this file: ${attachedFile.name}` : "");
     const imageToSend = capturedImage;
     const fileToSend = attachedFile;
     setAttachedFile(null);

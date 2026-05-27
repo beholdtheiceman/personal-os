@@ -264,7 +264,7 @@ export default function ChatPanel() {
     }
 
     const isFirstMessage = messages.length === 0;
-    const displayText = text.trim() || (capturedImage ? "What's in this image?" : "");
+    const displayText = text.trim() || (capturedImage ? "What's in this image?" : attachedFile ? `Please analyze this file: ${attachedFile.name}` : "");
     const imageToSend = capturedImage;
     const fileToSend = attachedFile;
     setCapturedImage(null);
