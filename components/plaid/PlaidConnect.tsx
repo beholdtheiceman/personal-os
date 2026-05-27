@@ -203,7 +203,7 @@ export default function PlaidConnect() {
                 <div key={r.stream_id} className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
-                    <span className="text-sm text-text-primary truncate">{r.merchant_name}</span>
+                    <span className="text-sm text-text-primary truncate">{r.merchant_name || r.description || "Unknown"}</span>
                     <FrequencyBadge freq={r.frequency} />
                   </div>
                   <span className="text-sm font-medium text-text-primary shrink-0">
