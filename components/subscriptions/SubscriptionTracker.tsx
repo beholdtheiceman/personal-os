@@ -87,11 +87,12 @@ export default function SubscriptionTracker() {
   const importFromPlaid = async (stream: typeof plaidRecurring[0]) => {
     if (!user) return;
     setImporting(true);
+    const resolvedName = stream.merchant_name || stream.description || stream.institution || "Unknown";
     try {
       const today = new Date().toLocaleDateString("en-CA");
       const nextDate = stream.last_date ?? today;
       await addDoc(collection(db, "users", user.uid, "subscriptions"), {
-        name: stream.merchant_name,
+        name: resolvedName,
         category: "Other",
         amount: stream.amount,
         billing_cycle: stream.frequency === "ANNUALLY" ? "yearly"
@@ -104,7 +105,7 @@ export default function SubscriptionTracker() {
         plaid_stream_id: stream.stream_id,
         created_at: new Date().toISOString(),
       });
-      toast.success(`${stream.merchant_name} imported`);
+      toast.success(`${resolvedName} imported`);
     } finally {
       setImporting(false);
     }
@@ -145,7 +146,7 @@ export default function SubscriptionTracker() {
             {unlinkedPlaid.map((r) => (
               <div key={r.stream_id} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm text-text-primary truncate">{r.merchant_name}</p>
+                  <p className="text-sm text-text-primary truncate">{r.merchant_name || r.description || r.institution || "Unknown"}</p>
                   <p className="text-xs text-text-muted">{fmt(r.amount)} · {r.frequency.toLowerCase()}</p>
                 </div>
                 <button
@@ -201,7 +202,7 @@ export default function SubscriptionTracker() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-text-primary truncate">{sub.name}</span>
+                    <span className="text-sm font-medium text-text-primary truncate">{sub.name || "Unknown"}</span>
                     <StatusBadge status={sub.status} />
                     {sub.plaid_stream_id && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">Plaid</span>
