@@ -6,11 +6,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscriptions, monthlyEquivalent } from "@/hooks/useSubscriptions";
 import { usePlaid } from "@/hooks/usePlaid";
 import SubscriptionForm from "./SubscriptionForm";
+import ContentBrowser from "./ContentBrowser";
 import { getStreamingMeta } from "@/lib/streaming-services";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import {
   RiAddLine, RiEditLine, RiDeleteBinLine, RiRefreshLine,
   RiCalendarLine, RiCheckLine, RiPauseLine, RiCloseLine,
-  RiLinksLine, RiArrowDownSLine, RiArrowUpSLine,
+  RiLinksLine, RiArrowDownSLine, RiArrowUpSLine, RiMovieLine,
 } from "react-icons/ri";
 import { format, differenceInDays } from "date-fns";
 import toast from "react-hot-toast";
@@ -50,8 +52,10 @@ export default function SubscriptionTracker() {
   const { user } = useAuth();
   const { subscriptions, active, loading, monthlyTotal, yearlyTotal } = useSubscriptions();
   const { recurring: plaidRecurring } = usePlaid();
+  const { getCountForSubscription } = useWatchlist();
   const [showForm, setShowForm]       = useState(false);
   const [editing, setEditing]         = useState<Subscription | null>(null);
+  const [contentSub, setContentSub]   = useState<Subscription | null>(null);
   const [filter, setFilter]           = useState<"all" | "active" | "cancelled">("active");
   const [importing, setImporting]     = useState(false);
   const [expandedLinks, setExpandedLinks] = useState<string | null>(null);
@@ -202,6 +206,11 @@ export default function SubscriptionTracker() {
                     {sub.plaid_stream_id && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">Plaid</span>
                     )}
+                    {getCountForSubscription(sub.id) > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
+                        ★ {getCountForSubscription(sub.id)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-text-muted">{sub.category}</span>
@@ -223,6 +232,15 @@ export default function SubscriptionTracker() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {sub.tmdbProviderId && (
+                    <button
+                      onClick={() => setContentSub(sub)}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors"
+                      title="Browse content"
+                    >
+                      <RiMovieLine className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {getStreamingMeta(sub.name) && (
                     <button
                       onClick={() => setExpandedLinks(expandedLinks === sub.id ? null : sub.id)}
@@ -278,6 +296,14 @@ export default function SubscriptionTracker() {
           initial={editing ?? undefined}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
+        />
+      )}
+
+      {/* Content browser */}
+      {contentSub && (
+        <ContentBrowser
+          subscription={contentSub}
+          onClose={() => setContentSub(null)}
         />
       )}
     </div>
