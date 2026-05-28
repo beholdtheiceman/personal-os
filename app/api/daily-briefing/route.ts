@@ -283,6 +283,14 @@ export async function GET(req: NextRequest) {
       const today = timeInfo.localDate;
       const tz = timeInfo.tz;
 
+      // Only generate during the 5–9 AM window in the user's local timezone.
+      // Without this guard the first hourly fire after midnight UTC (8 PM Eastern)
+      // would build "today's" briefing the night before.
+      if (timeInfo.localHour < 5 || timeInfo.localHour >= 9) {
+        results[uid] = `skipped (outside generation window — local hour ${timeInfo.localHour})`;
+        continue;
+      }
+
       // Skip if briefing already generated for today in user's local timezone
       const existing = await db.doc(`users/${uid}/daily_briefings/${today}`).get();
       if (existing.exists) {
