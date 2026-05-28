@@ -9,7 +9,7 @@ import HealthForm from "./HealthForm";
 import WeeklyChart from "./WeeklyChart";
 import {
   RiEditLine, RiAddLine, RiMoonLine, RiFlashlightLine, RiRunLine,
-  RiCheckLine, RiHeartPulseLine, RiLinksLine, RiRefreshLine,
+  RiCheckLine, RiHeartPulseLine, RiLinksLine, RiRefreshLine, RiSaveLine,
 } from "react-icons/ri";
 import LoadingDots from "@/components/ui/LoadingDots";
 import toast from "react-hot-toast";
@@ -91,6 +91,27 @@ export default function HealthTracker() {
       setFitLoading(false);
     }
   }, [user]);
+
+  const handleSyncAndLog = useCallback(async () => {
+    if (!user) return;
+    setFitLoading(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/health/auto-sync", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Sync failed");
+      toast.success("Health data synced and logged!");
+      // Refresh the displayed fit data so stats update immediately
+      await fetchFitData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync health data");
+    } finally {
+      setFitLoading(false);
+    }
+  }, [user, fetchFitData]);
 
   useEffect(() => {
     fetchFitData();
@@ -185,7 +206,14 @@ export default function HealthTracker() {
                 className="btn-ghost text-xs flex items-center gap-1.5"
                 title="Refresh Google Health data"
               >
-                <RiRefreshLine className="w-3.5 h-3.5" /> Google Health synced
+                <RiRefreshLine className="w-3.5 h-3.5" /> Google Health
+              </button>
+              <button
+                onClick={handleSyncAndLog}
+                className="btn-ghost text-xs flex items-center gap-1.5 text-accent hover:text-accent"
+                title="Sync Google Health data and write today's log"
+              >
+                <RiSaveLine className="w-3.5 h-3.5" /> Sync &amp; Log
               </button>
               <button
                 onClick={handleDisconnect}
