@@ -114,7 +114,7 @@
 - **Alignment score** — optional, lightweight: a simple weekly read (🟢 Well-aligned / 🟡 Some drift / 🔴 Significant gap) based on behavior vs. Constitution. Not a metric to optimize — a mirror to look into.
 - **Role-level check-ins** — beyond overall alignment, Claude can surface role-specific gaps: "Looking at your [key role], here's what excellent looks like by your own definition — and here's what last week actually looked like."
 
-### Life Season System
+### Life Season System 🧪 Pending Testing
 - **The key insight: seasons are recognized, not declared.** You don't always know what kind of period you're entering until you're already in it. A deliberate sprint toward a goal can be named in advance — but burnout, grief, uncertainty, and transition tend to arrive uninvited. The system shouldn't ask you to pick a season from a list. It should help you *notice* what's actually happening and name it so you can be intentional about it rather than just reactive.
 - **Two scales that matter:**
   - **Life chapters** — the long arcs, years in length. Building a career. Early marriage. A period of significant loss. Raising young kids. These shape the backdrop against which everything else happens and don't change quickly.
@@ -131,7 +131,7 @@
   - The "What Actually Matters" signal is recalibrated to the season's reality
 - **Season transitions and archives** — when a season closes, Claude runs a short reflection: what did this period produce, what did you learn, what does the next season seem to be calling for? Seasons are archived chronologically as a timeline of your life's chapters — something genuinely worth looking back on over years.
 
-### Longitudinal Memory & Pattern Recognition
+### Longitudinal Memory & Pattern Recognition 🧪 Pending Testing
 - **Advisors know your history. Claude should too.** Right now each week is relatively fresh context. This builds a living "life context" document that accumulates what Claude has learned about you over months and years — distinct from the PARA vault (which is your knowledge) and the Constitution (which is your values). This is Claude's understanding of *your patterns*.
 - **What accumulates:**
   - Recurring themes in your journal entries over time
@@ -145,7 +145,7 @@
 - **Gets richer every month.** At year three, Claude knows things about you that you've probably forgotten about yourself. This is the compounding asset of the entire system — the thing that makes the advisor relationship genuinely irreplaceable over time.
 - **Privacy architecture** — life context document is never used for anything other than your own chat context. No training, no external access. Worth calling out explicitly in the UI.
 
-### "What Actually Matters" Signal
+### "What Actually Matters" Signal 🧪 Pending Testing
 - **One honest read, above all the noise.** The risk of a comprehensive life OS is that signal drowns in data. This feature cuts through everything and surfaces one plain-language synthesis at the top of the dashboard and as the opening of every morning briefing.
 - **Not a metric. Not a widget. A sentence or two from Claude** — synthesized from your Constitution, your current Season, your recent patterns, and whatever's most urgent across all your systems: "This week, the thing that deserves most of your attention is [X]. Here's why given everything I know about where you are right now." Everything else is detail you can drill into if you want it.
 - **Changes daily based on real context** — not a rotating tip or a fixed goal reminder. Claude looks across all of it and makes a genuine call. Some days it's about a relationship that's been neglected. Some days it's about an approaching deadline. Some days it's about the fact that your health metrics have been declining for three weeks and you keep deprioritizing it.

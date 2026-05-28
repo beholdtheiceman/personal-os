@@ -25,6 +25,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/what-matters",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/insights",
       "schedule": "0 6 * * *"
     },

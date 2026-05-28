@@ -10,6 +10,7 @@ import { format, getDay } from "date-fns";
 import { getLocalTimeInfo } from "@/lib/timezone";
 import { fetchWeatherData } from "@/lib/weather";
 import { getConstitutionContext } from "@/lib/constitution";
+import { getWhatMattersForContext } from "@/lib/what-matters";
 
 // Returns RFC 3339 start/end-of-day strings in the user's local timezone so the
 // Google Calendar query covers exactly the user's local day, not UTC midnight→midnight.
@@ -140,7 +141,10 @@ async function collectContext(uid: string, today: string, tz: string) {
   // Constitution (optional — inject into system prompt if present)
   const constitutionCtx = await getConstitutionContext(uid).catch(() => null);
 
-  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx };
+  // "What Actually Matters" signal (optional — prepend to briefing if available)
+  const whatMattersCtx = await getWhatMattersForContext(uid).catch(() => null);
+
+  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx, whatMattersCtx };
 }
 
 async function generateBriefing(uid: string, today: string, tz: string): Promise<{
@@ -186,7 +190,7 @@ async function generateBriefing(uid: string, today: string, tz: string): Promise
   ].filter(Boolean).join("\n\n");
 
   const userPrompt = `Today is ${today} (${format(new Date(today + "T12:00:00"), "EEEE, MMMM d, yyyy")}).
-
+${ctx.whatMattersCtx ? `\n${ctx.whatMattersCtx}\n` : ""}
 Generate a concise, motivating morning briefing. Include:
 1. A short personalized greeting (1 sentence)
 2. **Today's priorities** — top 3 tasks with brief reasoning
