@@ -15,7 +15,7 @@ import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiAddLine, RiChat1Line, RiArrowRightSLine, RiCloseLine,
   RiExternalLinkLine, RiVolumeUpLine, RiVolumeMuteLine,
-  RiAttachmentLine,
+  RiAttachmentLine, RiEyeOffLine, RiEyeLine,
 } from "react-icons/ri";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -80,6 +80,7 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [offRecord, setOffRecord] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<{ name: string; text: string } | null>(null);
@@ -284,7 +285,9 @@ export default function ChatPanel() {
     setLoading(true);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    await saveMessage(chatId, { role: "user", content: displayText, timestamp: userMsg.timestamp });
+    if (!offRecord) {
+      await saveMessage(chatId, { role: "user", content: displayText, timestamp: userMsg.timestamp });
+    }
 
     await checkAndAward(user.uid, "hello_world");
     if (messages.length + 1 >= 500) await checkAndAward(user.uid, "power_user");
@@ -324,6 +327,7 @@ export default function ChatPanel() {
           fileText: fileToSend?.text,
           fileName: fileToSend?.name,
           isFirstMessage,
+          offRecord,
         }),
       });
 
@@ -344,12 +348,14 @@ export default function ChatPanel() {
 
       setMessages((prev) => prev.map((m) => (m.id === placeholderId ? assistantMsg : m)));
       tts.speakResponse(assistantMsg.content);
-      await saveMessage(chatId, {
-        role: "assistant",
-        content: assistantMsg.content,
-        timestamp: assistantMsg.timestamp,
-        ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}),
-      });
+      if (!offRecord) {
+        await saveMessage(chatId, {
+          role: "assistant",
+          content: assistantMsg.content,
+          timestamp: assistantMsg.timestamp,
+          ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}),
+        });
+      }
     } catch {
       toast.error("Failed to get response");
       setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
@@ -610,6 +616,17 @@ export default function ChatPanel() {
                 title={tts.enabled ? "Voice on — click to mute" : "Enable voice responses"}
               >
                 {tts.enabled ? <RiVolumeUpLine className="w-4 h-4" /> : <RiVolumeMuteLine className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => setOffRecord((v) => !v)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  offRecord
+                    ? "text-amber-400 bg-amber-500/20"
+                    : "text-text-secondary hover:text-text-primary hover:bg-white/10"
+                }`}
+                title={offRecord ? "Off the record — nothing saved. Click to exit." : "Go off the record"}
+              >
+                {offRecord ? <RiEyeOffLine className="w-4 h-4" /> : <RiEyeLine className="w-4 h-4" />}
               </button>
               <button
                 onClick={() => sendMessage(input)}
