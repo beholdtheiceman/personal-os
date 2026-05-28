@@ -10,6 +10,7 @@ import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 import { format, startOfWeek, subDays } from "date-fns";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { getSeasonContext } from "@/lib/season";
+import { updateLifeContext } from "@/lib/life-context";
 import type { NotificationSettings } from "@/types";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 
@@ -210,7 +211,7 @@ async function collectWeekData(uid: string, weekStart: string, weekEnd: string) 
 
 // ─── Review generation ────────────────────────────────────────────────────────
 
-async function generateReview(uid: string, weekStart: string): Promise<string> {
+async function generateReview(uid: string, weekStart: string): Promise<{ content: string; dataSummary: string }> {
   // Week is Mon–Sun
   const weekEnd = (() => {
     const d = new Date(weekStart + "T12:00:00Z");
@@ -320,7 +321,8 @@ ${context}`,
     ],
   });
 
-  return message.content[0].type === "text" ? message.content[0].text : "";
+  const content = message.content[0].type === "text" ? message.content[0].text : "";
+  return { content, dataSummary: context };
 }
 
 // ─── Per-user runner ──────────────────────────────────────────────────────────
@@ -361,13 +363,16 @@ async function runForUser(uid: string, fromCron = false): Promise<{ uid: string;
       return { uid, status: "skipped (already generated)" };
     }
 
-    const content = await generateReview(uid, weekStart);
+    const { content, dataSummary } = await generateReview(uid, weekStart);
 
     await reviewRef.set({
       week_start: weekStart,
       content,
       generated_at: new Date().toISOString(),
     });
+
+    // Update longitudinal memory in the background — fire-and-forget, never blocks the review
+    void updateLifeContext(uid, dataSummary, content);
 
     return { uid, status: "ok" };
   } catch (err) {

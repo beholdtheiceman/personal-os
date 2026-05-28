@@ -13,7 +13,7 @@ import {
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
   RiTimeLine, RiFocusLine, RiLightbulbLine,
   RiMicLine, RiBook2Line, RiTrophyLine, RiNewspaperLine,
-  RiSunLine, RiShieldLine, RiLeafLine,
+  RiSunLine, RiShieldLine, RiLeafLine, RiBrainLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
@@ -37,7 +37,8 @@ const MORE_SECTIONS = [
       { href: "/decisions",    label: "Decisions",  icon: RiLightbulbLine },
       { href: "/people",       label: "People",     icon: RiContactsBook2Line },
       { href: "/constitution", label: "Constitution", icon: RiShieldLine },
-      { href: "/season",       label: "Season",       icon: RiLeafLine },
+      { href: "/season",        label: "Season",        icon: RiLeafLine },
+      { href: "/life-context",  label: "Life Memory",   icon: RiBrainLine },
     ],
   },
   {
