@@ -22,7 +22,7 @@ import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiCameraLine, RiCloseLine, RiAddLine, RiChat1Line,
   RiEditLine, RiMenuLine, RiVolumeUpLine, RiVolumeMuteLine,
-  RiAttachmentLine,
+  RiAttachmentLine, RiEyeOffLine, RiEyeLine,
 } from "react-icons/ri";
 import toast from "react-hot-toast";
 import type { ChatMessage } from "@/types";
@@ -95,6 +95,7 @@ export default function ChatInterface() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<{ name: string; text: string } | null>(null);
   const [chatsLoaded, setChatsLoaded] = useState(false);
+  const [offRecord, setOffRecord] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
@@ -381,7 +382,9 @@ export default function ChatInterface() {
     // Reset textarea height after clearing
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    const savedUserRef = await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
+    const savedUserRef = offRecord
+      ? null
+      : await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
 
     await checkAndAward(user.uid, "hello_world");
     if (messages.length + 1 >= 500) await checkAndAward(user.uid, "power_user");
@@ -419,6 +422,7 @@ export default function ChatInterface() {
           fileText: fileToSend?.text,
           fileName: fileToSend?.name,
           isFirstMessage,
+          offRecord,
         }),
       });
 
@@ -440,12 +444,14 @@ export default function ChatInterface() {
 
       setMessages((prev) => prev.map((m) => m.id === placeholderId ? assistantMsg : m));
       tts.speakResponse(assistantMsg.content);
-      await saveMessage(chatId, {
-        role: "assistant",
-        content: assistantMsg.content,
-        timestamp: assistantMsg.timestamp,
-        ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}),
-      });
+      if (!offRecord) {
+        await saveMessage(chatId, {
+          role: "assistant",
+          content: assistantMsg.content,
+          timestamp: assistantMsg.timestamp,
+          ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}),
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to get response");
       // Roll back the user message we optimistically saved — otherwise the chat is
@@ -796,6 +802,15 @@ export default function ChatInterface() {
               title={tts.enabled ? "Voice on — click to mute" : "Enable voice responses"}
             >
               {tts.enabled ? <RiVolumeUpLine className="w-5 h-5" /> : <RiVolumeMuteLine className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={() => setOffRecord((v) => !v)}
+              className={`p-2.5 rounded-lg border transition-colors ${
+                offRecord ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
+              }`}
+              title={offRecord ? "Off the record — nothing is saved. Click to exit." : "Go off the record — no tools, no history"}
+            >
+              {offRecord ? <RiEyeOffLine className="w-5 h-5" /> : <RiEyeLine className="w-5 h-5" />}
             </button>
             <button
               onClick={() => sendMessage(input)}

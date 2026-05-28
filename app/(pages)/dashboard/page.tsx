@@ -40,6 +40,7 @@ import AchievementsWidget from "@/components/achievements/AchievementsWidget";
 import NewsBriefWidget from "@/components/dashboard/NewsBriefWidget";
 import WeatherWidget from "@/components/dashboard/WeatherWidget";
 import WhatMattersWidget from "@/components/dashboard/WhatMattersWidget";
+import SystemAuditWidget from "@/components/dashboard/SystemAuditWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
@@ -263,6 +264,9 @@ export default function DashboardPage() {
     switch (id) {
       case "what_matters":
         return <WhatMattersWidget key="what_matters" />;
+
+      case "system_audit":
+        return <SystemAuditWidget key="system_audit" />;
 
       case "xp":
         return <XPWidget key="xp" />;

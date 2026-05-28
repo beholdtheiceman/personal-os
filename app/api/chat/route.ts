@@ -5266,7 +5266,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate, imageBase64, imageMimeType, fileText, fileName, chatId, isFirstMessage } = await req.json();
+    const { messages, systemPrompt, uid, localDate, imageBase64, imageMimeType, fileText, fileName, chatId, isFirstMessage, offRecord } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -5323,6 +5323,19 @@ export async function POST(req: NextRequest) {
           { role: "user", content: combined },
         ];
       }
+    }
+
+    // ── Off the record: pure conversation, no tools, no chat naming ───────────
+    if (offRecord) {
+      const simpleSystem = systemPrompt ?? "You are a helpful personal assistant. This is an off-the-record conversation — be present and thoughtful.";
+      const simpleResponse = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        system: simpleSystem,
+        messages: currentMessages,
+      });
+      const text = simpleResponse.content.find((b) => b.type === "text")?.text ?? "";
+      return NextResponse.json({ text, actions: [], offRecord: true });
     }
 
     // Augment system prompt with second brain, constitution, and season context (fetched in parallel)

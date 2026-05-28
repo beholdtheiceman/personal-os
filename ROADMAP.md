@@ -151,7 +151,7 @@
 - **Changes daily based on real context** — not a rotating tip or a fixed goal reminder. Claude looks across all of it and makes a genuine call. Some days it's about a relationship that's been neglected. Some days it's about an approaching deadline. Some days it's about the fact that your health metrics have been declining for three weeks and you keep deprioritizing it.
 - **The metric is whether it's right.** Over time you should find yourself reading it and thinking "yes, that's the thing." If it's consistently off, the Constitution and longitudinal memory need refinement — which is itself useful feedback.
 
-### System Integrity & Subtraction
+### System Integrity & Subtraction 🧪 Pending Testing
 - **Every system needs a way to simplify itself or it becomes overhead.** As the app grows, this mechanic prevents it from collapsing under its own weight.
 - **Quarterly system audit** — Claude reviews which features, trackers, and habits you've actually engaged with in the past 90 days. Surfaces what's become noise. Asks: "You haven't logged [X] in 11 weeks — is this still serving you?" One-tap to archive, pause, or retire any tracker or feature.
 - **"Off the record" mode** — a chat mode where nothing is logged, no tools are called, no data is captured. Just a conversation. Some of the most important thinking happens when you're not being measured. The app should have space for that.

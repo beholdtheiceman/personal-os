@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "what_matters",         label: "What Actually Matters" },
+  { id: "system_audit",         label: "System Audit" },
   { id: "xp",                   label: "XP / Level" },
   { id: "quick_links",          label: "Quick Links" },
   { id: "daily_briefing",       label: "AI Briefing" },

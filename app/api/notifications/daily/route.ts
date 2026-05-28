@@ -39,6 +39,24 @@ export async function GET(req: NextRequest) {
     // One Firestore read for timezone info; reuse for all category checks
     const timeInfo = await getLocalTimeInfo(uid);
 
+    // ── Humanity protection: skip ALL notifications during protected windows ──
+    try {
+      const ptSnap = await db.doc(`users/${uid}/settings/protected_time`).get();
+      if (ptSnap.exists) {
+        const ptWindows = (ptSnap.data()?.windows ?? []) as Array<{
+          days: number[]; allDay: boolean; startHour: number; endHour: number;
+        }>;
+        const localNow = new Date(new Date().toLocaleString("en-US", { timeZone: timeInfo.tz }));
+        const currentDay  = localNow.getDay();
+        const currentHour = localNow.getHours();
+        const inProtected = ptWindows.some((w) =>
+          w.days.includes(currentDay) &&
+          (w.allDay || (currentHour >= w.startHour && currentHour < w.endHour))
+        );
+        if (inProtected) continue;
+      }
+    } catch { /* protected time is best-effort — never block notifications on error */ }
+
     const send = async (title: string, body: string, tag: string) => {
       await sendPushToUser(uid, { title, body, tag });
       fired.push(tag);
