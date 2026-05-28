@@ -9,6 +9,7 @@ import {
 import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
 import { checkAndAward } from "@/lib/checkAndAward";
+import { compressImage } from "@/lib/compress-image";
 import ReactMarkdown from "react-markdown";
 import LoadingDots from "@/components/ui/LoadingDots";
 import CameraCapture from "./CameraCapture";
@@ -315,7 +316,7 @@ export default function ChatInterface() {
 
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onload = () => setCapturedImage(reader.result as string);
+      reader.onload = () => compressImage(reader.result as string).then(setCapturedImage).catch((err: Error) => toast.error(err.message));
       reader.readAsDataURL(file);
       e.target.value = "";
       return;

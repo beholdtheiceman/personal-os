@@ -26,6 +26,7 @@ import { useSkills } from "@/hooks/useSkills";
 import type { Skill } from "@/lib/skills";
 import { useTTS } from "@/hooks/useTTS";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
+import { compressImage } from "@/lib/compress-image";
 import { useIsTouch } from "@/hooks/useIsTouch";
 import type { ChatMessage } from "@/types";
 
@@ -221,7 +222,7 @@ export default function ChatPanel() {
 
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onload = () => setCapturedImage(reader.result as string);
+      reader.onload = () => compressImage(reader.result as string).then(setCapturedImage).catch((err: Error) => toast.error(err.message));
       reader.readAsDataURL(file);
       e.target.value = "";
       return;
