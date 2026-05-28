@@ -302,6 +302,9 @@ export default function ChatPanel() {
 
     try {
       const idToken = await user.getIdToken();
+      const imageMimeType = imageToSend
+        ? (imageToSend.match(/^data:(image\/\w+);base64,/)?.[1] ?? "image/jpeg")
+        : undefined;
       const imageBase64 = imageToSend
         ? imageToSend.replace(/^data:image\/\w+;base64,/, "")
         : undefined;
@@ -316,6 +319,7 @@ export default function ChatPanel() {
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
           imageBase64,
+          imageMimeType,
           fileText: fileToSend?.text,
           fileName: fileToSend?.name,
           isFirstMessage,

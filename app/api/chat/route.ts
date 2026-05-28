@@ -5265,7 +5265,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate, imageBase64, fileText, fileName, chatId, isFirstMessage } = await req.json();
+    const { messages, systemPrompt, uid, localDate, imageBase64, imageMimeType, fileText, fileName, chatId, isFirstMessage } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -5297,7 +5297,7 @@ export async function POST(req: NextRequest) {
                 type: "image",
                 source: {
                   type: "base64",
-                  media_type: "image/jpeg",
+                  media_type: (imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp") ?? "image/jpeg",
                   data: imageBase64 as string,
                 },
               },
