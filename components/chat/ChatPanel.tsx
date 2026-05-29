@@ -361,7 +361,9 @@ export default function ChatPanel() {
       setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
     } finally {
       setLoading(false);
-      setTimeout(() => textareaRef.current?.focus(), 0);
+      // Use a short delay so React's render cycle has time to re-enable the
+      // textarea before focus() is called — 0ms loses the race.
+      setTimeout(() => textareaRef.current?.focus(), 50);
     }
   };
 
@@ -548,13 +550,7 @@ export default function ChatPanel() {
           {skills.activeSkill && (
             <ActiveSkillBadge skill={skills.activeSkill} onDismiss={skills.dismissSkill} />
           )}
-          <div
-            className="relative flex items-end gap-2 rounded-xl px-3 py-2"
-            style={{
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
+          <div className="relative flex items-end gap-2">
             <SkillPicker
               open={skills.pickerOpen}
               skills={skills.filteredSkills}
@@ -577,7 +573,6 @@ export default function ChatPanel() {
               placeholder="Message Claude…"
               className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted outline-none resize-none leading-5"
               style={{ maxHeight: "120px" }}
-              disabled={loading}
             />
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
               <input
