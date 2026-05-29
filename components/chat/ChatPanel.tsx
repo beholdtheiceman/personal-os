@@ -571,7 +571,7 @@ export default function ChatPanel() {
               }}
               onKeyDown={handleKeyDown}
               placeholder="Message Claude…"
-              className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted outline-none resize-none leading-5"
+              className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted outline-none focus:outline-none focus:ring-0 ring-0 resize-none leading-5"
               style={{ maxHeight: "120px" }}
             />
             <div className="flex items-center gap-1 shrink-0 pb-0.5">
