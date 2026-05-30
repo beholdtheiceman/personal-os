@@ -5266,7 +5266,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate, imageBase64, imageMimeType, fileText, fileName, chatId, isFirstMessage, offRecord } = await req.json();
+    const { messages, systemPrompt, uid, localDate, imageBase64, imageMimeType, fileText, fileName, filePdfBase64, chatId, isFirstMessage, offRecord } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -5321,6 +5321,28 @@ export async function POST(req: NextRequest) {
         currentMessages = [
           ...currentMessages.slice(0, lastIdx),
           { role: "user", content: combined },
+        ];
+      }
+    }
+
+    // If a PDF was attached, send it as a native document block
+    if (filePdfBase64) {
+      const lastIdx = currentMessages.length - 1;
+      const lastMsg = currentMessages[lastIdx];
+      if (lastMsg?.role === "user") {
+        const existingText = typeof lastMsg.content === "string"
+          ? lastMsg.content
+          : (lastMsg.content as { type: string; text?: string }[]).find((b) => b.type === "text")?.text ?? "";
+        currentMessages = [
+          ...currentMessages.slice(0, lastIdx),
+          {
+            role: "user",
+            content: [
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              { type: "document", source: { type: "base64", media_type: "application/pdf", data: filePdfBase64 as string } } as any,
+              { type: "text", text: existingText },
+            ],
+          },
         ];
       }
     }
