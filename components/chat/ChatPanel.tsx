@@ -189,6 +189,9 @@ export default function ChatPanel() {
           uid: user.uid,
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
+          localTime: new Date().toLocaleTimeString("en-US", {
+            hour12: false, hour: "2-digit", minute: "2-digit",
+          }),
           isFirstMessage: messages.length === 0,
         }),
       });
@@ -324,6 +327,9 @@ export default function ChatPanel() {
           uid: user.uid,
           chatId,
           localDate: format(new Date(), "yyyy-MM-dd"),
+          localTime: new Date().toLocaleTimeString("en-US", {
+            hour12: false, hour: "2-digit", minute: "2-digit",
+          }),
           imageBase64,
           imageMimeType,
           fileText: fileToSend?.type === "text" ? fileToSend.text : undefined,
