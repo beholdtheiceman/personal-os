@@ -18,6 +18,7 @@ import ActiveSkillBadge from "./ActiveSkillBadge";
 import { useSkills } from "@/hooks/useSkills";
 import type { Skill } from "@/lib/skills";
 import { useTTS } from "@/hooks/useTTS";
+import { RealtimeVoice } from "@/components/chat/RealtimeVoice";
 import {
   RiSendPlane2Line, RiMicLine, RiMicOffLine, RiCheckLine,
   RiCameraLine, RiCloseLine, RiAddLine, RiChat1Line,
@@ -803,6 +804,7 @@ export default function ChatInterface() {
             >
               {recording ? <RiMicOffLine className="w-5 h-5" /> : <RiMicLine className="w-5 h-5" />}
             </button>
+            <RealtimeVoice />
             <button
               onClick={tts.toggle}
               className={`p-2.5 rounded-lg border transition-colors ${
