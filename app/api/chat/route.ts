@@ -978,6 +978,31 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_fire_projection",
+    description: "Get the user's FIRE (Financial Independence) projection — FI number, progress %, projected date, and time remaining.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        extra_monthly_savings: { type: "number", description: "Optional: hypothetical extra monthly savings to model." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "update_fire_assumptions",
+    description: "Update FIRE calculation assumptions like annual expenses, expected return, or withdrawal rate.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        annual_expenses: { type: "number", description: "Override annual expenses used for FI number calculation." },
+        monthly_savings: { type: "number", description: "Override monthly savings rate." },
+        expected_return: { type: "number", description: "Annual investment return as a percentage, e.g. 7 for 7%." },
+        withdrawal_rate: { type: "number", description: "Safe withdrawal rate as a percentage, e.g. 4 for 4%." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "add_episode",
     description: "Add a new podcast episode to the content pipeline.",
     input_schema: {
@@ -3786,6 +3811,77 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       const debtName = doc.data().name as string;
       await doc.ref.delete();
       return `Deleted debt: "${debtName}".`;
+    }
+
+    case "get_fire_projection": {
+      const nwSnap = await db.collection(`users/${uid}/net_worth`).orderBy("snapshot_date", "desc").limit(1).get();
+      const currentNetWorth: number = nwSnap.empty ? 0 : (nwSnap.docs[0].data().net_worth as number);
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      const cutoff = threeMonthsAgo.toISOString().slice(0, 10);
+      const txSnap = await db.collection(`users/${uid}/transactions`).orderBy("date", "desc").limit(300).get();
+      const buckets: Record<string, { expenses: number; income: number }> = {};
+      for (const d of txSnap.docs) {
+        const t = d.data() as { date: string; type: string; amount: number };
+        if (t.date < cutoff) continue;
+        const mo = t.date.slice(0, 7);
+        if (!buckets[mo]) buckets[mo] = { expenses: 0, income: 0 };
+        if (t.type === "expense") buckets[mo].expenses += t.amount;
+        else if (t.type === "income") buckets[mo].income += t.amount;
+      }
+      const months = Object.values(buckets);
+      const avgExp = months.length ? months.reduce((s, m) => s + m.expenses, 0) / months.length : 0;
+      const avgInc = months.length ? months.reduce((s, m) => s + m.income, 0) / months.length : 0;
+      const assumDoc = await db.doc(`users/${uid}/settings/fire`).get();
+      const assum = assumDoc.exists ? (assumDoc.data() as Record<string, number>) : {};
+      const expectedReturn = assum.expected_return ?? 0.07;
+      const withdrawalRate = assum.withdrawal_rate ?? 0.04;
+      const annualExpenses = assum.annual_expenses ?? avgExp * 12;
+      const monthlySavings = assum.savings_rate ?? Math.max(0, avgInc - avgExp);
+      const fiNumber = annualExpenses / withdrawalRate;
+      const progressPct = fiNumber > 0 ? Math.min(100, (currentNetWorth / fiNumber) * 100) : 0;
+      // Months to FI
+      let monthsToFi: number | null = null;
+      if (currentNetWorth < fiNumber && monthlySavings > 0) {
+        const rate = expectedReturn / 12;
+        let nw = currentNetWorth;
+        for (let m = 1; m <= 600; m++) {
+          nw = nw * (1 + rate) + monthlySavings;
+          if (nw >= fiNumber) { monthsToFi = m; break; }
+        }
+      } else if (currentNetWorth >= fiNumber) {
+        monthsToFi = null;
+      }
+      const projDate = monthsToFi != null
+        ? (() => { const d = new Date(); d.setMonth(d.getMonth() + monthsToFi); return d.toISOString().slice(0, 7); })()
+        : null;
+      const fmtC = (n: number) => `$${Math.round(n).toLocaleString()}`;
+      let result = `FI Number: ${fmtC(fiNumber)} | Current Net Worth: ${fmtC(currentNetWorth)} | Progress: ${progressPct.toFixed(1)}% | Monthly Savings: ${fmtC(monthlySavings)} | Annual Expenses: ${fmtC(annualExpenses)} | Projected FI: ${projDate ?? (currentNetWorth >= fiNumber ? "Already FI!" : "Cannot project — add more data")}`;
+      const extra = input.extra_monthly_savings as number | undefined;
+      if (extra && extra > 0) {
+        let wiMonths: number | null = null;
+        const rate = expectedReturn / 12;
+        let nw2 = currentNetWorth;
+        for (let m = 1; m <= 600; m++) {
+          nw2 = nw2 * (1 + rate) + monthlySavings + extra;
+          if (nw2 >= fiNumber) { wiMonths = m; break; }
+        }
+        const saved = monthsToFi != null && wiMonths != null ? monthsToFi - wiMonths : null;
+        result += ` | What-if +${fmtC(extra)}/mo: ${wiMonths != null ? `reaches FI in ${wiMonths} months` : "Already FI"}${saved != null && saved > 0 ? ` (${Math.floor(saved / 12)}y ${saved % 12}m sooner)` : ""}`;
+      }
+      return result;
+    }
+
+    case "update_fire_assumptions": {
+      const updates: Record<string, number | string> = { updated_at: new Date().toISOString() };
+      const changed: string[] = [];
+      if (input.annual_expenses != null) { updates.annual_expenses = input.annual_expenses as number; changed.push(`annual expenses → $${Math.round(input.annual_expenses as number).toLocaleString()}`); }
+      if (input.monthly_savings != null) { updates.savings_rate = input.monthly_savings as number; changed.push(`monthly savings → $${Math.round(input.monthly_savings as number).toLocaleString()}`); }
+      if (input.expected_return != null) { updates.expected_return = (input.expected_return as number) / 100; changed.push(`expected return → ${input.expected_return}%`); }
+      if (input.withdrawal_rate != null) { updates.withdrawal_rate = (input.withdrawal_rate as number) / 100; changed.push(`withdrawal rate → ${input.withdrawal_rate}%`); }
+      if (changed.length === 0) return "No changes specified.";
+      await db.doc(`users/${uid}/settings/fire`).set(updates, { merge: true });
+      return `Updated FIRE assumptions: ${changed.join(", ")}.`;
     }
 
     case "add_episode": {

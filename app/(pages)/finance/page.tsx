@@ -7,8 +7,9 @@ import BudgetTracker from "@/components/finance/BudgetTracker";
 import NetWorthTracker from "@/components/finance/NetWorthTracker";
 import SavingsGoals from "@/components/finance/SavingsGoals";
 import DebtPayoffPlanner from "@/components/finance/DebtPayoffPlanner";
+import FireTracker from "@/components/finance/FireTracker";
 
-type Tab = "transactions" | "budget" | "net-worth" | "savings" | "subscriptions" | "accounts" | "debt";
+type Tab = "transactions" | "budget" | "net-worth" | "savings" | "subscriptions" | "accounts" | "debt" | "fire";
 
 export default function FinancePage() {
   const [tab, setTab] = useState<Tab>("transactions");
@@ -30,6 +31,7 @@ export default function FinancePage() {
           { key: "subscriptions", label: "Subscriptions" },
           { key: "accounts",      label: "Accounts" },
           { key: "debt",          label: "Debt Payoff" },
+          { key: "fire",          label: "FIRE" },
         ] as { key: Tab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
@@ -73,6 +75,11 @@ export default function FinancePage() {
       {tab === "debt" && (
         <div className="card">
           <DebtPayoffPlanner />
+        </div>
+      )}
+      {tab === "fire" && (
+        <div className="card">
+          <FireTracker />
         </div>
       )}
     </div>

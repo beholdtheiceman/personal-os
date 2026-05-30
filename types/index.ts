@@ -549,6 +549,25 @@ export interface NetWorthSnapshot {
   created_at: string;
 }
 
+// ─── FIRE Tracker ────────────────────────────────────────────────────────────
+export interface FireAssumptions {
+  annual_expenses?: number;   // override; if not set, calculated from transactions
+  savings_rate?: number;      // monthly savings amount override
+  expected_return: number;    // annual investment return as decimal, default 0.07
+  withdrawal_rate: number;    // safe withdrawal rate as decimal, default 0.04
+  updated_at: string;
+}
+
+export interface FireProjection {
+  fi_number: number;              // annual_expenses / withdrawal_rate
+  current_net_worth: number;
+  progress_pct: number;           // current_net_worth / fi_number * 100
+  monthly_savings: number;        // calculated from last 3 months of transactions
+  annual_expenses: number;        // calculated or overridden
+  months_to_fi: number | null;    // null if already FI or can't project
+  projected_fi_date: string | null; // ISO date or null
+}
+
 // ─── Projects ─────────────────────────────────────────────────────────────────
 export type ProjectStatus = "active" | "on-hold" | "completed";
 export type KanbanStatus = "todo" | "in_progress" | "done";
