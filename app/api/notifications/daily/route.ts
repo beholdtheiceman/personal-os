@@ -57,6 +57,16 @@ export async function GET(req: NextRequest) {
       }
     } catch { /* protected time is best-effort — never block notifications on error */ }
 
+    // ── Snooze guard: skip all category notifications if snoozed ─────────────
+    const snoozeUntil = (settingsDoc.data() as Record<string, unknown>)?.snooze_until as string | undefined;
+    if (snoozeUntil) {
+      const currentLocalStr = `${timeInfo.localDate}T${String(timeInfo.localHour).padStart(2, "0")}:00`;
+      if (currentLocalStr < snoozeUntil) {
+        results[uid] = ["snoozed"];
+        continue;
+      }
+    }
+
     const send = async (title: string, body: string, tag: string) => {
       await sendPushToUser(uid, { title, body, tag });
       fired.push(tag);
@@ -159,6 +169,31 @@ export async function GET(req: NextRequest) {
     if (settings.season_checkin?.enabled && settings.season_checkin.time && isHour(timeInfo, settings.season_checkin.time)) {
       const n = await seasonCheckinHandler(uid);
       if (n) await send(n.title, n.body, n.tag ?? "season-checkin");
+    }
+
+    // ── One-off reminders: bypass DND and snooze, always fire when due ────────
+    try {
+      const currentLocalStr = `${timeInfo.localDate}T${String(timeInfo.localHour).padStart(2, "0")}:00`;
+      const dueSnap = await db.collection(`users/${uid}/reminders`)
+        .where("status", "==", "pending")
+        .get();
+      for (const reminderDoc of dueSnap.docs) {
+        const r = reminderDoc.data();
+        if ((r.fire_at as string) <= currentLocalStr) {
+          await sendPushToUser(uid, {
+            title: "⏰ Reminder",
+            body: r.text as string,
+            tag: `reminder-${reminderDoc.id}`,
+          });
+          await reminderDoc.ref.update({
+            status: "fired",
+            fired_at: new Date().toISOString(),
+          });
+          fired.push(`reminder-${reminderDoc.id}`);
+        }
+      }
+    } catch (e) {
+      console.error(`Reminder firing failed for ${uid}:`, e);
     }
 
     results[uid] = fired;
