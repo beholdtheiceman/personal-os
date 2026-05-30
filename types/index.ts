@@ -125,6 +125,7 @@ export interface NotificationSettings {
   subscription_renewal: NotificationCategory; // fires days_before next_billing_date
   spending_trend: NotificationCategory;     // mid-month alert when pace projects overspend on a budget category
   season_checkin: NotificationCategory;    // nudge when active season is 4+ weeks old with no recent check-in
+  snooze_until?: string;     // local datetime "YYYY-MM-DDTHH:MM"; all notifications skip while now < this
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -165,6 +166,17 @@ export function mergeNotificationSettings(
         : value;
   }
   return out as unknown as NotificationSettings;
+}
+
+// ─── Reminders ────────────────────────────────────────────────────────────────
+export interface Reminder {
+  id?: string;               // Firestore doc ID, set after fetch
+  text: string;              // "Call Dr. Smith"
+  fire_at: string;           // local wall-clock "YYYY-MM-DDTHH:MM" (no UTC offset)
+  tz: string;                // user's tz at creation, e.g. "America/Chicago"
+  status: "pending" | "fired" | "cancelled";
+  created_at: string;        // ISO UTC
+  fired_at?: string;         // ISO UTC, written when push is sent
 }
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────
