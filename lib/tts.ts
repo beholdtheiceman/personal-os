@@ -1,10 +1,7 @@
 /**
- * Text-to-speech utilities.
- *
- * Current engine: browser SpeechSynthesis (free, no API key).
- * To swap to OpenAI TTS later: replace the `speak` function body with
- * a call to `speakWithOpenAI()` defined below, and add OPENAI_API_KEY
- * to env. The hook (hooks/useTTS.ts) and call sites don't need to change.
+ * Text-to-speech utilities — OpenAI TTS (tts-1, "nova" voice).
+ * Falls back gracefully if the API route is unavailable.
+ * Cost: ~$0.015/1K characters (~$0.005 per typical Claude response).
  */
 
 // ── Markdown stripping ────────────────────────────────────────────────────────
@@ -26,93 +23,60 @@ export function stripMarkdown(text: string): string {
     .trim();
 }
 
-// ── Sentence chunker ──────────────────────────────────────────────────────────
-// SpeechSynthesisUtterance has a ~32KB limit on some browsers.
-// Chunking at sentence boundaries also produces more natural pausing.
+// ── Active audio tracking (for stop support) ──────────────────────────────────
 
-function chunkText(text: string, maxLen = 300): string[] {
-  const sentences = text.split(/(?<=[.!?])\s+/);
-  const chunks: string[] = [];
-  let current = "";
+let activeAudio: HTMLAudioElement | null = null;
+let activeObjectUrl: string | null = null;
 
-  for (const sentence of sentences) {
-    if (current.length + sentence.length + 1 > maxLen && current) {
-      chunks.push(current.trim());
-      current = sentence;
-    } else {
-      current = current ? `${current} ${sentence}` : sentence;
-    }
+function cleanupActive() {
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio = null;
   }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks.length > 0 ? chunks : [text];
+  if (activeObjectUrl) {
+    URL.revokeObjectURL(activeObjectUrl);
+    activeObjectUrl = null;
+  }
 }
 
-// ── Voice picker ──────────────────────────────────────────────────────────────
+// ── OpenAI TTS ────────────────────────────────────────────────────────────────
 
-function pickVoice(lang: string): SpeechSynthesisVoice | null {
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) return null;
-
-  const preferred = voices.find(
-    (v) =>
-      v.lang.startsWith(lang.slice(0, 2)) &&
-      (v.name.includes("Google") ||
-        v.name.includes("Samantha") ||
-        v.name.includes("Alex") ||
-        v.name.includes("Karen") ||
-        v.name.includes("Daniel"))
-  );
-  return preferred ?? voices.find((v) => v.lang.startsWith(lang.slice(0, 2))) ?? null;
-}
-
-// ── Option A: Browser SpeechSynthesis (active) ───────────────────────────────
-
-export function speak(text: string, lang = "en-US", rate = 1.05): void {
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
-
-  window.speechSynthesis.cancel(); // stop anything currently playing
+export async function speak(text: string, voice = "nova"): Promise<void> {
+  if (typeof window === "undefined") return;
 
   const cleaned = stripMarkdown(text);
   if (!cleaned) return;
 
-  const chunks = chunkText(cleaned);
+  cleanupActive(); // stop anything currently playing
 
-  for (const chunk of chunks) {
-    const utter = new SpeechSynthesisUtterance(chunk);
-    utter.lang  = lang;
-    utter.rate  = rate;
-    utter.pitch = 1;
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: cleaned, voice }),
+    });
 
-    // Voices may not be loaded yet on first call — re-query each utterance
-    const voice = pickVoice(lang);
-    if (voice) utter.voice = voice;
+    if (!res.ok) return;
 
-    window.speechSynthesis.speak(utter);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+
+    activeAudio = audio;
+    activeObjectUrl = url;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (activeObjectUrl === url) activeObjectUrl = null;
+      if (activeAudio === audio) activeAudio = null;
+    };
+
+    audio.play();
+  } catch {
+    // Silently fail — TTS is non-critical
   }
 }
 
 export function stopSpeaking(): void {
-  if (typeof window !== "undefined" && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
+  cleanupActive();
 }
-
-// ── Option B: OpenAI TTS (swap in when ready) ─────────────────────────────────
-// To upgrade: replace the `speak` export above with this function,
-// create app/api/tts/route.ts (see docs/VOICE_TTS.md), add OPENAI_API_KEY to env.
-// Cost: ~$0.015 / 1K characters (~$0.005 per typical Claude response).
-//
-// export async function speak(text: string, voice = "nova"): Promise<void> {
-//   const cleaned = stripMarkdown(text);
-//   if (!cleaned) return;
-//   const res = await fetch("/api/tts", {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify({ text: cleaned, voice }),
-//   });
-//   const blob = await res.blob();
-//   const url = URL.createObjectURL(blob);
-//   const audio = new Audio(url);
-//   audio.play();
-//   audio.onended = () => URL.revokeObjectURL(url);
-// }

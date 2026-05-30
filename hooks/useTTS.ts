@@ -18,7 +18,7 @@ export function useTTS() {
 
   /** Call after an assistant response is ready. No-ops when TTS is disabled. */
   function speakResponse(text: string) {
-    if (enabled && text) speak(text);
+    if (enabled && text) speak(text).catch(() => {});
   }
 
   /** Stop any in-progress speech (call before sending a new message). */
