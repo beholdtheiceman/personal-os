@@ -928,6 +928,56 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "add_debt",
+    description: "Add a new debt to track in the Debt Payoff Planner.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:            { type: "string", description: "Name of the debt, e.g. 'Chase Sapphire' or 'Student Loan'." },
+        type:            { type: "string", description: "Type: credit_card | auto_loan | student_loan | personal_loan | mortgage | medical | other." },
+        balance:         { type: "number", description: "Current balance owed." },
+        interest_rate:   { type: "number", description: "Annual interest rate as a percentage, e.g. 23.99 for 23.99% APR." },
+        minimum_payment: { type: "number", description: "Minimum monthly payment." },
+      },
+      required: ["name", "type", "balance", "interest_rate", "minimum_payment"],
+    },
+  },
+  {
+    name: "update_debt_balance",
+    description: "Update the current balance of an existing debt (e.g. after making a payment).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:    { type: "string", description: "Partial name of the debt (case-insensitive match)." },
+        balance: { type: "number", description: "New current balance." },
+      },
+      required: ["name", "balance"],
+    },
+  },
+  {
+    name: "get_debts",
+    description: "Get a summary of all tracked debts with balances, APRs, and payoff projections.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        method:        { type: "string", description: "Payoff strategy: avalanche (highest interest first) or snowball (lowest balance first). Defaults to avalanche." },
+        extra_payment: { type: "number", description: "Extra monthly payment beyond minimums. Defaults to 0." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "delete_debt",
+    description: "Delete a debt (use when fully paid off or entered in error).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Partial name of the debt to delete (case-insensitive match)." },
+      },
+      required: ["name"],
+    },
+  },
+  {
     name: "add_episode",
     description: "Add a new podcast episode to the content pipeline.",
     input_schema: {
@@ -3676,6 +3726,66 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         lines.push(`• ${g.name}: $${(g.current_amount as number).toLocaleString()} / $${(g.target_amount as number).toLocaleString()} (${pct}%) — target ${g.target_date}`);
       }
       return lines.join("\n");
+    }
+
+    case "add_debt": {
+      const now = new Date().toISOString();
+      const balance = Number(input.balance);
+      await db.collection(`users/${uid}/debts`).add({
+        name:             input.name as string,
+        type:             (input.type as string) || "other",
+        balance,
+        original_balance: balance,
+        interest_rate:    Number(input.interest_rate) / 100, // store as decimal
+        minimum_payment:  Number(input.minimum_payment),
+        created_at:       now,
+        updated_at:       now,
+      });
+      return `Debt added: "${input.name as string}" — $${balance.toLocaleString()} at ${input.interest_rate}% APR, $${(input.minimum_payment as number).toLocaleString()}/mo minimum.`;
+    }
+
+    case "update_debt_balance": {
+      const name = (input.name as string).toLowerCase();
+      const newBalance = Number(input.balance);
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      const doc = snap.docs.find((d) => (d.data().name as string).toLowerCase().includes(name));
+      if (!doc) return `No debt found matching "${input.name as string}".`;
+      const prev = doc.data().balance as number;
+      await doc.ref.update({ balance: newBalance, updated_at: new Date().toISOString() });
+      const diff = prev - newBalance;
+      const msg = newBalance === 0 ? " 🎉 Debt paid off!" : diff > 0 ? ` ($${diff.toLocaleString()} paid down)` : "";
+      return `Updated "${doc.data().name as string}" balance to $${newBalance.toLocaleString()}.${msg}`;
+    }
+
+    case "get_debts": {
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      if (snap.empty) return "No debts tracked yet. Use add_debt to get started.";
+      const method = ((input.method as string) || "avalanche").toLowerCase();
+      const extra = Number(input.extra_payment) || 0;
+      const total = snap.docs.reduce((sum, d) => sum + (d.data().balance as number), 0);
+      const lines = [`**Debts** (${snap.docs.length} total, $${total.toLocaleString()} owed)`];
+      const sorted = method === "snowball"
+        ? snap.docs.sort((a, b) => (a.data().balance as number) - (b.data().balance as number))
+        : snap.docs.sort((a, b) => (b.data().interest_rate as number) - (a.data().interest_rate as number));
+      for (const d of sorted) {
+        const g = d.data();
+        const apr = ((g.interest_rate as number) * 100).toFixed(2);
+        lines.push(`• ${g.name}: $${(g.balance as number).toLocaleString()} @ ${apr}% APR — $${(g.minimum_payment as number).toLocaleString()}/mo minimum`);
+      }
+      const minTotal = snap.docs.reduce((sum, d) => sum + (d.data().minimum_payment as number), 0);
+      lines.push(`\nTotal minimum payments: $${minTotal.toLocaleString()}/mo${extra > 0 ? ` + $${extra.toLocaleString()} extra` : ""}`);
+      lines.push(`Strategy: ${method === "snowball" ? "Snowball (lowest balance first)" : "Avalanche (highest interest first)"}`);
+      return lines.join("\n");
+    }
+
+    case "delete_debt": {
+      const name = (input.name as string).toLowerCase();
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      const doc = snap.docs.find((d) => (d.data().name as string).toLowerCase().includes(name));
+      if (!doc) return `No debt found matching "${input.name as string}".`;
+      const debtName = doc.data().name as string;
+      await doc.ref.delete();
+      return `Deleted debt: "${debtName}".`;
     }
 
     case "add_episode": {
