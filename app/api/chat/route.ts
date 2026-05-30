@@ -2211,6 +2211,38 @@ const TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "create_reminder",
+    description: "Set a one-time push notification reminder for the user. Resolve any relative time expression ('in 2 hours', 'next Thursday at 10am', 'tomorrow morning') to an absolute local datetime using today's date and the current local time from your context — both are injected into your system prompt. Always confirm the resolved datetime back to the user so they can verify. Hour precision only: the system fires on the hour, so round to the nearest hour and confirm what you stored (e.g. '10:30am' → store '10:00', confirm 'I\\'ll remind you at 10am').",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text:    { type: "string", description: "What to remind the user about, e.g. 'Call Dr. Smith'" },
+        fire_at: { type: "string", description: "Absolute local datetime in YYYY-MM-DDTHH:MM format (hour precision, no seconds, no timezone offset)" },
+      },
+      required: ["text", "fire_at"],
+    },
+  },
+  {
+    name: "list_reminders",
+    description: "List all pending (not yet fired or cancelled) reminders for the user, sorted soonest first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "cancel_reminder",
+    description: "Cancel a pending reminder by its ID. Call list_reminders first if you need to resolve which reminder the user means.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "string", description: "Firestore document ID of the reminder to cancel" },
+      },
+      required: ["id"],
+    },
+  },
 ];
 
 // ── Tool execution ─────────────────────────────────────────────────────────────
@@ -5484,6 +5516,50 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
         `${d.date}: ${d.condition}, High ${d.temp_max}${deg}, Low ${d.temp_min}${deg}`
       ).join("\n");
       return `**Current weather in ${wd.city}:** ${wd.current.condition}, ${wd.current.temp}${deg} (feels like ${wd.current.feels_like}${deg}). Humidity ${wd.current.humidity}%, Wind ${wd.current.wind_speed} ${wd.units === "fahrenheit" ? "mph" : "km/h"}. UV index ${wd.current.uv_index}.\n**Today:** High ${wd.daily[0].temp_max}${deg}, Low ${wd.daily[0].temp_min}${deg}.\n**Next 3 days:**\n${nextThree}`;
+    }
+
+    case "create_reminder": {
+      const text = (input.text as string ?? "").trim();
+      const fire_at = (input.fire_at as string ?? "").trim();
+      if (!text || !fire_at) return "Missing text or fire_at.";
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(fire_at)) {
+        return "fire_at must be in YYYY-MM-DDTHH:MM format (e.g. 2026-06-04T10:00).";
+      }
+      const tzDoc = await db.doc(`users/${uid}/settings/timezone`).get();
+      const tz = (tzDoc.data()?.home_timezone ?? tzDoc.data()?.current_timezone ?? "UTC") as string;
+      const ref = await db.collection(`users/${uid}/reminders`).add({
+        text,
+        fire_at,
+        tz,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      });
+      return `Reminder set ✓ (id: ${ref.id}). I'll push a notification with "${text}" at ${fire_at} (${tz}).`;
+    }
+
+    case "list_reminders": {
+      const snap = await db.collection(`users/${uid}/reminders`)
+        .where("status", "==", "pending")
+        .orderBy("fire_at", "asc")
+        .get();
+      if (snap.empty) return "No pending reminders.";
+      const lines = snap.docs.map((d) => {
+        const r = d.data();
+        return `• [${d.id}] "${r.text}" at ${r.fire_at} (${r.tz})`;
+      });
+      return `**Pending reminders:**\n${lines.join("\n")}`;
+    }
+
+    case "cancel_reminder": {
+      const id = (input.id as string ?? "").trim();
+      if (!id) return "Missing reminder id.";
+      const ref = db.doc(`users/${uid}/reminders/${id}`);
+      const snap = await ref.get();
+      if (!snap.exists) return `No reminder found with id ${id}.`;
+      const r = snap.data()!;
+      if (r.status !== "pending") return `Reminder is already ${r.status as string}.`;
+      await ref.update({ status: "cancelled" });
+      return `Reminder cancelled: "${r.text as string}" scheduled for ${r.fire_at as string}.`;
     }
 
     default:
