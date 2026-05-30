@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { QuickCaptureProvider } from "@/contexts/QuickCaptureContext";
+import QuickCaptureModal from "@/components/capture/QuickCaptureModal";
 import { Toaster } from "react-hot-toast";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import "./globals.css";
@@ -26,8 +28,10 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <AuthProvider>
-          <ServiceWorkerRegistration />
-          {children}
+          <QuickCaptureProvider>
+            <QuickCaptureModal />
+            <ServiceWorkerRegistration />
+            {children}
           {/* Global toast notification system */}
           <Toaster
             position="bottom-right"
@@ -47,6 +51,7 @@ export default function RootLayout({
               },
             }}
           />
+          </QuickCaptureProvider>
         </AuthProvider>
       </body>
     </html>

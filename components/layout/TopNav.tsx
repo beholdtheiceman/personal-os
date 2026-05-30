@@ -16,6 +16,7 @@ import {
   RiSunLine, RiShieldLine, RiLeafLine, RiBrainLine,
 } from "react-icons/ri";
 import { useChatPanel } from "@/contexts/ChatPanelContext";
+import { useQuickCapture } from "@/contexts/QuickCaptureContext";
 
 const PRIMARY_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: RiDashboardLine },
@@ -82,6 +83,7 @@ export default function TopNav() {
   const pathname = usePathname();
   const { user, signOutUser } = useAuth();
   const { isOpen: panelOpen, toggle: togglePanel } = useChatPanel();
+  const { open: openCapture } = useQuickCapture();
   const [moreOpen, setMoreOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -186,6 +188,15 @@ export default function TopNav() {
           )}
         </div>
       </nav>
+
+      {/* Quick capture */}
+      <button
+        onClick={openCapture}
+        title="Quick capture"
+        className="hidden md:flex p-2 rounded-lg hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors"
+      >
+        <span className="text-lg">📥</span>
+      </button>
 
       {/* Chat panel toggle */}
       <button
