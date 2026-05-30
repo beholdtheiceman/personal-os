@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { speak, stopSpeaking } from "@/lib/tts";
+import { speak, stopSpeaking, unlockAudio } from "@/lib/tts";
 
 const STORAGE_KEY = "tts_enabled";
 
@@ -13,12 +13,12 @@ export function useTTS() {
     const next = !enabled;
     setEnabled(next);
     try { localStorage.setItem(STORAGE_KEY, String(next)); } catch { /* ignore */ }
-    if (!next) stopSpeaking();
+    if (next) unlockAudio(); // prime AudioContext on user gesture
+    else stopSpeaking();
   }
 
   /** Call after an assistant response is ready. No-ops when TTS is disabled. */
   function speakResponse(text: string) {
-    console.log("[TTS] speakResponse called — enabled:", enabled, "text length:", text?.length);
     if (enabled && text) speak(text).catch(() => {});
   }
 
