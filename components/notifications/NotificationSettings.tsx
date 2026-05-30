@@ -16,7 +16,7 @@ import {
 import toast from "react-hot-toast";
 
 const CATEGORIES: {
-  key: keyof NotificationSettings;
+  key: Exclude<keyof NotificationSettings, "snooze_until">;
   label: string;
   description: string;
   icon: React.ReactNode;
