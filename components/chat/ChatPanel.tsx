@@ -83,7 +83,7 @@ export default function ChatPanel() {
   const [offRecord, setOffRecord] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [attachedFile, setAttachedFile] = useState<{ name: string; text: string } | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; text: string; type: "text" } | { name: string; base64: string; type: "pdf" } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
@@ -234,7 +234,7 @@ export default function ChatPanel() {
 
     if (isTextFile) {
       const reader = new FileReader();
-      reader.onload = () => setAttachedFile({ name: file.name, text: reader.result as string });
+      reader.onload = () => setAttachedFile({ name: file.name, text: reader.result as string, type: "text" });
       reader.readAsText(file);
       e.target.value = "";
       return;
@@ -243,9 +243,11 @@ export default function ChatPanel() {
     if (file.type === "application/pdf") {
       const reader = new FileReader();
       reader.onload = () => {
-        setAttachedFile({ name: file.name, text: `[PDF content — ${file.name}, ${(file.size / 1024).toFixed(0)}KB. Note: text extraction from PDFs is limited in the browser. For best results, copy and paste the PDF text directly.]` });
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.replace(/^data:application\/pdf;base64,/, "");
+        setAttachedFile({ name: file.name, base64, type: "pdf" });
       };
-      reader.readAsText(file);
+      reader.readAsDataURL(file);
       e.target.value = "";
       return;
     }
@@ -324,8 +326,9 @@ export default function ChatPanel() {
           localDate: format(new Date(), "yyyy-MM-dd"),
           imageBase64,
           imageMimeType,
-          fileText: fileToSend?.text,
+          fileText: fileToSend?.type === "text" ? fileToSend.text : undefined,
           fileName: fileToSend?.name,
+          filePdfBase64: fileToSend?.type === "pdf" ? fileToSend.base64 : undefined,
           isFirstMessage,
           offRecord,
         }),
