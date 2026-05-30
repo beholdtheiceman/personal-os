@@ -638,6 +638,38 @@ export interface BodyMetricsEntry {
   logged_at: string;
 }
 
+// ─── Debt Payoff Planner ──────────────────────────────────────────────────────
+export type DebtType = "credit_card" | "auto_loan" | "student_loan" | "personal_loan" | "mortgage" | "medical" | "other";
+
+export interface Debt {
+  id: string;
+  name: string;
+  type: DebtType;
+  balance: number;
+  interest_rate: number;      // APR as decimal e.g. 0.2399 for 23.99%
+  minimum_payment: number;
+  original_balance?: number;  // for progress tracking
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayoffDebt {
+  id: string;
+  name: string;
+  payoff_date: string;
+  total_interest: number;
+  payment_order: number;
+}
+
+export interface PayoffPlan {
+  method: "avalanche" | "snowball";
+  extra_monthly_payment: number;
+  debts: PayoffDebt[];
+  total_interest: number;
+  payoff_date: string;        // ISO date of last debt paid
+  monthly_payment: number;
+}
+
 // ─── Savings Goals ────────────────────────────────────────────────────────────
 export interface SavingsContribution {
   amount: number;

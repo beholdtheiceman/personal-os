@@ -6,8 +6,9 @@ import SubscriptionTracker from "@/components/subscriptions/SubscriptionTracker"
 import BudgetTracker from "@/components/finance/BudgetTracker";
 import NetWorthTracker from "@/components/finance/NetWorthTracker";
 import SavingsGoals from "@/components/finance/SavingsGoals";
+import DebtPayoffPlanner from "@/components/finance/DebtPayoffPlanner";
 
-type Tab = "transactions" | "budget" | "net-worth" | "savings" | "subscriptions" | "accounts";
+type Tab = "transactions" | "budget" | "net-worth" | "savings" | "subscriptions" | "accounts" | "debt";
 
 export default function FinancePage() {
   const [tab, setTab] = useState<Tab>("transactions");
@@ -28,6 +29,7 @@ export default function FinancePage() {
           { key: "savings",       label: "Savings" },
           { key: "subscriptions", label: "Subscriptions" },
           { key: "accounts",      label: "Accounts" },
+          { key: "debt",          label: "Debt Payoff" },
         ] as { key: Tab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
@@ -66,6 +68,11 @@ export default function FinancePage() {
       {tab === "accounts" && (
         <div className="card">
           <PlaidConnect />
+        </div>
+      )}
+      {tab === "debt" && (
+        <div className="card">
+          <DebtPayoffPlanner />
         </div>
       )}
     </div>
