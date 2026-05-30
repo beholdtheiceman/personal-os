@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { RiEditLine, RiCheckLine, RiCloseLine, RiAddLine } from "react-icons/ri";
 import { useBudget } from "@/hooks/useBudget";
-import { format, subMonths } from "date-fns";
+import { format, subMonths, addMonths, parseISO } from "date-fns";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -84,10 +84,10 @@ export default function BudgetTracker() {
     setAddingNew(false);
   };
 
-  const prev = format(subMonths(new Date(viewMonth + "-01"), 1), "yyyy-MM");
-  const next = format(new Date(viewMonth + "-01"), "yyyy-MM") < format(new Date(), "yyyy-MM")
-    ? format(new Date(new Date(viewMonth + "-01").setMonth(new Date(viewMonth + "-01").getMonth() + 1)), "yyyy-MM")
-    : null;
+  const monthStart = parseISO(`${viewMonth}-01`);
+  const prev = format(subMonths(monthStart, 1), "yyyy-MM");
+  const nextMonth = addMonths(monthStart, 1);
+  const next = format(nextMonth, "yyyy-MM") <= format(new Date(), "yyyy-MM") ? format(nextMonth, "yyyy-MM") : null;
 
   const totalBudgeted = Object.values(budget?.categories ?? {}).reduce((s, c) => s + c.limit, 0);
   const totalSpent = Object.values(actuals).reduce((s, v) => s + v, 0);
