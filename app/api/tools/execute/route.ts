@@ -16,7 +16,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 
-  const { name, arguments: args } = await req.json();
+  let body: { name?: unknown; arguments?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const { name, arguments: args } = body;
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "Missing tool name" }, { status: 400 });
   }
@@ -25,8 +31,7 @@ export async function POST(req: NextRequest) {
     const result = await executeTool(uid, name, (args ?? {}) as ToolInput, today);
     return NextResponse.json({ result });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     console.error(`Tool execute error [${name}]:`, err);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: "Tool execution failed" }, { status: 500 });
   }
 }
