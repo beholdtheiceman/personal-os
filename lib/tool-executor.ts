@@ -1,0 +1,3610 @@
+import { getAdminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+import { GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, TAVILY_API_KEY } from "@/lib/env";
+import { searchSecondBrainFromDB, captureToInboxDB } from "@/lib/second-brain";
+import { refreshGmailToken as _refreshGmailToken } from "@/lib/gmail-token";
+import { computeNextDue, isWithinRecurrence } from "@/lib/recurrence";
+import { fetchWeatherData } from "@/lib/weather";
+import { syncUserPlaid } from "@/lib/plaid-sync";
+import type { RecurrenceCadence } from "@/types";
+import { mergeNotificationSettings } from "@/types";
+
+export type ToolInput = Record<string, unknown>;
+
+function makeToday(localDate?: string) {
+  return localDate ?? new Date().toISOString().slice(0, 10);
+}
+
+function daysAgo(todayStr: string, days: number): string {
+  const d = new Date(todayStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Find a doc in a collection by approximate title/name match
+async function findDoc(uid: string, collection: string, searchField: string, searchValue: string) {
+  const db = getAdminDb();
+  const snap = await db.collection(`users/${uid}/${collection}`).get();
+  const lower = searchValue.toLowerCase();
+  const doc = snap.docs.find((d) => (d.data()[searchField] as string)?.toLowerCase().includes(lower));
+  return doc ?? null;
+}
+
+// Use shared Gmail token helper
+const refreshGmailToken = _refreshGmailToken;
+
+async function refreshCalendarToken(uid: string): Promise<string> {
+  const db = getAdminDb();
+  const tokenDoc = await db.doc(`users/${uid}/integrations/google_calendar`).get();
+  if (!tokenDoc.exists) throw new Error("Google Calendar not connected");
+  const tokenData = tokenDoc.data()!;
+  let accessToken: string = tokenData.access_token;
+  if (Date.now() > tokenData.expires_at - 60000) {
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CALENDAR_CLIENT_ID,
+        client_secret: GOOGLE_CALENDAR_CLIENT_SECRET,
+        refresh_token: tokenData.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error_description);
+    accessToken = data.access_token;
+    await tokenDoc.ref.update({ access_token: accessToken, expires_at: Date.now() + 3600 * 1000 });
+  }
+  return accessToken;
+}
+
+// ── Tool definitions are in lib/chat-tools.ts ─────────────────────────────────
+
+// ── Tool execution ─────────────────────────────────────────────────────────────
+
+export async function executeTool(uid: string, toolName: string, input: ToolInput, today: () => string, chatId?: string): Promise<string> {
+  const db = getAdminDb();
+
+  switch (toolName) {
+    // ── Tasks ──────────────────────────────────────────────────────────────────
+    case "add_task": {
+      await db.collection(`users/${uid}/tasks`).add({
+        title: input.title,
+        description: input.description ?? "",
+        tags: (input.tags as string[]) ?? ["personal"],
+        due_date: input.due_date ?? null,
+        priority_score: 50,
+        status: "active",
+        source: "ai",
+        recurrence: (input.recurrence as RecurrenceCadence) ?? null,
+        recurrence_end: input.recurrence_end ?? null,
+        parent_task_id: null,
+        created_at: FieldValue.serverTimestamp(),
+      });
+      const repeat = input.recurrence ? ` (repeats ${input.recurrence})` : "";
+      return `Task "${input.title}" added${repeat}.`;
+    }
+
+    case "update_task": {
+      const doc = await findDoc(uid, "tasks", "title", input.title_search as string);
+      if (!doc) return `No task found matching "${input.title_search}".`;
+      if (input.delete) {
+        await doc.ref.delete();
+        return `Task "${doc.data().title}" deleted.`;
+      }
+      const updates: Record<string, unknown> = {};
+      if (input.status !== undefined) updates.status = input.status;
+      if (input.due_date !== undefined) updates.due_date = input.due_date;
+      if (input.priority_score !== undefined) updates.priority_score = input.priority_score;
+
+      // Spawn the next occurrence when a recurring task is completed (once).
+      const data = doc.data();
+      let recurNote = "";
+      if (
+        input.status === "completed" &&
+        data.recurrence &&
+        !data.recurrence_spawned
+      ) {
+        const nextDue = computeNextDue(
+          data.recurrence as RecurrenceCadence,
+          (data.due_date as string | null) ?? null,
+          today()
+        );
+        if (isWithinRecurrence(nextDue, data.recurrence_end as string | null)) {
+          await db.collection(`users/${uid}/tasks`).add({
+            title: data.title,
+            description: data.description ?? "",
+            tags: data.tags ?? ["personal"],
+            due_date: nextDue,
+            priority_score: data.priority_score ?? 50,
+            status: "active",
+            source: data.source ?? "ai",
+            recurrence: data.recurrence,
+            recurrence_end: data.recurrence_end ?? null,
+            parent_task_id: data.parent_task_id ?? doc.id,
+            created_at: FieldValue.serverTimestamp(),
+          });
+          updates.recurrence_spawned = true;
+          recurNote = ` Next one scheduled for ${nextDue}.`;
+        }
+      }
+
+      await doc.ref.update(updates);
+      const action = input.status === "completed" ? "marked complete" : "updated";
+      return `Task "${doc.data().title}" ${action}.${recurNote}`;
+    }
+
+    // ── Calendar ───────────────────────────────────────────────────────────────
+    case "add_calendar_event": {
+      try {
+        const accessToken = await refreshCalendarToken(uid);
+        const body = {
+          summary: input.title,
+          description: input.description,
+          location: input.location,
+          start: { dateTime: input.start_datetime, timeZone: "America/New_York" },
+          end: { dateTime: input.end_datetime, timeZone: "America/New_York" },
+        };
+        const res = await fetch(
+          "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+          { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Calendar error: ${data.error?.message ?? "Unknown error"}`;
+        return `Event "${input.title}" added to Google Calendar.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Could not add calendar event: ${msg}`;
+      }
+    }
+
+    // ── Habits ─────────────────────────────────────────────────────────────────
+    case "add_habit": {
+      await db.collection(`users/${uid}/habits`).add({
+        name: input.name,
+        category: input.category ?? "General",
+        target_days: (input.target_days as number[]) ?? [0, 1, 2, 3, 4, 5, 6],
+        completions: [],
+      });
+      return `Habit "${input.name}" created.`;
+    }
+
+    case "log_habit_today": {
+      const doc = await findDoc(uid, "habits", "name", input.name_search as string);
+      if (!doc) return `No habit found matching "${input.name_search}".`;
+      const data = doc.data();
+      const completions: string[] = data.completions ?? [];
+      const t = today();
+      let updated: string[];
+      if (input.completed) {
+        updated = completions.includes(t) ? completions : [...completions, t];
+      } else {
+        updated = completions.filter((d) => d !== t);
+      }
+      await doc.ref.update({ completions: updated });
+      return `Habit "${data.name}" ${input.completed ? "marked done" : "unmarked"} for today.`;
+    }
+
+    // ── Nutrition ──────────────────────────────────────────────────────────────
+    case "log_meal": {
+      await db.collection(`users/${uid}/nutrition`).add({
+        date: (input.date as string) ?? today(),
+        meal: input.meal,
+        description: input.description,
+        calories_estimated: input.calories_estimated,
+        protein_g: input.protein_g,
+        carbs_g: input.carbs_g,
+        fat_g: input.fat_g,
+        logged_at: FieldValue.serverTimestamp(),
+      });
+      return `${String(input.meal).charAt(0).toUpperCase() + String(input.meal).slice(1)} logged: ${input.description} (~${input.calories_estimated} kcal, ${input.protein_g}g protein).`;
+    }
+
+    case "build_nutrition_plan": {
+      const meals = input.meals as Array<{
+        description: string; meal: string;
+        calories_estimated: number; protein_g: number; carbs_g: number; fat_g: number;
+      }>;
+      const date = (input.date as string) ?? today();
+      const batch = db.batch();
+      for (const meal of meals) {
+        const ref = db.collection(`users/${uid}/nutrition`).doc();
+        batch.set(ref, { ...meal, date, logged_at: FieldValue.serverTimestamp() });
+      }
+      await batch.commit();
+      const totalCal = meals.reduce((s, m) => s + m.calories_estimated, 0);
+      return `Nutrition plan built: ${meals.length} meals logged for ${date} (~${totalCal} kcal total).`;
+    }
+
+    // ── Health ─────────────────────────────────────────────────────────────────
+    case "log_health": {
+      const date = (input.date as string) ?? today();
+      const updates: Record<string, unknown> = { date, logged_at: FieldValue.serverTimestamp() };
+      if (input.sleep_hours !== undefined) updates.sleep_hours = input.sleep_hours;
+      if (input.sleep_quality !== undefined) updates.sleep_quality = input.sleep_quality;
+      if (input.energy_level !== undefined) updates.energy_level = input.energy_level;
+      if (input.exercise_done !== undefined) updates.exercise_done = input.exercise_done;
+      if (input.exercise_description !== undefined) updates.exercise_description = input.exercise_description;
+      if (input.steps !== undefined) updates.steps = input.steps;
+      if (input.notes !== undefined) updates.notes = input.notes;
+      await db.doc(`users/${uid}/health/${date}`).set(updates, { merge: true });
+      return `Health log updated for ${date}.`;
+    }
+
+    // ── Journal ────────────────────────────────────────────────────────────────
+    case "add_journal_entry": {
+      await db.collection(`users/${uid}/journal`).add({
+        date: today(),
+        raw_transcript: input.raw_transcript,
+        ai_summary: input.ai_summary,
+        mood_score: input.mood_score,
+        tags: input.tags ?? [],
+        created_at: FieldValue.serverTimestamp(),
+      });
+      return `Journal entry saved (mood ${input.mood_score}/10).`;
+    }
+
+    // ── Goals ──────────────────────────────────────────────────────────────────
+    case "add_goal": {
+      await db.collection(`users/${uid}/goals`).add({
+        title: input.title,
+        description: input.description ?? "",
+        category: input.category ?? "personal",
+        target_date: input.target_date ?? "",
+        milestones: (input.milestones as { title: string; completed: boolean }[]) ?? [],
+        status: "active",
+        created_at: FieldValue.serverTimestamp(),
+      });
+      return `Goal "${input.title}" added.`;
+    }
+
+    case "update_goal": {
+      const doc = await findDoc(uid, "goals", "title", input.title_search as string);
+      if (!doc) return `No goal found matching "${input.title_search}".`;
+      const data = doc.data();
+      const updates: Record<string, unknown> = {};
+      if (input.status) updates.status = input.status;
+      if (input.milestone_title !== undefined) {
+        const milestones = (data.milestones as { title: string; completed: boolean }[]) ?? [];
+        const lower = (input.milestone_title as string).toLowerCase();
+        updates.milestones = milestones.map((m) =>
+          m.title.toLowerCase().includes(lower)
+            ? { ...m, completed: input.milestone_completed ?? !m.completed }
+            : m
+        );
+      }
+      await doc.ref.update(updates);
+      return `Goal "${data.title}" updated.`;
+    }
+
+    // ── Finance ────────────────────────────────────────────────────────────────
+    case "add_transaction": {
+      await db.collection(`users/${uid}/transactions`).add({
+        type: input.type,
+        amount: input.amount,
+        category: input.category,
+        description: input.description ?? "",
+        date: (input.date as string) ?? today(),
+        source: "manual",
+        logged_at: FieldValue.serverTimestamp(),
+      });
+      const sign = input.type === "income" ? "+" : "−";
+      return `${String(input.type) === "income" ? "Income" : "Expense"} ${sign}$${input.amount} (${input.category}) logged.`;
+    }
+
+    case "update_transaction": {
+      const snap = await db.collection(`users/${uid}/transactions`).orderBy("logged_at", "desc").limit(100).get();
+      const lower = (input.description_search as string).toLowerCase();
+      const doc = snap.docs.find((d) => {
+        const data = d.data();
+        return (data.description as string)?.toLowerCase().includes(lower) ||
+               (data.category as string)?.toLowerCase().includes(lower);
+      });
+      if (!doc) return `No transaction found matching "${input.description_search}".`;
+      if (input.delete) {
+        await doc.ref.delete();
+        return `Transaction deleted.`;
+      }
+      const updates: Record<string, unknown> = {};
+      if (input.amount !== undefined) updates.amount = input.amount;
+      if (input.category !== undefined) updates.category = input.category;
+      if (input.description !== undefined) updates.description = input.description;
+      if (input.type !== undefined) updates.type = input.type;
+      await doc.ref.update(updates);
+      return `Transaction updated.`;
+    }
+
+    // ── Projects ───────────────────────────────────────────────────────────────
+    case "add_project": {
+      await db.collection(`users/${uid}/projects`).add({
+        name: input.name,
+        description: input.description ?? "",
+        color_tag: (input.color_tag as string) ?? "#6C8EF5",
+        status: "active",
+        created_at: FieldValue.serverTimestamp(),
+      });
+      return `Project "${input.name}" created.`;
+    }
+
+    case "add_project_card": {
+      const project = await findDoc(uid, "projects", "name", input.project_name_search as string);
+      if (!project) return `No project found matching "${input.project_name_search}".`;
+      await db.collection(`users/${uid}/projects/${project.id}/cards`).add({
+        title: input.title,
+        description: input.description ?? "",
+        status: input.status ?? "todo",
+        priority: input.priority ?? "medium",
+        created_at: FieldValue.serverTimestamp(),
+      });
+      return `Card "${input.title}" added to project "${project.data().name}".`;
+    }
+
+    // ── Gmail ──────────────────────────────────────────────────────────────────
+    case "search_gmail": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const q = encodeURIComponent(input.query as string);
+        const max = (input.max_results as number) ?? 10;
+        const listRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=${max}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const listData = await listRes.json();
+        if (listData.error) return `Gmail search error: ${listData.error.message}`;
+        const ids: string[] = (listData.messages ?? []).map((m: { id: string }) => m.id);
+        if (ids.length === 0) return `No emails found matching "${input.query}".`;
+
+        const results = await Promise.all(
+          ids.slice(0, max).map((id) =>
+            fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            ).then((r) => r.json())
+          )
+        );
+
+        const summary = results
+          .filter((m) => !m.error)
+          .map((msg) => {
+            const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
+            const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+            return `ID: ${msg.id}\nFrom: ${get("From")}\nSubject: ${get("Subject")}\nDate: ${get("Date")}\nSnippet: ${msg.snippet ?? ""}`;
+          })
+          .join("\n\n---\n\n");
+
+        return `Found ${results.length} email(s) matching "${input.query}":\n\n${summary}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail not connected or error: ${msg}`;
+      }
+    }
+
+    case "get_email_content": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${input.email_id}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const msg = await res.json();
+        if (msg.error) return `Error fetching email: ${msg.error.message}`;
+
+        const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
+        const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+        function decodeBody(part: Record<string, unknown>): string {
+          if (part.body && (part.body as Record<string, unknown>).data) {
+            return Buffer.from((part.body as Record<string, string>).data, "base64").toString("utf8");
+          }
+          if (part.parts) {
+            for (const p of part.parts as Record<string, unknown>[]) {
+              const text = decodeBody(p);
+              if (text) return text;
+            }
+          }
+          return "";
+        }
+
+        let body = decodeBody(msg.payload);
+        if (body.includes("<html") || body.includes("<body")) {
+          body = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        }
+
+        return `From: ${get("From")}\nTo: ${get("To")}\nSubject: ${get("Subject")}\nDate: ${get("Date")}\n\n${body.slice(0, 4000)}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Could not fetch email: ${msg}`;
+      }
+    }
+
+    case "unsubscribe_from_email": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${input.email_id}?format=metadata&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Unsubscribe-Post&metadataHeaders=Subject&metadataHeaders=From`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const msg = await res.json();
+        if (msg.error) return `Error fetching email: ${msg.error.message}`;
+
+        const headers: { name: string; value: string }[] = msg.payload?.headers ?? [];
+        const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+        const subject = get("Subject");
+        const from = get("From");
+        const listUnsub = get("List-Unsubscribe");
+        const listUnsubPost = get("List-Unsubscribe-Post");
+
+        if (!listUnsub) {
+          return `No List-Unsubscribe header found on this email from ${from}. This sender doesn't support automatic unsubscription — you'll need to open the email and click the unsubscribe link manually.`;
+        }
+
+        // Parse URLs and mailto from the header (format: <https://...>, <mailto:...>)
+        const httpMatch = listUnsub.match(/<(https?:\/\/[^>]+)>/);
+        const mailtoMatch = listUnsub.match(/<mailto:([^>]+)>/);
+
+        // Prefer one-click HTTP unsubscribe (RFC 8058) if List-Unsubscribe-Post is present
+        if (httpMatch?.[1] && listUnsubPost?.toLowerCase().includes("list-unsubscribe=one-click")) {
+          const unsubUrl = httpMatch[1];
+          const postRes = await fetch(unsubUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "List-Unsubscribe=One-Click",
+            signal: AbortSignal.timeout(10000),
+          });
+          if (postRes.ok) {
+            return `✓ Successfully unsubscribed from "${subject}" (${from}) via one-click unsubscribe.`;
+          }
+          return `One-click unsubscribe returned status ${postRes.status}. You may need to visit the link manually: ${unsubUrl}`;
+        }
+
+        // Fall back to GET request on the unsubscribe URL
+        if (httpMatch?.[1]) {
+          const unsubUrl = httpMatch[1];
+          const getRes = await fetch(unsubUrl, {
+            method: "GET",
+            headers: { "User-Agent": "Mozilla/5.0" },
+            redirect: "follow",
+            signal: AbortSignal.timeout(10000),
+          });
+          if (getRes.ok) {
+            return `✓ Unsubscribe request sent for "${subject}" (${from}). The page responded with status ${getRes.status} — you should be unsubscribed. If you keep receiving emails, visit: ${unsubUrl}`;
+          }
+          return `Unsubscribe URL returned status ${getRes.status}. Try visiting it directly: ${unsubUrl}`;
+        }
+
+        // Mailto fallback — send an unsubscribe email via Gmail
+        if (mailtoMatch?.[1]) {
+          const mailtoRaw = mailtoMatch[1];
+          const [toAddr, ...rest] = mailtoRaw.split("?");
+          const params = new URLSearchParams(rest.join("?"));
+          const subj = params.get("subject") ?? "Unsubscribe";
+          const body = params.get("body") ?? "";
+
+          const raw = [
+            `To: ${toAddr}`,
+            `Subject: ${subj}`,
+            `Content-Type: text/plain`,
+            ``,
+            body || "Please unsubscribe me from this mailing list.",
+          ].join("\r\n");
+
+          const encoded = Buffer.from(raw).toString("base64url");
+          const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ raw: encoded }),
+          });
+          const sendData = await sendRes.json();
+          if (sendRes.ok) {
+            return `✓ Sent unsubscribe email to ${toAddr} for "${subject}" (${from}).`;
+          }
+          return `Failed to send unsubscribe email: ${sendData.error?.message ?? "unknown error"}`;
+        }
+
+        return `Could not parse a usable unsubscribe method from the header: ${listUnsub}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Unsubscribe failed: ${msg}`;
+      }
+    }
+
+    // ── Subscriptions ─────────────────────────────────────────────────────────
+    case "add_subscription": {
+      const today = makeToday(undefined);
+      await db.collection(`users/${uid}/subscriptions`).add({
+        name:              input.name,
+        category:          input.category ?? "Other",
+        amount:            input.amount,
+        billing_cycle:     input.billing_cycle,
+        next_billing_date: input.next_billing_date ?? today,
+        start_date:        today,
+        status:            "active",
+        url:               input.url ?? null,
+        notes:             input.notes ?? null,
+        created_at:        new Date().toISOString(),
+      });
+      return `Subscription "${input.name}" added — ${input.billing_cycle} at $${input.amount}.`;
+    }
+
+    case "update_subscription": {
+      const snap = await db.collection(`users/${uid}/subscriptions`).get();
+      const lower = (input.name_search as string).toLowerCase();
+      const sdoc = snap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower));
+      if (!sdoc) return `No subscription found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = {};
+      if (input.status            !== undefined) updates.status            = input.status;
+      if (input.amount            !== undefined) updates.amount            = input.amount;
+      if (input.billing_cycle     !== undefined) updates.billing_cycle     = input.billing_cycle;
+      if (input.next_billing_date !== undefined) updates.next_billing_date = input.next_billing_date;
+      await sdoc.ref.update(updates);
+      const action = input.status === "cancelled" ? "cancelled" : "updated";
+      return `Subscription "${sdoc.data().name}" ${action}.`;
+    }
+
+    // ── Meal Planner ──────────────────────────────────────────────────────────
+    case "get_recipes": {
+      const snap = await db.collection(`users/${uid}/recipes`).orderBy("name").get();
+      let recipes = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Record<string, unknown>[];
+      if (input.search) {
+        const q = (input.search as string).toLowerCase();
+        recipes = recipes.filter((r) => {
+          const name = ((r.name as string) ?? "").toLowerCase();
+          const tags = ((r.tags as string[]) ?? []).join(" ").toLowerCase();
+          return name.includes(q) || tags.includes(q);
+        });
+      }
+      const limit = (input.limit as number) ?? 50;
+      recipes = recipes.slice(0, limit);
+      if (recipes.length === 0) return "No recipes found. Add some recipes via the Meal Planner page or ask me to add one.";
+      return recipes.map((r) => {
+        const macros = [
+          r.calories ? `${r.calories} cal` : null,
+          r.protein  ? `${r.protein}g protein` : null,
+        ].filter(Boolean).join(", ");
+        const tags = ((r.tags as string[]) ?? []).join(", ");
+        return `**${r.name}** (id: ${r.id})${tags ? ` [${tags}]` : ""}${macros ? ` — ${macros}` : ""}`;
+      }).join("\n");
+    }
+
+    case "add_recipe": {
+      const ref = await db.collection(`users/${uid}/recipes`).add({
+        name:         input.name,
+        servings:     input.servings ?? 1,
+        prep_time:    input.prep_time ?? 0,
+        cook_time:    input.cook_time ?? 0,
+        ingredients:  input.ingredients ?? [],
+        instructions: input.instructions ?? "",
+        calories:     input.calories ?? null,
+        protein:      input.protein ?? null,
+        carbs:        input.carbs ?? null,
+        fat:          input.fat ?? null,
+        tags:         (input.tags as string[]) ?? [],
+        created_at:   new Date().toISOString(),
+      });
+      return `Recipe "${input.name}" saved (id: ${ref.id}).`;
+    }
+
+    case "plan_meal": {
+      const search = (input.recipe_name_search as string).toLowerCase();
+      const rSnap = await db.collection(`users/${uid}/recipes`).get();
+      const match = rSnap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(search));
+      if (!match) return `No recipe found matching "${input.recipe_name_search}".`;
+
+      const date = input.date as string; // YYYY-MM-DD
+      // Derive week start (Monday)
+      const d = new Date(date + "T12:00:00Z");
+      const day = d.getUTCDay(); // 0=Sun
+      const diff = (day === 0 ? -6 : 1 - day);
+      const weekStartDate = new Date(d);
+      weekStartDate.setUTCDate(d.getUTCDate() + diff);
+      const weekStart = weekStartDate.toISOString().slice(0, 10);
+
+      const planRef = db.doc(`users/${uid}/meal_plans/${weekStart}`);
+      const planSnap = await planRef.get();
+      const existing = planSnap.exists ? (planSnap.data() as Record<string, unknown>) : {};
+      const days = (existing.days as Record<string, Record<string, unknown>>) ?? {};
+      if (!days[date]) days[date] = {};
+      days[date][input.slot as string] = { recipe_id: match.id, recipe_name: match.data().name };
+
+      await planRef.set({ week_start: weekStart, days }, { merge: true });
+      return `Planned "${match.data().name}" for ${date} (${input.slot}).`;
+    }
+
+    case "get_meal_plan": {
+      // Derive current week start if not provided
+      let weekStart = input.week_start as string | undefined;
+      if (!weekStart) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const diff = (day === 0 ? -6 : 1 - day);
+        const ws = new Date(now);
+        ws.setUTCDate(now.getUTCDate() + diff);
+        weekStart = ws.toISOString().slice(0, 10);
+      }
+      const planSnap = await db.doc(`users/${uid}/meal_plans/${weekStart}`).get();
+      if (!planSnap.exists) return `No meal plan found for the week of ${weekStart}.`;
+      const days = (planSnap.data()?.days ?? {}) as Record<string, Record<string, { recipe_name?: string }>>;
+      const lines: string[] = [`**Meal plan for week of ${weekStart}:**`];
+      for (const [date, slots] of Object.entries(days).sort()) {
+        const slotStrs = (["breakfast","lunch","dinner","snack"] as const)
+          .filter((s) => slots[s])
+          .map((s) => `${s}: ${slots[s].recipe_name ?? "?"}`)
+          .join(", ");
+        if (slotStrs) lines.push(`• ${date} — ${slotStrs}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "generate_shopping_list": {
+      let weekStart = input.week_start as string | undefined;
+      if (!weekStart) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const diff = (day === 0 ? -6 : 1 - day);
+        const ws = new Date(now);
+        ws.setUTCDate(now.getUTCDate() + diff);
+        weekStart = ws.toISOString().slice(0, 10);
+      }
+      const planSnap = await db.doc(`users/${uid}/meal_plans/${weekStart}`).get();
+      if (!planSnap.exists) return `No meal plan for week of ${weekStart}. Plan some meals first.`;
+
+      const days = (planSnap.data()?.days ?? {}) as Record<string, Record<string, { recipe_id?: string }>>;
+      const recipeIds = new Set<string>();
+      for (const slots of Object.values(days)) {
+        for (const entry of Object.values(slots)) {
+          if (entry?.recipe_id) recipeIds.add(entry.recipe_id);
+        }
+      }
+      if (recipeIds.size === 0) return "No recipes are planned yet. Add meals to the planner first.";
+
+      const aggregate = new Map<string, string[]>();
+      for (const id of recipeIds) {
+        const rSnap = await db.doc(`users/${uid}/recipes/${id}`).get();
+        if (!rSnap.exists) continue;
+        for (const ing of (rSnap.data()?.ingredients ?? []) as { name: string; amount: string }[]) {
+          const key = ing.name.toLowerCase().trim();
+          if (!aggregate.has(key)) aggregate.set(key, []);
+          aggregate.get(key)!.push(ing.amount);
+        }
+      }
+
+      const items = Array.from(aggregate.entries()).map(([name, amounts]) => ({
+        ingredient: name,
+        amount: amounts.length > 1 ? amounts.join(" + ") : amounts[0] ?? "",
+        checked: false,
+      }));
+
+      await db.doc(`users/${uid}/shopping_lists/${weekStart}`).set({
+        week_start: weekStart,
+        items,
+        generated_at: new Date().toISOString(),
+      });
+      return `Shopping list generated for week of ${weekStart} — ${items.length} items: ${items.slice(0, 8).map((i) => i.ingredient).join(", ")}${items.length > 8 ? `, +${items.length - 8} more` : ""}.`;
+    }
+
+    // ── People / CRM ──────────────────────────────────────────────────────────
+    case "list_people": {
+      const snap = await db.collection(`users/${uid}/people`).orderBy("name").get();
+      let people = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Record<string, unknown>[];
+
+      if (input.search) {
+        const q = (input.search as string).toLowerCase();
+        people = people.filter((p) =>
+          (p.name as string)?.toLowerCase().includes(q) ||
+          (p.company as string)?.toLowerCase().includes(q) ||
+          ((p.tags as string[]) ?? []).some((t) => t.toLowerCase().includes(q))
+        );
+      }
+      if (input.relationship) people = people.filter((p) => p.relationship === input.relationship);
+      if (input.has_follow_up) people = people.filter((p) => p.follow_up_date);
+
+      if (input.overdue_only) {
+        const thresholds: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+        people = people.filter((p) => {
+          if (!p.contact_frequency || !p.last_contacted) return false;
+          const days = Math.floor((Date.now() - new Date((p.last_contacted as string) + "T12:00:00Z").getTime()) / 86400000);
+          return days > thresholds[p.contact_frequency as string];
+        });
+      }
+
+      if (people.length === 0) return "No contacts found matching those criteria.";
+
+      return people.map((p) => {
+        const days = p.last_contacted
+          ? Math.floor((Date.now() - new Date((p.last_contacted as string) + "T12:00:00Z").getTime()) / 86400000)
+          : null;
+        const lines = [`**${p.name}** (${p.relationship}${p.company ? `, ${p.company}` : ""})`];
+        if (days !== null) lines.push(`  Last contact: ${days}d ago`);
+        if (p.follow_up_date) lines.push(`  Follow-up: ${p.follow_up_date}${p.follow_up_note ? ` — ${p.follow_up_note}` : ""}`);
+        if (p.notes) lines.push(`  Notes: ${(p.notes as string).slice(0, 100)}`);
+        return lines.join("\n");
+      }).join("\n\n");
+    }
+
+    case "add_person": {
+      const now = new Date().toISOString();
+      const data: Record<string, unknown> = {
+        name: input.name, relationship: input.relationship ?? "other",
+        created_at: now, updated_at: now,
+      };
+      const optional = ["email","phone","birthday","location","company","notes","contact_frequency","follow_up_date","follow_up_note","gift_ideas","tags"];
+      for (const k of optional) if (input[k] !== undefined) data[k] = input[k];
+      await db.collection(`users/${uid}/people`).add(data);
+      return `${input.name} added to your contacts.`;
+    }
+
+    case "update_person": {
+      const pSnap = await db.collection(`users/${uid}/people`).get();
+      const lower = (input.name_search as string).toLowerCase();
+      const pdoc = pSnap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower));
+      if (!pdoc) return `No contact found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (input.notes             !== undefined) updates.notes             = input.notes;
+      if (input.follow_up_date    !== undefined) updates.follow_up_date    = input.follow_up_date;
+      if (input.follow_up_note    !== undefined) updates.follow_up_note    = input.follow_up_note;
+      if (input.contact_frequency !== undefined) updates.contact_frequency = input.contact_frequency;
+      if (input.add_gift_idea) {
+        const existing = (pdoc.data().gift_ideas as string[]) ?? [];
+        updates.gift_ideas = [...existing, input.add_gift_idea as string];
+      }
+      if (input.add_tag) {
+        const existing = (pdoc.data().tags as string[]) ?? [];
+        updates.tags = [...existing, (input.add_tag as string).toLowerCase()];
+      }
+      await pdoc.ref.update(updates);
+      return `Updated ${pdoc.data().name}.`;
+    }
+
+    case "log_interaction": {
+      const pSnap2 = await db.collection(`users/${uid}/people`).get();
+      const lower2 = (input.name_search as string).toLowerCase();
+      const pdoc2 = pSnap2.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower2));
+      if (!pdoc2) return `No contact found matching "${input.name_search}".`;
+      const iDate = (input.date as string) ?? today();
+      const now2 = new Date().toISOString();
+      const iData: Record<string, unknown> = {
+        person_id: pdoc2.id, type: input.type, date: iDate, created_at: now2,
+      };
+      if (input.notes) iData.notes = input.notes;
+      await db.collection(`users/${uid}/people/${pdoc2.id}/interactions`).add(iData);
+      await pdoc2.ref.update({ last_contacted: iDate, updated_at: now2 });
+      return `Logged ${input.type} with ${pdoc2.data().name} on ${iDate}.`;
+    }
+
+    // ── Google Drive ──────────────────────────────────────────────────────────
+    case "search_drive": {
+      const { refreshDriveToken } = await import("@/lib/drive-token");
+      let accessToken: string;
+      try {
+        accessToken = await refreshDriveToken(uid);
+      } catch {
+        return "Google Drive is not connected. Go to the Drive page to connect it.";
+      }
+
+      const q = input.query as string;
+      const limit = (input.limit as number) ?? 10;
+      const driveQuery = `trashed = false and (name contains '${q.replace(/'/g, "\\'")}' or fullText contains '${q.replace(/'/g, "\\'")}')`;
+      const params = new URLSearchParams({
+        q: driveQuery,
+        fields: "files(id,name,mimeType,modifiedTime)",
+        orderBy: "relevance",
+        pageSize: String(Math.min(limit, 20)),
+      });
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json();
+      if (data.error) return `Drive search failed: ${data.error.message}`;
+
+      const files = (data.files ?? []) as { id: string; name: string; mimeType: string; modifiedTime: string }[];
+      if (files.length === 0) return `No Drive files found matching "${q}".`;
+
+      const MIME_LABELS: Record<string, string> = {
+        "application/vnd.google-apps.document":     "Google Doc",
+        "application/vnd.google-apps.spreadsheet":  "Google Sheet",
+        "application/vnd.google-apps.presentation": "Google Slides",
+      };
+
+      return files.map((f) =>
+        `**${f.name}** (${MIME_LABELS[f.mimeType] ?? f.mimeType.split("/").pop()}) — id: \`${f.id}\``
+      ).join("\n");
+    }
+
+    case "read_drive_file": {
+      const { refreshDriveToken } = await import("@/lib/drive-token");
+      let accessToken: string;
+      try {
+        accessToken = await refreshDriveToken(uid);
+      } catch {
+        return "Google Drive is not connected. Go to the Drive page to connect it.";
+      }
+
+      const fileId = input.file_id as string;
+      const GOOGLE_DOC_TYPES: Record<string, string> = {
+        "application/vnd.google-apps.document":     "text/plain",
+        "application/vnd.google-apps.spreadsheet":  "text/csv",
+        "application/vnd.google-apps.presentation": "text/plain",
+      };
+
+      const metaRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const meta = await metaRes.json();
+      if (meta.error) return `Could not access file: ${meta.error.message}`;
+
+      const exportMime = GOOGLE_DOC_TYPES[meta.mimeType];
+      let content = "";
+
+      if (exportMime) {
+        const exportRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMime)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        content = await exportRes.text();
+      } else if (meta.mimeType?.startsWith("text/") || meta.mimeType === "application/json") {
+        const dlRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        content = await dlRes.text();
+      } else {
+        return `Cannot read file type: ${meta.mimeType}. Only Google Docs, Sheets, Slides, and plain text files are supported.`;
+      }
+
+      const trimmed = content.length > 30000
+        ? content.slice(0, 30000) + "\n\n[...truncated at 30,000 characters]"
+        : content;
+
+      return `**${input.file_name ?? meta.name}**\n\n${trimmed}`;
+    }
+
+    // ── Second Brain ───────────────────────────────────────────────────────────
+    case "rename_chat": {
+      if (!chatId) return "No active chat to rename.";
+      const db2 = getAdminDb();
+      await db2.doc(`users/${uid}/chats/${chatId}`).update({ name: input.name });
+      return `Chat renamed to "${input.name}"`;
+    }
+
+    case "search_second_brain": {
+      const results = await searchSecondBrainFromDB(uid, input.query as string);
+      if (results.length === 0) return `No notes found matching "${input.query}" in your second brain.`;
+      return results.map((r) => `**${r.file}**\n${r.excerpt}`).join("\n\n---\n\n");
+    }
+
+    case "capture_to_second_brain": {
+      const dest = (input.destination as string) === "tasks" ? "tasks" : "inbox";
+      const file = await captureToInboxDB(uid, input.text as string, dest);
+      return `Captured to ${file}: "${input.text}"`;
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────────────
+    case "configure_notification": {
+      const adminDb = getAdminDb();
+      const settingsRef = adminDb.doc(`users/${uid}/settings/notifications`);
+      const snap = await settingsRef.get();
+      const current = snap.data() ?? {};
+      const category = input.category as string;
+      const patch = {
+        ...((current[category] as object) ?? {}),
+        enabled: input.enabled,
+        ...(input.time ? { time: input.time } : {}),
+      };
+      await settingsRef.set({ ...current, [category]: patch }, { merge: true });
+      const label = category.replace(/_/g, " ");
+      return input.enabled
+        ? `${label} notifications enabled${input.time ? ` at ${input.time}` : ""}.`
+        : `${label} notifications disabled.`;
+    }
+
+    case "set_habit_reminder": {
+      const doc = await findDoc(uid, "habits", "name", input.habit_name_search as string);
+      if (!doc) return `No habit found matching "${input.habit_name_search}".`;
+      const habitName = doc.data().name as string;
+      const times = (input.reminder_times as string[]) ?? [];
+      if (times.length === 0) {
+        await doc.ref.update({ reminder_enabled: false, reminder_times: [] });
+        return `All reminders cleared for habit "${habitName}".`;
+      }
+      const sorted = [...times].sort();
+      await doc.ref.update({
+        reminder_enabled: true,
+        reminder_times: sorted,
+        reminder_timezone: "America/New_York",
+      });
+      return `${sorted.length} reminder${sorted.length > 1 ? "s" : ""} set for "${habitName}": ${sorted.join(", ")}.`;
+    }
+
+    // ── Memory ─────────────────────────────────────────────────────────────────
+    case "update_memory": {
+      const snap = await db.collection(`users/${uid}/memory`).get();
+      const lower = (input.key as string).toLowerCase();
+      const existing = snap.docs.find((d) => (d.data().key as string)?.toLowerCase() === lower);
+      if (existing) {
+        await existing.ref.update({ value: input.value, lastUpdated: new Date().toISOString() });
+        return `Memory updated: "${input.key}" → "${input.value}".`;
+      } else {
+        await db.collection(`users/${uid}/memory`).add({
+          key: input.key,
+          value: input.value,
+          category: input.category ?? "Personal Preferences",
+          lastUpdated: new Date().toISOString(),
+        });
+        return `Memory saved: "${input.key}" = "${input.value}".`;
+      }
+    }
+
+    // ── Web Search ────────────────────────────────────────────────────────────
+    case "web_search": {
+      if (!TAVILY_API_KEY) return "Web search is not configured (missing TAVILY_API_KEY).";
+      const maxResults = Math.min(Math.max(1, (input.max_results as number) ?? 3), 5);
+      const res = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: TAVILY_API_KEY,
+          query: input.query,
+          max_results: maxResults,
+          search_depth: "basic",
+          include_answer: true,
+        }),
+      });
+      if (!res.ok) return `Search failed: ${res.statusText}`;
+      const data = await res.json();
+      const parts: string[] = [];
+      if (data.answer) parts.push(`**Summary:** ${data.answer}\n`);
+      if (data.results?.length) {
+        for (const r of data.results as Array<{ title: string; url: string; content: string }>) {
+          const snippet = r.content?.slice(0, 400).replace(/\s+/g, " ").trim();
+          parts.push(`**${r.title}**\n${r.url}\n${snippet}`);
+        }
+      }
+      return parts.length ? parts.join("\n\n---\n\n") : "No results found.";
+    }
+
+    // ── Read tools ────────────────────────────────────────────────────────────
+    case "list_calendar_events": {
+      try {
+        const accessToken = await refreshCalendarToken(uid);
+        const daysBack = (input.days_back as number) ?? 0;
+        const daysAhead = (input.days_ahead as number) ?? 7;
+        const maxResults = (input.max_results as number) ?? 50;
+        const now = Date.now();
+        const timeMin = new Date(now - daysBack * 86400000).toISOString();
+        const timeMax = new Date(now + daysAhead * 86400000).toISOString();
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=${maxResults}&singleEvents=true&orderBy=startTime`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const data = await res.json();
+        if (!res.ok) return `Calendar error: ${data.error?.message ?? "Unknown error"}`;
+        const events = (data.items ?? []) as Array<{
+          summary?: string;
+          start: { dateTime?: string; date?: string };
+          end: { dateTime?: string; date?: string };
+          location?: string;
+        }>;
+        if (events.length === 0) return `No events from ${timeMin.slice(0, 10)} to ${timeMax.slice(0, 10)}.`;
+        return events
+          .map((e) => {
+            const start = e.start.dateTime ?? e.start.date ?? "?";
+            const end = e.end.dateTime ?? e.end.date ?? "?";
+            const loc = e.location ? ` @ ${e.location}` : "";
+            return `${start} → ${end}: ${e.summary ?? "(no title)"}${loc}`;
+          })
+          .join("\n");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Could not fetch calendar events: ${msg}`;
+      }
+    }
+
+    case "list_tasks": {
+      const status = (input.status as string) ?? "active";
+      const snap = await db.collection(`users/${uid}/tasks`).where("status", "==", status).get();
+      let tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>));
+      if (input.tag) tasks = tasks.filter((t) => (t.tags as string[] | undefined)?.includes(input.tag as string));
+      if (input.due_before) tasks = tasks.filter((t) => (t.due_date as string) && (t.due_date as string) <= (input.due_before as string));
+      if (input.due_after) tasks = tasks.filter((t) => (t.due_date as string) && (t.due_date as string) >= (input.due_after as string));
+      tasks.sort((a, b) => ((b.priority_score as number) ?? 50) - ((a.priority_score as number) ?? 50));
+      const limit = (input.limit as number) ?? 50;
+      tasks = tasks.slice(0, limit);
+      if (tasks.length === 0) return `No ${status} tasks match.`;
+      return tasks
+        .map((t) => {
+          const tags = (t.tags as string[] | undefined)?.join(", ");
+          return `[p${t.priority_score ?? 50}] ${t.title}${t.due_date ? ` (due ${t.due_date})` : ""}${tags ? ` — ${tags}` : ""}`;
+        })
+        .join("\n");
+    }
+
+    case "list_habits": {
+      const snap = await db.collection(`users/${uid}/habits`).get();
+      if (snap.empty) return "No habits yet.";
+      const days = (input.include_completions_days as number) ?? 7;
+      const startStr = daysAgo(today(), days - 1);
+      return snap.docs
+        .map((d) => {
+          const h = d.data();
+          const completions = ((h.completions as string[]) ?? []).filter((c) => c >= startStr);
+          return `${h.name} (${h.category ?? "General"}): ${completions.length}/${days} days completed`;
+        })
+        .join("\n");
+    }
+
+    case "list_meals": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const snap = await db
+        .collection(`users/${uid}/nutrition`)
+        .where("date", ">=", start)
+        .where("date", "<=", end)
+        .get();
+      const meals = snap.docs.map((d) => d.data() as Record<string, unknown>);
+      if (meals.length === 0) return `No meals logged from ${start} to ${end}.`;
+      const byDay: Record<string, Record<string, unknown>[]> = {};
+      for (const m of meals) {
+        const date = m.date as string;
+        (byDay[date] ??= []).push(m);
+      }
+      const lines: string[] = [];
+      for (const date of Object.keys(byDay).sort().reverse()) {
+        const dayMeals = byDay[date];
+        const cal = dayMeals.reduce((s, m) => s + ((m.calories_estimated as number) ?? 0), 0);
+        const prot = dayMeals.reduce((s, m) => s + ((m.protein_g as number) ?? 0), 0);
+        lines.push(`**${date}** — ${cal} kcal, ${prot}g protein`);
+        for (const m of dayMeals) lines.push(`  ${m.meal}: ${m.description} (${m.calories_estimated} kcal)`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_health_log": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const snap = await db.collection(`users/${uid}/health`).get();
+      const logs = snap.docs
+        .map((d) => d.data())
+        .filter((h) => {
+          const dt = h.date as string;
+          return dt && dt >= start && dt <= end;
+        })
+        .sort((a, b) => (b.date as string).localeCompare(a.date as string));
+      if (logs.length === 0) return `No health data logged from ${start} to ${end}.`;
+      return logs
+        .map((h) => {
+          const bits: string[] = [`**${h.date}**`];
+          if (h.sleep_hours !== undefined) bits.push(`sleep ${h.sleep_hours}h${h.sleep_quality ? ` (q${h.sleep_quality}/10)` : ""}`);
+          if (h.energy_level !== undefined) bits.push(`energy ${h.energy_level}/10`);
+          if (h.exercise_done) bits.push(`exercise: ${h.exercise_description ?? "yes"}`);
+          if (h.steps !== undefined) bits.push(`${h.steps} steps`);
+          if (h.notes) bits.push(`notes: ${h.notes}`);
+          return bits.join(" — ");
+        })
+        .join("\n");
+    }
+
+    case "log_water": {
+      const todayStr = today();
+      const ref = db.doc(`users/${uid}/hydration/${todayStr}`);
+      const snap = await ref.get();
+      const now = new Date().toISOString();
+      const DEFAULT_GOAL = 8;
+      if (!snap.exists) {
+        await ref.set({ date: todayStr, glasses: 1, goal: DEFAULT_GOAL, logs: [now], updated_at: now });
+        return `Logged 1 glass of water today. You're at 1/${DEFAULT_GOAL} glasses.`;
+      }
+      const data = snap.data()!;
+      const current: number = data.glasses ?? 0;
+      const goal: number = data.goal ?? DEFAULT_GOAL;
+      const newCount = current + 1;
+      await ref.update({ glasses: newCount, logs: FieldValue.arrayUnion(now), updated_at: now });
+      if (newCount === goal) {
+        // Award 10 XP for hitting the daily hydration goal
+        const xpRef = db.doc(`users/${uid}/xp/summary`);
+        const eventRef = db.collection(`users/${uid}/xp_events`).doc();
+        const xpSnap = await xpRef.get();
+        const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+        await Promise.all([
+          xpSnap.exists
+            ? xpRef.update({ total: FieldValue.increment(10) })
+            : xpRef.set({ total: 10 }),
+          eventRef.set({ id: eventRef.id, type: "hydration_goal", xp: 10, description: `Hydration goal hit: ${goal} glasses`, timestamp: now, totalAfter: currentXP + 10 }),
+        ]);
+        return `Logged glass #${newCount} — you hit your hydration goal of ${goal} glasses today! +10 XP awarded.`;
+      }
+      return `Logged glass #${newCount}. You're at ${newCount}/${goal} glasses today.`;
+    }
+
+    case "get_hydration": {
+      const todayStr = today();
+      const snap = await db.doc(`users/${uid}/hydration/${todayStr}`).get();
+      if (!snap.exists) return `No water logged yet today. Daily goal: 8 glasses.`;
+      const data = snap.data()!;
+      const glasses: number = data.glasses ?? 0;
+      const goal: number = data.goal ?? 8;
+      const logs: string[] = data.logs ?? [];
+      const timestamps = logs.map((ts: string) => {
+        const d = new Date(ts);
+        return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      });
+      const status = glasses >= goal ? "Goal reached!" : `${goal - glasses} more to go`;
+      return `Hydration today: ${glasses}/${goal} glasses. ${status}\nTimes: ${timestamps.join(", ") || "none"}`;
+    }
+
+    case "log_mood": {
+      const score = Math.min(10, Math.max(1, Math.round(Number(input.score))));
+      const note = (input.note as string | undefined) ?? "";
+      const todayStr = today();
+      const existingSnap = await db.doc(`users/${uid}/mood/${todayStr}`).get();
+      const isFirst = !existingSnap.exists;
+      await db.doc(`users/${uid}/mood/${todayStr}`).set({
+        date: todayStr,
+        score,
+        note,
+        logged_at: new Date().toISOString(),
+      });
+      if (isFirst) {
+        const xpRef = db.doc(`users/${uid}/xp/summary`);
+        const xpSnap = await xpRef.get();
+        const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+        await xpRef.set({ total: currentXP + 5 }, { merge: true });
+        await db.collection(`users/${uid}/xp_events`).add({ type: "mood_logged", xp: 5, description: "Mood logged", timestamp: new Date().toISOString() });
+      }
+      const label = score <= 3 ? "rough" : score <= 5 ? "low" : score <= 7 ? "okay" : score <= 8 ? "good" : "great";
+      return `Mood logged: ${score}/10 (${label})${note ? ` — "${note}"` : ""}${isFirst ? " +5 XP" : " (updated)"}`;
+    }
+
+    case "get_mood_history": {
+      const days = Math.min(30, Number(input.days) || 7);
+      const snap = await db.collection(`users/${uid}/mood`)
+        .orderBy("date", "desc")
+        .limit(days)
+        .get();
+      if (snap.empty) return "No mood entries found.";
+      const entries = snap.docs.map((d) => {
+        const data = d.data();
+        return `${data.date}: ${data.score}/10${data.note ? ` — "${data.note}"` : ""}`;
+      });
+      const scores = snap.docs.map((d) => d.data().score as number);
+      const avg = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+      return `Mood history (last ${entries.length} days, avg ${avg}/10):\n${entries.join("\n")}`;
+    }
+
+    case "log_body_metrics": {
+      const todayStr = today();
+      const data: Record<string, unknown> = { date: todayStr, logged_at: new Date().toISOString() };
+      const fields = ["weight_lbs", "body_fat_pct", "chest_in", "waist_in", "hips_in", "arms_in", "notes"];
+      for (const f of fields) {
+        if (input[f] != null) data[f] = f === "notes" ? String(input[f]) : Number(input[f]);
+      }
+      await db.doc(`users/${uid}/body_metrics/${todayStr}`).set(data, { merge: true });
+      const logged = fields.filter((f) => input[f] != null).map((f) => {
+        const unit = f === "body_fat_pct" ? "%" : f === "notes" ? "" : f.endsWith("_lbs") ? " lbs" : " in";
+        return `${f.replace(/_/g, " ")}: ${input[f]}${unit}`;
+      });
+      return `Body metrics logged for ${todayStr}:\n${logged.join("\n")}`;
+    }
+
+    case "get_body_metrics_history": {
+      const lim = Math.min(30, Number(input.limit) || 10);
+      const snap = await db.collection(`users/${uid}/body_metrics`)
+        .orderBy("date", "desc")
+        .limit(lim)
+        .get();
+      if (snap.empty) return "No body metrics entries found.";
+      const lines = snap.docs.map((d) => {
+        const e = d.data();
+        const parts: string[] = [`Date: ${e.date}`];
+        if (e.weight_lbs)   parts.push(`Weight: ${e.weight_lbs} lbs`);
+        if (e.body_fat_pct) parts.push(`Body fat: ${e.body_fat_pct}%`);
+        if (e.waist_in)     parts.push(`Waist: ${e.waist_in}"`);
+        if (e.notes)        parts.push(`Notes: ${e.notes}`);
+        return parts.join(" | ");
+      });
+      return `Body metrics (${lines.length} entries):\n${lines.join("\n")}`;
+    }
+
+    case "log_workout": {
+      const sessionName = (input.name as string) || "Workout";
+      const rawExercises = input.exercises as { exercise_name: string; category?: string; sets?: { reps: number; weight: number; unit?: string }[] }[];
+      const todayStr = today();
+      const now = new Date().toISOString();
+
+      // Ensure each exercise exists in the library, detect PRs
+      const newPRs: string[] = [];
+      const workoutExercises = [];
+      for (const raw of rawExercises) {
+        const exName = raw.exercise_name;
+        const category = (raw.category ?? "other") as string;
+        // Find or create exercise
+        const exSnap = await db.collection(`users/${uid}/exercises`).get();
+        let exDoc = exSnap.docs.find((d) => (d.data().name as string).toLowerCase() === exName.toLowerCase());
+        let exId: string;
+        if (!exDoc) {
+          const ref = await db.collection(`users/${uid}/exercises`).add({ name: exName, category, created_at: now });
+          exId = ref.id;
+        } else {
+          exId = exDoc.id;
+        }
+        const sets = (raw.sets ?? []).map((s) => ({ reps: s.reps ?? 0, weight: s.weight ?? 0, unit: s.unit ?? "lbs" }));
+        workoutExercises.push({ exercise_id: exId, exercise_name: exName, sets });
+        // PR check
+        if (sets.length > 0) {
+          const maxSet = sets.reduce((best, s) => (s.weight > best.weight ? s : best), sets[0]);
+          const oldPR: number = exDoc ? ((exDoc.data().pr_weight as number) ?? 0) : 0;
+          if (maxSet.weight > oldPR) {
+            newPRs.push(`${exName}: ${maxSet.weight}${maxSet.unit}`);
+            await db.doc(`users/${uid}/exercises/${exId}`).update({ pr_weight: maxSet.weight, pr_reps: maxSet.reps, pr_date: todayStr });
+          }
+        }
+      }
+      await db.collection(`users/${uid}/workouts`).add({
+        date: todayStr, name: sessionName, exercises: workoutExercises,
+        duration_min: (input.duration_min as number) ?? null,
+        notes: (input.notes as string) ?? "", created_at: now,
+      });
+      const xp = 50 + workoutExercises.length * 10;
+      const xpRef = db.doc(`users/${uid}/xp/summary`);
+      const xpSnap = await xpRef.get();
+      const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+      const eventRef = db.collection(`users/${uid}/xp_events`).doc();
+      await Promise.all([
+        xpSnap.exists ? xpRef.update({ total: FieldValue.increment(xp) }) : xpRef.set({ total: xp }),
+        eventRef.set({ id: eventRef.id, type: "workout_complete", xp, description: `Workout: ${sessionName}`, timestamp: now, totalAfter: currentXP + xp }),
+      ]);
+      const prMsg = newPRs.length > 0 ? ` New PRs: ${newPRs.join(", ")}.` : "";
+      return `Workout "${sessionName}" logged with ${workoutExercises.length} exercises. +${xp} XP awarded.${prMsg}`;
+    }
+
+    case "get_workout_history": {
+      const maxSessions = (input.limit as number) ?? 10;
+      const snap = await db.collection(`users/${uid}/workouts`).orderBy("date", "desc").limit(maxSessions).get();
+      if (snap.empty) return "No workouts logged yet.";
+      const lines = ["**Recent Workouts**"];
+      for (const d of snap.docs) {
+        const s = d.data();
+        const exList = (s.exercises as { exercise_name: string; sets: { reps: number; weight: number; unit: string }[] }[]) ?? [];
+        const summary = exList.map((e) => `${e.exercise_name} (${e.sets.length} sets)`).join(", ");
+        lines.push(`**${s.date}** — ${s.name}: ${summary}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_prs": {
+      const categoryFilter = input.category as string | undefined;
+      const snap = await db.collection(`users/${uid}/exercises`).get();
+      type ExRow = { id: string; name: string; category: string; pr_weight?: number; pr_reps?: number; pr_date?: string };
+      const exercises = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<ExRow, "id">) }))
+        .filter((e) => e.pr_weight && e.pr_weight > 0)
+        .filter((e) => !categoryFilter || e.category === categoryFilter)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      if (exercises.length === 0) return "No PRs recorded yet.";
+      const lines = ["**Personal Records**"];
+      for (const e of exercises) {
+        lines.push(`${e.name} (${e.category}): ${e.pr_weight} lbs × ${e.pr_reps ?? "?"} reps${e.pr_date ? ` on ${e.pr_date}` : ""}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "list_exercises": {
+      const categoryFilter = input.category as string | undefined;
+      const snap = await db.collection(`users/${uid}/exercises`).get();
+      type ExRow2 = { id: string; name: string; category: string };
+      let exercises = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ExRow2, "id">) }));
+      if (categoryFilter) exercises = exercises.filter((e) => e.category === categoryFilter);
+      exercises.sort((a, b) => a.name.localeCompare(b.name));
+      if (exercises.length === 0) return "No exercises in library yet.";
+      const grouped: Record<string, string[]> = {};
+      for (const e of exercises) {
+        const cat = e.category ?? "other";
+        (grouped[cat] ??= []).push(e.name);
+      }
+      return Object.entries(grouped).map(([cat, names]) => `**${cat}**: ${names.join(", ")}`).join("\n");
+    }
+
+    case "generate_workout_plan": {
+      const planName = (input.name as string) || "Workout Plan";
+      const days = input.days as { day: string; focus: string; exercises: string[] }[];
+      await db.collection(`users/${uid}/workout_plans`).add({
+        name: planName, days, created_at: new Date().toISOString(),
+      });
+      const summary = days.map((d) => `${d.day} (${d.focus}): ${d.exercises.join(", ")}`).join("\n");
+      return `Workout plan "${planName}" saved with ${days.length} days:\n${summary}`;
+    }
+
+    case "list_journal_entries": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const limit = (input.limit as number) ?? 20;
+      const snap = await db
+        .collection(`users/${uid}/journal`)
+        .where("date", ">=", start)
+        .where("date", "<=", end)
+        .get();
+      const entries = snap.docs
+        .map((d) => d.data())
+        .sort((a, b) => (b.date as string).localeCompare(a.date as string))
+        .slice(0, limit);
+      if (entries.length === 0) return `No journal entries from ${start} to ${end}.`;
+      return entries
+        .map((j) => {
+          const tags = (j.tags as string[] | undefined)?.join(", ");
+          return `**${j.date}** (mood ${j.mood_score}/10)${tags ? ` — ${tags}` : ""}\n${j.ai_summary ?? ""}`;
+        })
+        .join("\n\n");
+    }
+
+    case "list_goals": {
+      const status = (input.status as string) ?? "active";
+      const snap = await db.collection(`users/${uid}/goals`).where("status", "==", status).get();
+      let goals = snap.docs.map((d) => d.data());
+      if (input.category) goals = goals.filter((g) => g.category === input.category);
+      if (goals.length === 0) return `No ${status} goals.`;
+      return goals
+        .map((g) => {
+          const ms = (g.milestones as { title: string; completed: boolean }[]) ?? [];
+          const done = ms.filter((m) => m.completed).length;
+          const header = `**${g.title}** (${g.category}${g.target_date ? `, target ${g.target_date}` : ""}) — ${done}/${ms.length} milestones`;
+          const lines = [header];
+          for (const m of ms) lines.push(`  ${m.completed ? "[x]" : "[ ]"} ${m.title}`);
+          if (g.description) lines.push(`  ${g.description}`);
+          return lines.join("\n");
+        })
+        .join("\n\n");
+    }
+
+    case "list_transactions": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 6);
+      const limit = (input.limit as number) ?? 100;
+      const typeFilter = input.type as string | undefined;
+      const catSearch = (input.category_search as string | undefined)?.toLowerCase();
+
+      const manualSnap = await db
+        .collection(`users/${uid}/transactions`)
+        .where("date", ">=", start)
+        .where("date", "<=", end)
+        .get();
+      const manual = manualSnap.docs.map((d) => {
+        const t = d.data();
+        return {
+          date: t.date as string,
+          type: t.type as string,
+          amount: t.amount as number,
+          category: (t.category as string) ?? "",
+          description: (t.description as string) ?? "",
+          source: "manual",
+        };
+      });
+
+      const plaidSnap = await db.collection(`users/${uid}/plaid_transactions`).get();
+      const plaid = plaidSnap.docs
+        .map((d) => d.data())
+        .filter((p) => {
+          const dt = p.date as string;
+          return dt && dt >= start && dt <= end;
+        })
+        .map((p) => ({
+          date: p.date as string,
+          // Plaid: positive amount = debit/expense, negative = credit/income
+          type: (p.amount as number) >= 0 ? "expense" : "income",
+          amount: Math.abs(p.amount as number),
+          category: (p.category as string) ?? "",
+          description: ((p.merchant_name as string) ?? "") + (p.institution ? ` (${p.institution})` : ""),
+          source: "plaid",
+        }));
+
+      let all = [...manual, ...plaid];
+      if (typeFilter) all = all.filter((t) => t.type === typeFilter);
+      if (catSearch) all = all.filter((t) => t.category.toLowerCase().includes(catSearch));
+      all.sort((a, b) => b.date.localeCompare(a.date));
+      all = all.slice(0, limit);
+
+      if (all.length === 0) return `No transactions from ${start} to ${end}.`;
+      const totalIncome = all.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+      const totalExpense = all.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+      const lines = [`**Window ${start} → ${end}**: +$${totalIncome.toFixed(2)} income, −$${totalExpense.toFixed(2)} expense (net $${(totalIncome - totalExpense).toFixed(2)})`];
+      for (const t of all) {
+        const sign = t.type === "income" ? "+" : "−";
+        lines.push(`${t.date} ${sign}$${t.amount.toFixed(2)} ${t.category}${t.description ? ` — ${t.description}` : ""} [${t.source}]`);
+      }
+      return lines.join("\n");
+    }
+
+    case "log_time": {
+      const description = (input.description as string) || "Focus session";
+      const duration_min = input.duration_min as number;
+      const category = (input.category as string) ?? "work";
+      const entryDate = (input.date as string) ?? today();
+      const now = new Date().toISOString();
+      const start = new Date(new Date(now).getTime() - duration_min * 60000).toISOString();
+      await db.collection(`users/${uid}/time_entries`).add({
+        date: entryDate,
+        start_time: start,
+        end_time: now,
+        duration_min,
+        description,
+        task_id: null,
+        project_id: null,
+        category,
+        source: "manual",
+        created_at: now,
+      });
+      const h = Math.floor(duration_min / 60);
+      const m = duration_min % 60;
+      const durStr = h > 0 ? `${h}h ${m > 0 ? `${m}m` : ""}`.trim() : `${m}m`;
+      return `Logged ${durStr} of ${category} time: "${description}" on ${entryDate}.`;
+    }
+
+    case "get_time_summary": {
+      const daysBack = (input.days as number) ?? 7;
+      const endDate = today();
+      const startDate = daysAgo(endDate, daysBack - 1);
+      const snap = await db
+        .collection(`users/${uid}/time_entries`)
+        .where("date", ">=", startDate)
+        .where("date", "<=", endDate)
+        .get();
+      if (snap.empty) return `No time entries in the last ${daysBack} days.`;
+      const entries = snap.docs.map((d) => d.data());
+      const byCategory: Record<string, number> = {};
+      const byDate: Record<string, number> = {};
+      for (const e of entries) {
+        byCategory[e.category] = (byCategory[e.category] ?? 0) + (e.duration_min as number);
+        byDate[e.date] = (byDate[e.date] ?? 0) + (e.duration_min as number);
+      }
+      const total = entries.reduce((s, e) => s + (e.duration_min as number), 0);
+      const lines = [`**Time Summary — last ${daysBack} days** (${Math.round(total / 60 * 10) / 10}h total)`];
+      const catLines = Object.entries(byCategory).sort(([, a], [, b]) => b - a)
+        .map(([cat, min]) => `  ${cat}: ${Math.round(min / 60 * 10) / 10}h`);
+      lines.push("By category:", ...catLines);
+      const dateLines = Object.entries(byDate).sort(([a], [b]) => b.localeCompare(a))
+        .map(([date, min]) => `  ${date}: ${Math.round(min / 60 * 10) / 10}h`);
+      lines.push("By day:", ...dateLines);
+      return lines.join("\n");
+    }
+
+    case "start_focus_session": {
+      // This tool can't directly control the client-side timer, but we can inform the user
+      // and provide a deep link. The actual timer start happens in the UI.
+      const taskName = (input.task_name as string) || "Focus session";
+      const duration = (input.duration_min as number) ?? 25;
+      const category = (input.category as string) ?? "work";
+      return `Ready to start a ${duration}-minute focus session on "${taskName}" (${category}). Open the [Focus page](/focus) — the timer will be pre-filled. Or click the Focus link in the nav to start your session now.`;
+    }
+
+    case "set_budget": {
+      const category = (input.category as string).trim();
+      const limit = input.limit as number;
+      const alert_threshold = (input.alert_threshold as number) ?? 0.8;
+      const month = (input.month as string) ?? today().slice(0, 7);
+      if (!category || limit < 0) return "Invalid category or limit.";
+      const ref = db.doc(`users/${uid}/budgets/${month}`);
+      const snap = await ref.get();
+      const existing = snap.exists ? (snap.data()?.categories ?? {}) : {};
+      await ref.set(
+        { categories: { ...existing, [category]: { limit, alert_threshold } }, created_at: snap.exists ? snap.data()?.created_at : new Date().toISOString() },
+        { merge: true }
+      );
+      return `Budget set: ${category} → $${limit.toFixed(2)}/month (${month}). Alert at ${Math.round(alert_threshold * 100)}%.`;
+    }
+
+    case "get_budget_status": {
+      const month = (input.month as string) ?? today().slice(0, 7);
+      const start = `${month}-01`;
+      const end = `${month}-31`;
+      const [budgetSnap, txSnap] = await Promise.all([
+        db.doc(`users/${uid}/budgets/${month}`).get(),
+        db.collection(`users/${uid}/transactions`).where("date", ">=", start).where("date", "<=", end).get(),
+      ]);
+      const budgetCategories: Record<string, { limit: number; alert_threshold: number }> = budgetSnap.exists
+        ? (budgetSnap.data()?.categories ?? {})
+        : {};
+      const actuals: Record<string, number> = {};
+      for (const d of txSnap.docs) {
+        const t = d.data();
+        if (t.type === "expense") actuals[t.category] = (actuals[t.category] ?? 0) + (t.amount as number);
+      }
+      if (Object.keys(budgetCategories).length === 0) return `No budget set for ${month}.`;
+      const lines = [`**Budget Status — ${month}**`];
+      let totalBudgeted = 0;
+      let totalSpent = 0;
+      for (const [cat, entry] of Object.entries(budgetCategories)) {
+        const spent = actuals[cat] ?? 0;
+        totalBudgeted += entry.limit;
+        totalSpent += spent;
+        const pct = entry.limit > 0 ? spent / entry.limit : 0;
+        const status = spent > entry.limit ? "OVER" : pct >= entry.alert_threshold ? "near limit" : "on track";
+        lines.push(`${cat}: $${spent.toFixed(2)} / $${entry.limit.toFixed(2)} (${Math.round(pct * 100)}%) — ${status}`);
+      }
+      lines.push(`\nTotal: $${totalSpent.toFixed(2)} / $${totalBudgeted.toFixed(2)} budgeted`);
+      return lines.join("\n");
+    }
+
+    case "update_net_worth": {
+      const month = (input.month as string) ?? today().slice(0, 7);
+      const rawAssets = input.assets as Record<string, { value: number; category: string }>;
+      const rawLiabilities = input.liabilities as Record<string, { value: number; category: string }>;
+      const assets = Object.fromEntries(
+        Object.entries(rawAssets).map(([k, v]) => [k, { value: Number(v.value) || 0, category: v.category ?? "other" }])
+      );
+      const liabilities = Object.fromEntries(
+        Object.entries(rawLiabilities).map(([k, v]) => [k, { value: Number(v.value) || 0, category: v.category ?? "other" }])
+      );
+      const total_assets = Object.values(assets).reduce((s, a) => s + a.value, 0);
+      const total_liabilities = Object.values(liabilities).reduce((s, l) => s + l.value, 0);
+      const net_worth = total_assets - total_liabilities;
+      await db.doc(`users/${uid}/net_worth/${month}`).set({
+        assets, liabilities, total_assets, total_liabilities, net_worth,
+        snapshot_date: month, created_at: new Date().toISOString(),
+      });
+      return `Net worth snapshot saved for ${month}: assets $${total_assets.toFixed(2)}, liabilities $${total_liabilities.toFixed(2)}, net worth $${net_worth.toFixed(2)}.`;
+    }
+
+    case "get_net_worth": {
+      const monthsBack = (input.months as number) ?? 6;
+      const snap = await db.collection(`users/${uid}/net_worth`).orderBy("snapshot_date", "desc").limit(monthsBack).get();
+      if (snap.empty) return "No net worth snapshots recorded yet.";
+      const lines = ["**Net Worth History**"];
+      for (const d of snap.docs) {
+        const s = d.data();
+        lines.push(`${s.snapshot_date}: assets $${(s.total_assets as number).toFixed(2)}, liabilities $${(s.total_liabilities as number).toFixed(2)}, net worth $${(s.net_worth as number).toFixed(2)}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "add_savings_goal": {
+      const now = new Date().toISOString();
+      await db.collection(`users/${uid}/savings_goals`).add({
+        name: input.name as string,
+        target_amount: Number(input.target_amount),
+        current_amount: 0,
+        target_date: input.target_date as string,
+        color: (input.color as string | undefined) ?? "#C4728A",
+        status: "active",
+        contributions: [],
+        created_at: now,
+        updated_at: now,
+      });
+      return `Savings goal created: "${input.name}" — $${(input.target_amount as number).toLocaleString()} by ${input.target_date}.`;
+    }
+
+    case "log_savings_contribution": {
+      const goalName = (input.goal_name as string).toLowerCase();
+      const amount = Number(input.amount);
+      const note = (input.note as string | undefined) ?? "";
+      const snap = await db.collection(`users/${uid}/savings_goals`)
+        .where("status", "==", "active").get();
+      const goalDoc = snap.docs.find((d) =>
+        (d.data().name as string).toLowerCase().includes(goalName)
+      );
+      if (!goalDoc) return `No active savings goal found matching "${input.goal_name}".`;
+      const data = goalDoc.data();
+      const newAmount = (data.current_amount as number) + amount;
+      const newStatus = newAmount >= (data.target_amount as number) ? "completed" : "active";
+      const contribution = { amount, note, date: today() };
+      await goalDoc.ref.update({
+        current_amount: newAmount,
+        contributions: [...(data.contributions as object[]), contribution],
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      });
+      const pct = Math.min(100, (newAmount / (data.target_amount as number)) * 100).toFixed(0);
+      const msg = newStatus === "completed" ? " 🎉 Goal reached!" : "";
+      return `Added $${amount.toLocaleString()} to "${data.name as string}". Now at $${newAmount.toLocaleString()} (${pct}%).${msg}`;
+    }
+
+    case "get_savings_progress": {
+      const snap = await db.collection(`users/${uid}/savings_goals`)
+        .where("status", "==", "active").get();
+      if (snap.empty) return "No active savings goals.";
+      const lines = ["**Savings Goals**"];
+      for (const d of snap.docs) {
+        const g = d.data();
+        const pct = g.target_amount > 0
+          ? Math.min(100, (g.current_amount as number / (g.target_amount as number)) * 100).toFixed(0)
+          : "0";
+        lines.push(`• ${g.name}: $${(g.current_amount as number).toLocaleString()} / $${(g.target_amount as number).toLocaleString()} (${pct}%) — target ${g.target_date}`);
+      }
+      return lines.join("\n");
+    }
+
+    case "add_debt": {
+      const now = new Date().toISOString();
+      const balance = Number(input.balance);
+      await db.collection(`users/${uid}/debts`).add({
+        name:             input.name as string,
+        type:             (input.type as string) || "other",
+        balance,
+        original_balance: balance,
+        interest_rate:    Number(input.interest_rate) / 100, // store as decimal
+        minimum_payment:  Number(input.minimum_payment),
+        created_at:       now,
+        updated_at:       now,
+      });
+      return `Debt added: "${input.name as string}" — $${balance.toLocaleString()} at ${input.interest_rate}% APR, $${(input.minimum_payment as number).toLocaleString()}/mo minimum.`;
+    }
+
+    case "update_debt_balance": {
+      const name = (input.name as string).toLowerCase();
+      const newBalance = Number(input.balance);
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      const doc = snap.docs.find((d) => (d.data().name as string).toLowerCase().includes(name));
+      if (!doc) return `No debt found matching "${input.name as string}".`;
+      const prev = doc.data().balance as number;
+      await doc.ref.update({ balance: newBalance, updated_at: new Date().toISOString() });
+      const diff = prev - newBalance;
+      const msg = newBalance === 0 ? " 🎉 Debt paid off!" : diff > 0 ? ` ($${diff.toLocaleString()} paid down)` : "";
+      return `Updated "${doc.data().name as string}" balance to $${newBalance.toLocaleString()}.${msg}`;
+    }
+
+    case "get_debts": {
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      if (snap.empty) return "No debts tracked yet. Use add_debt to get started.";
+      const method = ((input.method as string) || "avalanche").toLowerCase();
+      const extra = Number(input.extra_payment) || 0;
+      const total = snap.docs.reduce((sum, d) => sum + (d.data().balance as number), 0);
+      const lines = [`**Debts** (${snap.docs.length} total, $${total.toLocaleString()} owed)`];
+      const sorted = method === "snowball"
+        ? snap.docs.sort((a, b) => (a.data().balance as number) - (b.data().balance as number))
+        : snap.docs.sort((a, b) => (b.data().interest_rate as number) - (a.data().interest_rate as number));
+      for (const d of sorted) {
+        const g = d.data();
+        const apr = ((g.interest_rate as number) * 100).toFixed(2);
+        lines.push(`• ${g.name}: $${(g.balance as number).toLocaleString()} @ ${apr}% APR — $${(g.minimum_payment as number).toLocaleString()}/mo minimum`);
+      }
+      const minTotal = snap.docs.reduce((sum, d) => sum + (d.data().minimum_payment as number), 0);
+      lines.push(`\nTotal minimum payments: $${minTotal.toLocaleString()}/mo${extra > 0 ? ` + $${extra.toLocaleString()} extra` : ""}`);
+      lines.push(`Strategy: ${method === "snowball" ? "Snowball (lowest balance first)" : "Avalanche (highest interest first)"}`);
+      return lines.join("\n");
+    }
+
+    case "delete_debt": {
+      const name = (input.name as string).toLowerCase();
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      const doc = snap.docs.find((d) => (d.data().name as string).toLowerCase().includes(name));
+      if (!doc) return `No debt found matching "${input.name as string}".`;
+      const debtName = doc.data().name as string;
+      await doc.ref.delete();
+      return `Deleted debt: "${debtName}".`;
+    }
+
+    case "reorder_debts": {
+      const names = (input.order as string[]).map((n) => n.toLowerCase());
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      const matched: string[] = [];
+      const unmatched: string[] = [];
+      for (const name of names) {
+        const d = snap.docs.find((doc) => (doc.data().name as string).toLowerCase().includes(name));
+        if (d) matched.push(d.id); else unmatched.push(name);
+      }
+      // Append any debts not mentioned at the end
+      const remaining = snap.docs.filter((d) => !matched.includes(d.id)).map((d) => d.id);
+      const finalOrder = [...matched, ...remaining];
+      await db.doc(`users/${uid}/settings/debt_payoff`).set({ custom_order: finalOrder, updated_at: new Date().toISOString() }, { merge: true });
+      const orderedNames = finalOrder.map((id) => snap.docs.find((d) => d.id === id)?.data().name as string).filter(Boolean);
+      const msg = unmatched.length ? ` (couldn't match: ${unmatched.join(", ")})` : "";
+      return `Custom payoff order saved: ${orderedNames.map((n, i) => `${i + 1}. ${n}`).join(", ")}.${msg} Switch to Custom mode in the Debt Payoff Planner to use this order.`;
+    }
+
+    case "get_fire_projection": {
+      const nwSnap = await db.collection(`users/${uid}/net_worth`).orderBy("snapshot_date", "desc").limit(1).get();
+      const currentNetWorth: number = nwSnap.empty ? 0 : (nwSnap.docs[0].data().net_worth as number);
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      const cutoff = threeMonthsAgo.toISOString().slice(0, 10);
+      const txSnap = await db.collection(`users/${uid}/transactions`).orderBy("date", "desc").limit(300).get();
+      const buckets: Record<string, { expenses: number; income: number }> = {};
+      for (const d of txSnap.docs) {
+        const t = d.data() as { date: string; type: string; amount: number };
+        if (t.date < cutoff) continue;
+        const mo = t.date.slice(0, 7);
+        if (!buckets[mo]) buckets[mo] = { expenses: 0, income: 0 };
+        if (t.type === "expense") buckets[mo].expenses += t.amount;
+        else if (t.type === "income") buckets[mo].income += t.amount;
+      }
+      const months = Object.values(buckets);
+      const avgExp = months.length ? months.reduce((s, m) => s + m.expenses, 0) / months.length : 0;
+      const avgInc = months.length ? months.reduce((s, m) => s + m.income, 0) / months.length : 0;
+      const assumDoc = await db.doc(`users/${uid}/settings/fire`).get();
+      const assum = assumDoc.exists ? (assumDoc.data() as Record<string, number>) : {};
+      const expectedReturn = assum.expected_return ?? 0.07;
+      const withdrawalRate = assum.withdrawal_rate ?? 0.04;
+      const annualExpenses = assum.annual_expenses ?? avgExp * 12;
+      const monthlySavings = assum.savings_rate ?? Math.max(0, avgInc - avgExp);
+      const fiNumber = annualExpenses / withdrawalRate;
+      const progressPct = fiNumber > 0 ? Math.min(100, (currentNetWorth / fiNumber) * 100) : 0;
+      // Months to FI
+      let monthsToFi: number | null = null;
+      if (currentNetWorth < fiNumber && monthlySavings > 0) {
+        const rate = expectedReturn / 12;
+        let nw = currentNetWorth;
+        for (let m = 1; m <= 600; m++) {
+          nw = nw * (1 + rate) + monthlySavings;
+          if (nw >= fiNumber) { monthsToFi = m; break; }
+        }
+      } else if (currentNetWorth >= fiNumber) {
+        monthsToFi = null;
+      }
+      const projDate = monthsToFi != null
+        ? (() => { const d = new Date(); d.setMonth(d.getMonth() + monthsToFi); return d.toISOString().slice(0, 7); })()
+        : null;
+      const fmtC = (n: number) => `$${Math.round(n).toLocaleString()}`;
+      let result = `FI Number: ${fmtC(fiNumber)} | Current Net Worth: ${fmtC(currentNetWorth)} | Progress: ${progressPct.toFixed(1)}% | Monthly Savings: ${fmtC(monthlySavings)} | Annual Expenses: ${fmtC(annualExpenses)} | Projected FI: ${projDate ?? (currentNetWorth >= fiNumber ? "Already FI!" : "Cannot project — add more data")}`;
+      const extra = input.extra_monthly_savings as number | undefined;
+      if (extra && extra > 0) {
+        let wiMonths: number | null = null;
+        const rate = expectedReturn / 12;
+        let nw2 = currentNetWorth;
+        for (let m = 1; m <= 600; m++) {
+          nw2 = nw2 * (1 + rate) + monthlySavings + extra;
+          if (nw2 >= fiNumber) { wiMonths = m; break; }
+        }
+        const saved = monthsToFi != null && wiMonths != null ? monthsToFi - wiMonths : null;
+        result += ` | What-if +${fmtC(extra)}/mo: ${wiMonths != null ? `reaches FI in ${wiMonths} months` : "Already FI"}${saved != null && saved > 0 ? ` (${Math.floor(saved / 12)}y ${saved % 12}m sooner)` : ""}`;
+      }
+      return result;
+    }
+
+    case "update_fire_assumptions": {
+      const updates: Record<string, number | string> = { updated_at: new Date().toISOString() };
+      const changed: string[] = [];
+      if (input.annual_expenses != null) { updates.annual_expenses = input.annual_expenses as number; changed.push(`annual expenses → $${Math.round(input.annual_expenses as number).toLocaleString()}`); }
+      if (input.monthly_savings != null) { updates.savings_rate = input.monthly_savings as number; changed.push(`monthly savings → $${Math.round(input.monthly_savings as number).toLocaleString()}`); }
+      if (input.expected_return != null) { updates.expected_return = (input.expected_return as number) / 100; changed.push(`expected return → ${input.expected_return}%`); }
+      if (input.withdrawal_rate != null) { updates.withdrawal_rate = (input.withdrawal_rate as number) / 100; changed.push(`withdrawal rate → ${input.withdrawal_rate}%`); }
+      if (changed.length === 0) return "No changes specified.";
+      await db.doc(`users/${uid}/settings/fire`).set(updates, { merge: true });
+      return `Updated FIRE assumptions: ${changed.join(", ")}.`;
+    }
+
+    case "add_episode": {
+      const now = new Date().toISOString();
+      const status = (input.status as string) || "idea";
+      await db.collection(`users/${uid}/podcast_episodes`).add({
+        title: input.title as string,
+        episode_number: input.episode_number ?? null,
+        status,
+        record_date: (input.record_date as string) ?? null,
+        publish_date: (input.publish_date as string) ?? null,
+        description: (input.description as string) ?? "",
+        notes: "",
+        tags: (input.tags as string[]) ?? [],
+        links: [],
+        created_at: now,
+        updated_at: now,
+      });
+      return `Episode "${input.title}" added to pipeline with status: ${status}.`;
+    }
+
+    case "update_episode_status": {
+      const titleQuery = (input.title as string).toLowerCase();
+      const allEps = await db.collection(`users/${uid}/podcast_episodes`).get();
+      const match = allEps.docs.find((d) =>
+        (d.data().title as string).toLowerCase().includes(titleQuery)
+      );
+      if (!match) return `No episode found matching "${input.title}".`;
+      const newStatus = input.status as string;
+      await match.ref.update({ status: newStatus, updated_at: new Date().toISOString() });
+      return `"${match.data().title}" status updated to: ${newStatus}.`;
+    }
+
+    case "list_episodes": {
+      const statusFilter = (input.status as string) ?? "all";
+      let q = db.collection(`users/${uid}/podcast_episodes`).orderBy("created_at", "desc") as FirebaseFirestore.Query;
+      if (statusFilter !== "all") q = q.where("status", "==", statusFilter);
+      const snap = await q.get();
+      if (snap.empty) return statusFilter === "all" ? "No episodes yet." : `No episodes with status '${statusFilter}'.`;
+      const order = ["idea", "outlined", "recorded", "edited", "published"];
+      const byStatus = new Map<string, string[]>();
+      for (const d of snap.docs) {
+        const ep = d.data();
+        const s = ep.status as string;
+        if (!byStatus.has(s)) byStatus.set(s, []);
+        const epNum = ep.episode_number ? `#${ep.episode_number} ` : "";
+        byStatus.get(s)!.push(`  • ${epNum}${ep.title}${ep.publish_date ? ` (pub: ${ep.publish_date})` : ""}`);
+      }
+      const lines = ["**Podcast Pipeline**"];
+      for (const s of order) {
+        if (byStatus.has(s)) {
+          lines.push(`\n**${s.charAt(0).toUpperCase() + s.slice(1)}** (${byStatus.get(s)!.length})`);
+          lines.push(...byStatus.get(s)!);
+        }
+      }
+      return lines.join("\n");
+    }
+
+    case "add_supplement": {
+      const now = new Date().toISOString();
+      const timing = (input.timing as string) || "morning";
+      await db.collection(`users/${uid}/supplements`).add({
+        name: input.name as string,
+        dosage: input.dosage as string,
+        timing,
+        notes: (input.notes as string) ?? "",
+        active: true,
+        created_at: now,
+        updated_at: now,
+      });
+      return `"${input.name}" (${input.dosage}, ${timing}) added to your supplement checklist.`;
+    }
+
+    case "log_supplement_taken": {
+      const names = (input.names as string[]) ?? [];
+      const suppSnap = await db.collection(`users/${uid}/supplements`).where("active", "==", true).get();
+      const date = today();
+      const logRef = db.doc(`users/${uid}/supplement_logs/${date}`);
+      const logSnap = await logRef.get();
+      const currentTaken: string[] = logSnap.exists ? (logSnap.data()!.taken as string[]) : [];
+      const newTaken = new Set(currentTaken);
+      const matched: string[] = [];
+      for (const name of names) {
+        const lower = name.toLowerCase();
+        const match = suppSnap.docs.find((d) => (d.data().name as string).toLowerCase().includes(lower));
+        if (match) { newTaken.add(match.id); matched.push(match.data().name as string); }
+      }
+      await logRef.set({ date, taken: Array.from(newTaken), logged_at: new Date().toISOString() }, { merge: true });
+      return matched.length > 0 ? `Marked as taken: ${matched.join(", ")}.` : `No matching supplements found for: ${names.join(", ")}.`;
+    }
+
+    case "get_supplement_status": {
+      const suppSnap = await db.collection(`users/${uid}/supplements`).where("active", "==", true).get();
+      if (suppSnap.empty) return "No active supplements in your checklist.";
+      const date = today();
+      const logSnap = await db.doc(`users/${uid}/supplement_logs/${date}`).get();
+      const taken = new Set<string>(logSnap.exists ? (logSnap.data()!.taken as string[]) : []);
+      const timingLabels: Record<string, string> = { morning: "Morning", afternoon: "Afternoon", evening: "Evening", with_meals: "With Meals", before_bed: "Before Bed" };
+      const lines = ["**Supplement Status — Today**"];
+      for (const d of suppSnap.docs) {
+        const s = d.data();
+        const status = taken.has(d.id) ? "✅" : "⬜";
+        lines.push(`${status} ${s.name} — ${s.dosage} (${timingLabels[s.timing as string] ?? s.timing})`);
+      }
+      const takenCount = suppSnap.docs.filter((d) => taken.has(d.id)).length;
+      lines.push(`\n${takenCount}/${suppSnap.size} taken today.`);
+      return lines.join("\n");
+    }
+
+    case "get_insights": {
+      const insightSnap = await db.collection(`users/${uid}/ai_insights`).orderBy("date", "desc").limit(1).get();
+      if (insightSnap.empty) return "No AI insights generated yet. Ask the user to open the dashboard and click 'Generate Insights' in the AI Insights widget.";
+      const insight = insightSnap.docs[0].data();
+      return `**AI Insights — ${insight.date as string}** (generated ${insight.generated_at as string})\n\n${insight.content as string}\n\n*Sources: ${(insight.data_sources as string[]).join(", ")}*`;
+    }
+
+    case "add_book": {
+      const now = new Date().toISOString();
+      const status = (input.status as string) || "want_to_read";
+      const extra: Record<string, string> = {};
+      if (status === "reading") extra.start_date = new Date().toLocaleDateString("en-CA");
+      if (status === "finished") {
+        extra.start_date = new Date().toLocaleDateString("en-CA");
+        extra.finish_date = new Date().toLocaleDateString("en-CA");
+      }
+      await db.collection(`users/${uid}/books`).add({
+        title:     input.title as string,
+        author:    input.author as string,
+        status,
+        rating:    input.rating ?? null,
+        cover_url: null,
+        tags:      (input.tags as string[]) ?? [],
+        takeaways: (input.takeaways as string) ?? "",
+        highlights: [],
+        ...extra,
+        created_at: now,
+        updated_at: now,
+      });
+      return `"${input.title}" by ${input.author} added to your reading list (status: ${status}).`;
+    }
+
+    case "update_book_status": {
+      const titleQ = (input.title as string).toLowerCase();
+      const allBooks = await db.collection(`users/${uid}/books`).get();
+      const match = allBooks.docs.find((d) =>
+        (d.data().title as string).toLowerCase().includes(titleQ)
+      );
+      if (!match) return `No book found matching "${input.title}".`;
+      const patch: Record<string, unknown> = {
+        status: input.status as string,
+        updated_at: new Date().toISOString(),
+      };
+      if (input.rating) patch.rating = input.rating as number;
+      const bk = match.data();
+      if (input.status === "reading" && !bk.start_date) patch.start_date = new Date().toLocaleDateString("en-CA");
+      if (input.status === "finished" && !bk.finish_date) patch.finish_date = new Date().toLocaleDateString("en-CA");
+      await match.ref.update(patch);
+      return `"${bk.title}" status updated to: ${input.status}${input.rating ? `, rated ${input.rating}/10` : ""}.`;
+    }
+
+    case "log_highlight": {
+      const titleQ = (input.title as string).toLowerCase();
+      const allBooks = await db.collection(`users/${uid}/books`).get();
+      const match = allBooks.docs.find((d) =>
+        (d.data().title as string).toLowerCase().includes(titleQ)
+      );
+      if (!match) return `No book found matching "${input.title}".`;
+      const bk = match.data();
+      const highlights = (bk.highlights as string[]) ?? [];
+      await match.ref.update({
+        highlights: [...highlights, input.highlight as string],
+        updated_at: new Date().toISOString(),
+      });
+      return `Highlight added to "${bk.title}".`;
+    }
+
+    case "get_reading_list": {
+      const statusFilter = (input.status as string) ?? "all";
+      let bq = db.collection(`users/${uid}/books`).orderBy("created_at", "desc") as FirebaseFirestore.Query;
+      if (statusFilter !== "all") bq = bq.where("status", "==", statusFilter);
+      const snap = await bq.get();
+      if (snap.empty) return statusFilter === "all" ? "No books in your reading list yet." : `No books with status '${statusFilter}'.`;
+      const statusOrder = ["reading", "want_to_read", "finished", "abandoned"];
+      const statusLabels: Record<string, string> = {
+        reading: "📖 Reading", want_to_read: "📚 Want to Read",
+        finished: "✅ Finished", abandoned: "🗃 Abandoned",
+      };
+      const byStatus = new Map<string, string[]>();
+      for (const d of snap.docs) {
+        const b = d.data();
+        const s = b.status as string;
+        if (!byStatus.has(s)) byStatus.set(s, []);
+        const rating = b.rating ? ` ★${b.rating}` : "";
+        byStatus.get(s)!.push(`  • ${b.title} — ${b.author}${rating}`);
+      }
+      const lines = ["**Reading List**"];
+      for (const s of statusOrder) {
+        if (byStatus.has(s)) {
+          lines.push(`\n${statusLabels[s]} (${byStatus.get(s)!.length})`);
+          lines.push(...byStatus.get(s)!);
+        }
+      }
+      return lines.join("\n");
+    }
+
+    case "reorder_books": {
+      const orderedTitles = input.ordered_titles as string[];
+      const wtrSnap = await db.collection(`users/${uid}/books`).where("status", "==", "want_to_read").get();
+      if (wtrSnap.empty) return "No 'Want to Read' books to reorder.";
+      const batch = db.batch();
+      let matched = 0;
+      orderedTitles.forEach((title, index) => {
+        const titleQ = title.toLowerCase();
+        const match = wtrSnap.docs.find((d) => (d.data().title as string).toLowerCase().includes(titleQ));
+        if (match) { batch.update(match.ref, { order: index }); matched++; }
+      });
+      await batch.commit();
+      return `Reordered ${matched} of ${orderedTitles.length} books in your Want to Read list.`;
+    }
+
+    case "get_daily_briefing": {
+      const todayStr = today();
+      const briefDoc = await db.doc(`users/${uid}/daily_briefings/${todayStr}`).get();
+      if (!briefDoc.exists) return `No briefing generated yet for today (${todayStr}). Ask the user to open the dashboard and click "Generate morning briefing", or trigger it via the /api/daily-briefing endpoint.`;
+      const b = briefDoc.data()!;
+      return `**Morning Briefing — ${b.date}** (generated ${b.generated_at})\n\n${b.content}`;
+    }
+
+    case "log_decision": {
+      const todayStr = today();
+      const reviewDate = (input.review_date as string) || (() => {
+        const d = new Date(todayStr);
+        d.setDate(d.getDate() + 30);
+        return d.toISOString().slice(0, 10);
+      })();
+      const now = new Date().toISOString();
+      await db.collection(`users/${uid}/decisions`).add({
+        title: input.title as string,
+        date: (input.date as string) || todayStr,
+        context: (input.context as string) ?? "",
+        options_considered: (input.options_considered as string[]) ?? [],
+        chosen_option: input.chosen_option as string,
+        reasoning: (input.reasoning as string) ?? "",
+        expected_outcome: (input.expected_outcome as string) ?? "",
+        review_date: reviewDate,
+        tags: (input.tags as string[]) ?? [],
+        status: "pending_review",
+        created_at: now,
+        updated_at: now,
+      });
+      return `Decision logged: "${input.title}". Review scheduled for ${reviewDate}.`;
+    }
+
+    case "list_decisions": {
+      const statusFilter = (input.status as string) ?? "all";
+      const limitN = (input.limit as number) ?? 10;
+      let q = db.collection(`users/${uid}/decisions`).orderBy("date", "desc").limit(limitN);
+      if (statusFilter !== "all") q = q.where("status", "==", statusFilter) as typeof q;
+      const snap = await db.collection(`users/${uid}/decisions`)
+        .orderBy("date", "desc")
+        .limit(limitN)
+        .get();
+      if (snap.empty) return "No decisions logged yet.";
+      const lines = snap.docs
+        .filter((d) => statusFilter === "all" || d.data().status === statusFilter)
+        .map((d) => {
+          const dec = d.data();
+          return `- [${d.id}] **${dec.title}** (${dec.date}) — chose: ${dec.chosen_option} | review: ${dec.review_date} | status: ${dec.status}`;
+        });
+      return lines.length ? lines.join("\n") : `No decisions with status "${statusFilter}".`;
+    }
+
+    case "review_decision": {
+      const decId = input.decision_id as string;
+      const rating = Number(input.outcome_rating);
+      if (!decId) return "decision_id is required.";
+      if (rating < 1 || rating > 5) return "outcome_rating must be 1–5.";
+      await db.doc(`users/${uid}/decisions/${decId}`).update({
+        outcome_rating: rating,
+        review_notes: (input.review_notes as string) ?? "",
+        status: "reviewed",
+        updated_at: new Date().toISOString(),
+      });
+      return `Decision ${decId} marked as reviewed with rating ${rating}/5.`;
+    }
+
+    case "list_projects": {
+      const includeCards = input.include_cards !== false;
+      const status = (input.status as string) ?? "active";
+      const projectsSnap = await db.collection(`users/${uid}/projects`).where("status", "==", status).get();
+      if (projectsSnap.empty) return `No ${status} projects.`;
+      const sections: string[] = [];
+      for (const projDoc of projectsSnap.docs) {
+        const p = projDoc.data();
+        let section = `**${p.name}**${p.description ? ` — ${p.description}` : ""}`;
+        if (includeCards) {
+          const cardsSnap = await db.collection(`users/${uid}/projects/${projDoc.id}/cards`).get();
+          if (!cardsSnap.empty) {
+            const byStatus: Record<string, string[]> = { todo: [], in_progress: [], done: [] };
+            for (const c of cardsSnap.docs) {
+              const card = c.data();
+              const s = (card.status as string) ?? "todo";
+              (byStatus[s] ??= []).push(`  - ${card.title}${card.priority ? ` (${card.priority})` : ""}`);
+            }
+            for (const s of ["todo", "in_progress", "done"]) {
+              if (byStatus[s]?.length) section += `\n  ${s.toUpperCase()}:\n${byStatus[s].join("\n")}`;
+            }
+          }
+        }
+        sections.push(section);
+      }
+      return sections.join("\n\n");
+    }
+
+    case "list_subscriptions": {
+      const status = (input.status as string) ?? "active";
+      const snap = await db.collection(`users/${uid}/subscriptions`).get();
+      const subs = snap.docs.map((d) => d.data()).filter((s) => (s.status ?? "active") === status);
+      if (subs.length === 0) return `No ${status} subscriptions.`;
+      const cycleMultiplier: Record<string, number> = { weekly: 4.33, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12 };
+      const monthlyTotal = subs.reduce((sum, s) => {
+        const m = cycleMultiplier[s.billing_cycle as string] ?? 1;
+        return sum + (s.amount as number) * m;
+      }, 0);
+      const lines = [`**Estimated monthly cost: $${monthlyTotal.toFixed(2)}** across ${subs.length} subscription(s)`];
+      subs.sort((a, b) => ((a.next_billing_date as string) ?? "").localeCompare((b.next_billing_date as string) ?? ""));
+      for (const s of subs) {
+        lines.push(`${s.name} — $${s.amount} ${s.billing_cycle}${s.next_billing_date ? `, next ${s.next_billing_date}` : ""} (${s.category ?? "Other"})`);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_memory": {
+      const snap = await db.collection(`users/${uid}/memory`).get();
+      const entries = snap.docs.map((d) => d.data());
+      const filtered = input.category
+        ? entries.filter((e) => (e.category as string)?.toLowerCase() === (input.category as string).toLowerCase())
+        : entries;
+      const populated = filtered.filter((e) => e.value);
+      if (populated.length === 0) return input.category ? `No memory entries in category "${input.category}".` : "No memory entries with values.";
+      const byCat: Record<string, string[]> = {};
+      for (const e of populated) {
+        const cat = (e.category as string) ?? "Other";
+        (byCat[cat] ??= []).push(`  ${e.key}: ${e.value}`);
+      }
+      const lines: string[] = [];
+      for (const [cat, items] of Object.entries(byCat)) {
+        lines.push(`[${cat}]`);
+        lines.push(...items);
+      }
+      return lines.join("\n");
+    }
+
+    case "get_notification_settings": {
+      const snap = await db.doc(`users/${uid}/settings/notifications`).get();
+      const raw = snap.data() as Record<string, unknown> | undefined;
+      const settings = mergeNotificationSettings(raw);
+      const snoozeUntil = (raw?.snooze_until as string | undefined) ?? (settings.snooze_until as string | undefined);
+      const lines = (Object.keys(settings) as Array<keyof typeof settings>).map((k) => {
+        const cat = settings[k] as { enabled: boolean; time?: string; day_of_week?: number; days_before?: number };
+        const parts: string[] = [`${cat.enabled ? "✅" : "⬜"} **${k}**`];
+        if (cat.time) parts.push(`at ${cat.time}`);
+        if (cat.day_of_week !== undefined) parts.push(`day ${cat.day_of_week}`);
+        if (cat.days_before !== undefined) parts.push(`${cat.days_before}d before`);
+        return parts.join(" ");
+      });
+      const snoozeNote = snoozeUntil ? `\n\n⏸ All notifications snoozed until **${snoozeUntil}**` : "";
+      return `**Notification Settings:**\n${lines.join("\n")}${snoozeNote}`;
+    }
+
+    case "update_notification_setting": {
+      const category = (input.category as string ?? "").trim();
+      const validCategories = [
+        "morning_briefing","streak_alert","task_reminder","goal_deadline","journal_reminder",
+        "health_reminder","weekly_review","birthday_reminder","savings_milestone","progress_midday",
+        "progress_evening","decision_review","networth_reminder","time_summary","goal_inactivity",
+        "subscription_renewal","spending_trend","season_checkin",
+      ];
+      if (!validCategories.includes(category)) {
+        return `Unknown category "${category}". Valid: ${validCategories.join(", ")}.`;
+      }
+      const update: Record<string, unknown> = {};
+      if (input.enabled !== undefined) update[`${category}.enabled`] = input.enabled;
+      if (input.time     !== undefined) update[`${category}.time`]    = input.time;
+      if (input.day_of_week !== undefined) update[`${category}.day_of_week`] = input.day_of_week;
+      if (input.days_before !== undefined) update[`${category}.days_before`] = input.days_before;
+      if (Object.keys(update).length === 0) {
+        return "Nothing to update — provide at least one of: enabled, time, day_of_week, days_before.";
+      }
+      await db.doc(`users/${uid}/settings/notifications`).set(update, { merge: true });
+      const summary = Object.entries(update)
+        .map(([k, v]) => `${k.split(".")[1]} → ${v}`)
+        .join(", ");
+      return `Updated **${category}**: ${summary}.`;
+    }
+
+    case "snooze_all_notifications": {
+      const until = (input.until as string ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(until)) {
+        return "until must be in YYYY-MM-DDTHH:MM format.";
+      }
+      await db.doc(`users/${uid}/settings/notifications`).set({ snooze_until: until }, { merge: true });
+      return `All notifications snoozed until **${until}**. One-off reminders are not affected and will still fire.`;
+    }
+
+    case "list_media": {
+      const limit = (input.limit as number) ?? 20;
+      const snap = await db.collection(`users/${uid}/media_history`)
+        .orderBy("played_at", "desc")
+        .limit(limit)
+        .get();
+      if (snap.empty) return "No media plays logged yet. The player will start tracking from now on.";
+
+      const sourceCounts: Record<string, number> = {};
+      const lines: string[] = [];
+      for (const doc of snap.docs) {
+        const m = doc.data();
+        let source = "Audio";
+        if (m.type === "youtube") {
+          source = "YouTube";
+        } else if (m.type === "suno") {
+          try {
+            const host = new URL(m.source_id as string).hostname;
+            if (host.endsWith(".public.blob.vercel-storage.com")) source = "The Crate";
+            else if (host === "suno.com" || host.endsWith(".suno.ai")) source = "Suno";
+          } catch { /* keep default */ }
+        }
+        sourceCounts[source] = (sourceCounts[source] ?? 0) + 1;
+        const ts = m.played_at as { toDate?: () => Date } | undefined;
+        const when = ts?.toDate ? ts.toDate().toISOString().slice(0, 16).replace("T", " ") : "?";
+        const sub = m.channel ? ` (${m.channel})` : "";
+        lines.push(`${when} — [${source}] ${m.title}${sub}`);
+      }
+
+      const summary = `**${snap.size} recent plays**: ${Object.entries(sourceCounts).map(([s, c]) => `${c} ${s}`).join(", ")}`;
+      return `${summary}\n\n${lines.join("\n")}`;
+    }
+
+    case "list_bible_reading": {
+      const limit = (input.limit as number) ?? 20;
+      const snap = await db
+        .collection(`users/${uid}/bible_reading`)
+        .orderBy("read_at", "desc")
+        .limit(limit)
+        .get();
+      if (snap.empty) {
+        return "No bible reading history yet. Reading is tracked from the /bible page — open a chapter to start building history.";
+      }
+
+      const bookCounts: Record<string, number> = {};
+      const lines: string[] = [];
+      for (const doc of snap.docs) {
+        const r = doc.data();
+        const book = r.book as string;
+        bookCounts[book] = (bookCounts[book] ?? 0) + 1;
+        const ts = r.read_at as { toDate?: () => Date } | undefined;
+        const when = ts?.toDate ? ts.toDate().toISOString().slice(0, 16).replace("T", " ") : "?";
+        lines.push(`${when} — ${r.reference} (${r.translation ?? "NET"})`);
+      }
+
+      const topBooks = Object.entries(bookCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5);
+      const summary = `**${snap.size} recent passages**${topBooks.length ? `, top books: ${topBooks.map(([b, c]) => `${b} (${c})`).join(", ")}` : ""}`;
+      return `${summary}\n\n${lines.join("\n")}`;
+    }
+
+    case "list_interactions": {
+      const end = (input.end_date as string) ?? today();
+      const start = (input.start_date as string) ?? daysAgo(end, 30);
+      const limit = (input.limit as number) ?? 30;
+      const typeFilter = input.type as string | undefined;
+      const nameSearch = (input.person_name_search as string | undefined)?.toLowerCase();
+
+      const peopleSnap = await db.collection(`users/${uid}/people`).get();
+      let people = peopleSnap.docs;
+      if (nameSearch) {
+        people = people.filter((p) => (p.data().name as string)?.toLowerCase().includes(nameSearch));
+      }
+      if (people.length === 0) {
+        return nameSearch ? `No contacts found matching "${input.person_name_search}".` : "No contacts in the CRM yet.";
+      }
+
+      const allInteractions: Array<{ person: string; type: string; date: string; notes?: string }> = [];
+      for (const p of people) {
+        const iSnap = await db.collection(`users/${uid}/people/${p.id}/interactions`).get();
+        for (const i of iSnap.docs) {
+          const d = i.data();
+          const dt = d.date as string;
+          if (!dt || dt < start || dt > end) continue;
+          if (typeFilter && d.type !== typeFilter) continue;
+          allInteractions.push({
+            person: p.data().name as string,
+            type: d.type as string,
+            date: dt,
+            notes: d.notes as string | undefined,
+          });
+        }
+      }
+
+      allInteractions.sort((a, b) => b.date.localeCompare(a.date));
+      const sliced = allInteractions.slice(0, limit);
+      if (sliced.length === 0) return `No interactions logged from ${start} to ${end}.`;
+      return sliced
+        .map((i) => `${i.date} — ${i.type} with ${i.person}${i.notes ? `: ${i.notes}` : ""}`)
+        .join("\n");
+    }
+
+    case "get_shopping_list": {
+      let weekStart = input.week_start as string | undefined;
+      if (!weekStart) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const ws = new Date(now);
+        ws.setUTCDate(now.getUTCDate() + diff);
+        weekStart = ws.toISOString().slice(0, 10);
+      }
+      const listSnap = await db.doc(`users/${uid}/shopping_lists/${weekStart}`).get();
+      if (!listSnap.exists) return `No shopping list found for week of ${weekStart}. Use generate_shopping_list to build one from the meal plan.`;
+      const data = listSnap.data() ?? {};
+      const items = (data.items ?? []) as Array<{ ingredient: string; amount: string; checked: boolean }>;
+      if (items.length === 0) return `Shopping list for week of ${weekStart} exists but is empty.`;
+      const unchecked = items.filter((i) => !i.checked);
+      const checked = items.filter((i) => i.checked);
+      const lines = [`**Shopping list — week of ${weekStart}** (${unchecked.length} to buy, ${checked.length} already checked off)`];
+      if (unchecked.length > 0) {
+        lines.push("\nTo buy:");
+        for (const i of unchecked) lines.push(`  [ ] ${i.ingredient} — ${i.amount}`);
+      }
+      if (checked.length > 0) {
+        lines.push("\nChecked off:");
+        for (const i of checked) lines.push(`  [x] ${i.ingredient} — ${i.amount}`);
+      }
+      return lines.join("\n");
+    }
+
+    // ── Firestore CRUD gap closure ────────────────────────────────────────────
+    case "delete_task": {
+      const doc = await findDoc(uid, "tasks", "title", input.title_search as string);
+      if (!doc) return `No task found matching "${input.title_search}".`;
+      const title = doc.data().title;
+      await doc.ref.delete();
+      return `Task "${title}" deleted.`;
+    }
+
+    case "update_habit": {
+      const doc = await findDoc(uid, "habits", "name", input.name_search as string);
+      if (!doc) return `No habit found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = {};
+      if (input.new_name !== undefined) updates.name = input.new_name;
+      if (input.new_category !== undefined) updates.category = input.new_category;
+      if (input.new_target_days !== undefined) updates.target_days = input.new_target_days;
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await doc.ref.update(updates);
+      return `Habit "${doc.data().name}" updated.`;
+    }
+
+    case "delete_habit": {
+      const doc = await findDoc(uid, "habits", "name", input.name_search as string);
+      if (!doc) return `No habit found matching "${input.name_search}".`;
+      const name = doc.data().name;
+      await doc.ref.delete();
+      return `Habit "${name}" deleted.`;
+    }
+
+    case "update_meal": {
+      const search = (input.description_search as string).toLowerCase();
+      const date = (input.date as string) ?? today();
+      const snap = await db.collection(`users/${uid}/nutrition`).where("date", "==", date).get();
+      const match = snap.docs.find((d) => (d.data().description as string)?.toLowerCase().includes(search));
+      if (!match) return `No meal found matching "${input.description_search}" on ${date}.`;
+      const updates: Record<string, unknown> = {};
+      if (input.new_description !== undefined) updates.description = input.new_description;
+      if (input.new_meal !== undefined) updates.meal = input.new_meal;
+      if (input.new_calories !== undefined) updates.calories_estimated = input.new_calories;
+      if (input.new_protein_g !== undefined) updates.protein_g = input.new_protein_g;
+      if (input.new_carbs_g !== undefined) updates.carbs_g = input.new_carbs_g;
+      if (input.new_fat_g !== undefined) updates.fat_g = input.new_fat_g;
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await match.ref.update(updates);
+      return `Meal entry updated for ${date}.`;
+    }
+
+    case "delete_meal": {
+      const search = (input.description_search as string).toLowerCase();
+      const date = (input.date as string) ?? today();
+      const snap = await db.collection(`users/${uid}/nutrition`).where("date", "==", date).get();
+      const match = snap.docs.find((d) => (d.data().description as string)?.toLowerCase().includes(search));
+      if (!match) return `No meal found matching "${input.description_search}" on ${date}.`;
+      const desc = match.data().description;
+      await match.ref.delete();
+      return `Deleted meal: ${desc} (${date}).`;
+    }
+
+    case "delete_health_log": {
+      const date = input.date as string;
+      const ref = db.doc(`users/${uid}/health/${date}`);
+      const snap = await ref.get();
+      if (!snap.exists) return `No health log for ${date}.`;
+      await ref.delete();
+      return `Health log for ${date} deleted.`;
+    }
+
+    case "update_journal_entry": {
+      const snap = await db.collection(`users/${uid}/journal`).get();
+      const date = input.date as string | undefined;
+      const search = (input.text_search as string | undefined)?.toLowerCase();
+      const match = snap.docs.find((d) => {
+        const data = d.data();
+        if (date && data.date !== date) return false;
+        if (search) {
+          const summary = ((data.ai_summary as string) ?? "").toLowerCase();
+          const transcript = ((data.raw_transcript as string) ?? "").toLowerCase();
+          return summary.includes(search) || transcript.includes(search);
+        }
+        return !!date;
+      });
+      if (!match) return `No journal entry found.`;
+      const updates: Record<string, unknown> = {};
+      if (input.new_raw_transcript !== undefined) updates.raw_transcript = input.new_raw_transcript;
+      if (input.new_ai_summary !== undefined) updates.ai_summary = input.new_ai_summary;
+      if (input.new_mood_score !== undefined) updates.mood_score = input.new_mood_score;
+      if (input.new_tags !== undefined) updates.tags = input.new_tags;
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await match.ref.update(updates);
+      return `Journal entry for ${match.data().date} updated.`;
+    }
+
+    case "delete_journal_entry": {
+      const snap = await db.collection(`users/${uid}/journal`).get();
+      const date = input.date as string | undefined;
+      const search = (input.text_search as string | undefined)?.toLowerCase();
+      const match = snap.docs.find((d) => {
+        const data = d.data();
+        if (date && data.date !== date) return false;
+        if (search) {
+          const summary = ((data.ai_summary as string) ?? "").toLowerCase();
+          const transcript = ((data.raw_transcript as string) ?? "").toLowerCase();
+          return summary.includes(search) || transcript.includes(search);
+        }
+        return !!date;
+      });
+      if (!match) return `No journal entry found.`;
+      const dateLabel = match.data().date;
+      await match.ref.delete();
+      return `Journal entry for ${dateLabel} deleted.`;
+    }
+
+    case "delete_goal": {
+      const doc = await findDoc(uid, "goals", "title", input.title_search as string);
+      if (!doc) return `No goal found matching "${input.title_search}".`;
+      const title = doc.data().title;
+      await doc.ref.delete();
+      return `Goal "${title}" deleted.`;
+    }
+
+    case "delete_subscription": {
+      const snap = await db.collection(`users/${uid}/subscriptions`).get();
+      const lower = (input.name_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower));
+      if (!match) return `No subscription found matching "${input.name_search}".`;
+      const name = match.data().name;
+      await match.ref.delete();
+      return `Subscription "${name}" deleted.`;
+    }
+
+    case "delete_memory": {
+      const snap = await db.collection(`users/${uid}/memory`).get();
+      const lower = (input.key as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().key as string)?.toLowerCase() === lower);
+      if (!match) return `No memory entry with key "${input.key}".`;
+      await match.ref.delete();
+      return `Memory "${input.key}" deleted.`;
+    }
+
+    case "update_project": {
+      const doc = await findDoc(uid, "projects", "name", input.name_search as string);
+      if (!doc) return `No project found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = {};
+      if (input.new_name !== undefined) updates.name = input.new_name;
+      if (input.new_description !== undefined) updates.description = input.new_description;
+      if (input.new_color_tag !== undefined) updates.color_tag = input.new_color_tag;
+      if (input.new_status !== undefined) updates.status = input.new_status;
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await doc.ref.update(updates);
+      return `Project "${doc.data().name}" updated.`;
+    }
+
+    case "delete_project": {
+      const doc = await findDoc(uid, "projects", "name", input.name_search as string);
+      if (!doc) return `No project found matching "${input.name_search}".`;
+      const projectName = doc.data().name as string;
+      // Cascade: delete all cards first
+      const cardsSnap = await db.collection(`users/${uid}/projects/${doc.id}/cards`).get();
+      const batch = db.batch();
+      for (const c of cardsSnap.docs) batch.delete(c.ref);
+      batch.delete(doc.ref);
+      await batch.commit();
+      return `Project "${projectName}" deleted (${cardsSnap.size} card${cardsSnap.size === 1 ? "" : "s"} removed).`;
+    }
+
+    case "update_project_card":
+    case "delete_project_card":
+    case "move_project_card": {
+      const project = await findDoc(uid, "projects", "name", input.project_name_search as string);
+      if (!project) return `No project found matching "${input.project_name_search}".`;
+      const cardsSnap = await db.collection(`users/${uid}/projects/${project.id}/cards`).get();
+      const cardSearch = (input.card_title_search as string).toLowerCase();
+      const cardDoc = cardsSnap.docs.find((c) => (c.data().title as string)?.toLowerCase().includes(cardSearch));
+      if (!cardDoc) return `No card found matching "${input.card_title_search}" in project "${project.data().name}".`;
+
+      if (toolName === "delete_project_card") {
+        const title = cardDoc.data().title;
+        await cardDoc.ref.delete();
+        return `Card "${title}" deleted from project "${project.data().name}".`;
+      }
+
+      const updates: Record<string, unknown> = {};
+      if (toolName === "move_project_card") {
+        updates.status = input.new_status;
+      } else {
+        if (input.new_title !== undefined) updates.title = input.new_title;
+        if (input.new_description !== undefined) updates.description = input.new_description;
+        if (input.new_status !== undefined) updates.status = input.new_status;
+        if (input.new_priority !== undefined) updates.priority = input.new_priority;
+      }
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await cardDoc.ref.update(updates);
+      return toolName === "move_project_card"
+        ? `Card "${cardDoc.data().title}" moved to ${input.new_status}.`
+        : `Card "${cardDoc.data().title}" updated.`;
+    }
+
+    case "update_recipe": {
+      const doc = await findDoc(uid, "recipes", "name", input.name_search as string);
+      if (!doc) return `No recipe found matching "${input.name_search}".`;
+      const updates: Record<string, unknown> = {};
+      if (input.new_name !== undefined) updates.name = input.new_name;
+      if (input.new_servings !== undefined) updates.servings = input.new_servings;
+      if (input.new_prep_time !== undefined) updates.prep_time = input.new_prep_time;
+      if (input.new_cook_time !== undefined) updates.cook_time = input.new_cook_time;
+      if (input.new_ingredients !== undefined) updates.ingredients = input.new_ingredients;
+      if (input.new_instructions !== undefined) updates.instructions = input.new_instructions;
+      if (input.new_calories !== undefined) updates.calories = input.new_calories;
+      if (input.new_protein !== undefined) updates.protein = input.new_protein;
+      if (input.new_carbs !== undefined) updates.carbs = input.new_carbs;
+      if (input.new_fat !== undefined) updates.fat = input.new_fat;
+      if (input.new_tags !== undefined) updates.tags = input.new_tags;
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await doc.ref.update(updates);
+      return `Recipe "${doc.data().name}" updated.`;
+    }
+
+    case "delete_recipe": {
+      const doc = await findDoc(uid, "recipes", "name", input.name_search as string);
+      if (!doc) return `No recipe found matching "${input.name_search}".`;
+      const name = doc.data().name;
+      await doc.ref.delete();
+      return `Recipe "${name}" deleted. (Meal plans referencing this recipe will now show a missing slot.)`;
+    }
+
+    case "unplan_meal": {
+      const date = input.date as string;
+      const slot = input.slot as string;
+      // Derive week start (Monday) — match existing plan_meal pattern
+      const d = new Date(date + "T12:00:00Z");
+      const day = d.getUTCDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setUTCDate(d.getUTCDate() + diff);
+      const weekStart = d.toISOString().slice(0, 10);
+
+      const planRef = db.doc(`users/${uid}/meal_plans/${weekStart}`);
+      const planSnap = await planRef.get();
+      if (!planSnap.exists) return `No meal plan exists for week of ${weekStart}.`;
+      const existing = planSnap.data() as Record<string, unknown>;
+      const days = (existing.days as Record<string, Record<string, unknown>>) ?? {};
+      if (!days[date]?.[slot]) return `No meal planned for ${date} ${slot}.`;
+      const dayCopy = { ...days[date] };
+      delete dayCopy[slot];
+      days[date] = dayCopy;
+      await planRef.set({ week_start: weekStart, days }, { merge: true });
+      return `Cleared ${slot} on ${date}.`;
+    }
+
+    case "update_interaction":
+    case "delete_interaction": {
+      // Find the person first
+      const pSnap = await db.collection(`users/${uid}/people`).get();
+      const search = (input.person_name_search as string).toLowerCase();
+      const person = pSnap.docs.find((p) => (p.data().name as string)?.toLowerCase().includes(search));
+      if (!person) return `No contact found matching "${input.person_name_search}".`;
+
+      // Find the interaction on that date
+      const iSnap = await db.collection(`users/${uid}/people/${person.id}/interactions`).get();
+      const targetDate = input.date as string;
+      const interaction = iSnap.docs.find((i) => i.data().date === targetDate);
+      if (!interaction) return `No interaction with ${person.data().name} found on ${targetDate}.`;
+
+      if (toolName === "delete_interaction") {
+        await interaction.ref.delete();
+        return `Deleted ${interaction.data().type} interaction with ${person.data().name} on ${targetDate}.`;
+      }
+
+      const updates: Record<string, unknown> = {};
+      if (input.new_type !== undefined) updates.type = input.new_type;
+      if (input.new_date !== undefined) updates.date = input.new_date;
+      if (input.new_notes !== undefined) updates.notes = input.new_notes;
+      if (Object.keys(updates).length === 0) return "No fields to update.";
+      await interaction.ref.update(updates);
+      return `Interaction with ${person.data().name} on ${targetDate} updated.`;
+    }
+
+    case "delete_person": {
+      const pSnap = await db.collection(`users/${uid}/people`).get();
+      const search = (input.name_search as string).toLowerCase();
+      const person = pSnap.docs.find((p) => (p.data().name as string)?.toLowerCase().includes(search));
+      if (!person) return `No contact found matching "${input.name_search}".`;
+      const name = person.data().name as string;
+      // Cascade: delete all interactions in the subcollection
+      const iSnap = await db.collection(`users/${uid}/people/${person.id}/interactions`).get();
+      const batch = db.batch();
+      for (const i of iSnap.docs) batch.delete(i.ref);
+      batch.delete(person.ref);
+      await batch.commit();
+      return `Contact "${name}" deleted (${iSnap.size} interaction${iSnap.size === 1 ? "" : "s"} removed).`;
+    }
+
+    case "update_second_brain_item": {
+      const path = input.path as string;
+      const snap = await db.collection(`users/${uid}/second_brain`).where("path", "==", path).get();
+      if (snap.empty) return `No note found at path "${path}".`;
+      await snap.docs[0].ref.update({ content: input.new_content, last_updated: new Date().toISOString() });
+      return `Note at "${path}" updated.`;
+    }
+
+    case "delete_second_brain_item": {
+      const path = input.path as string;
+      const snap = await db.collection(`users/${uid}/second_brain`).where("path", "==", path).get();
+      if (snap.empty) return `No note found at path "${path}".`;
+      await snap.docs[0].ref.delete();
+      return `Note at "${path}" deleted.`;
+    }
+
+    case "add_shopping_item":
+    case "update_shopping_item":
+    case "check_shopping_item":
+    case "delete_shopping_item":
+    case "clear_shopping_list": {
+      // Derive current week (Monday) for default
+      let weekStart = input.week_start as string | undefined;
+      if (!weekStart) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const ws = new Date(now);
+        ws.setUTCDate(now.getUTCDate() + diff);
+        weekStart = ws.toISOString().slice(0, 10);
+      }
+      const ref = db.doc(`users/${uid}/shopping_lists/${weekStart}`);
+      const snap = await ref.get();
+
+      if (toolName === "clear_shopping_list") {
+        if (!snap.exists) return `No shopping list to clear for week of ${weekStart}.`;
+        await ref.update({ items: [] });
+        return `Shopping list for week of ${weekStart} cleared.`;
+      }
+
+      type Item = { ingredient: string; amount: string; checked: boolean };
+      const data = snap.exists ? (snap.data() as { items?: Item[] }) : { items: [] };
+      const items = [...(data.items ?? [])];
+
+      if (toolName === "add_shopping_item") {
+        const ingredient = (input.ingredient as string).toLowerCase().trim();
+        if (items.some((i) => i.ingredient.toLowerCase() === ingredient)) {
+          return `"${input.ingredient}" is already on the list. Use update_shopping_item to change its amount.`;
+        }
+        items.push({
+          ingredient,
+          amount: (input.amount as string) ?? "",
+          checked: false,
+        });
+        await ref.set({ week_start: weekStart, items, generated_at: snap.exists ? data : new Date().toISOString() }, { merge: true });
+        return `Added "${input.ingredient}" to shopping list for week of ${weekStart}.`;
+      }
+
+      // For update/check/delete — find item by ingredient_search
+      const search = (input.ingredient_search as string).toLowerCase();
+      const idx = items.findIndex((i) => i.ingredient.toLowerCase().includes(search));
+      if (idx === -1) return `No shopping item matching "${input.ingredient_search}" for week of ${weekStart}.`;
+
+      if (toolName === "delete_shopping_item") {
+        const removed = items.splice(idx, 1)[0];
+        await ref.update({ items });
+        return `Removed "${removed.ingredient}" from shopping list.`;
+      }
+
+      if (toolName === "check_shopping_item") {
+        items[idx] = { ...items[idx], checked: input.checked as boolean };
+        await ref.update({ items });
+        return `${input.checked ? "Checked off" : "Unchecked"} "${items[idx].ingredient}".`;
+      }
+
+      // update_shopping_item
+      if (input.new_ingredient !== undefined) items[idx].ingredient = (input.new_ingredient as string).toLowerCase().trim();
+      if (input.new_amount !== undefined) items[idx].amount = input.new_amount as string;
+      await ref.update({ items });
+      return `Shopping item updated.`;
+    }
+
+    // ── Google Contacts (write operations via People API) ─────────────────────
+    case "list_google_contacts":
+    case "create_google_contact":
+    case "update_google_contact":
+    case "delete_google_contact": {
+      try {
+        const { refreshContactsToken } = await import("@/lib/contacts-token");
+        let accessToken: string;
+        try {
+          accessToken = await refreshContactsToken(uid);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Unknown";
+          return `Google Contacts needs to be reconnected (${msg}). Visit /people to reconnect — the OAuth scope was recently expanded to include write access.`;
+        }
+
+        const personFields = "names,emailAddresses,phoneNumbers,organizations,biographies";
+
+        if (toolName === "list_google_contacts") {
+          const params = new URLSearchParams({
+            personFields,
+            pageSize: String(Math.min((input.limit as number) ?? 50, 200)),
+          });
+          const res = await fetch(`https://people.googleapis.com/v1/people/me/connections?${params}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          const data = await res.json();
+          if (!res.ok) return `Google Contacts error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+          let connections = (data.connections ?? []) as Array<{
+            resourceName: string;
+            names?: Array<{ displayName?: string }>;
+            emailAddresses?: Array<{ value?: string }>;
+            phoneNumbers?: Array<{ value?: string }>;
+            organizations?: Array<{ name?: string }>;
+          }>;
+          if (input.search) {
+            const q = (input.search as string).toLowerCase();
+            connections = connections.filter((c) =>
+              (c.names?.[0]?.displayName ?? "").toLowerCase().includes(q)
+            );
+          }
+          if (connections.length === 0) return "No Google Contacts match.";
+          return connections.map((c) => {
+            const parts: string[] = [`**${c.names?.[0]?.displayName ?? "(no name)"}**`];
+            if (c.emailAddresses?.[0]?.value) parts.push(`✉ ${c.emailAddresses[0].value}`);
+            if (c.phoneNumbers?.[0]?.value) parts.push(`📞 ${c.phoneNumbers[0].value}`);
+            if (c.organizations?.[0]?.name) parts.push(`🏢 ${c.organizations[0].name}`);
+            parts.push(`id: ${c.resourceName}`);
+            return parts.join(" · ");
+          }).join("\n");
+        }
+
+        if (toolName === "create_google_contact") {
+          const body: Record<string, unknown> = {
+            names: [{ givenName: input.name as string }],
+          };
+          if (input.email) body.emailAddresses = [{ value: input.email }];
+          if (input.phone) body.phoneNumbers = [{ value: input.phone }];
+          if (input.company) body.organizations = [{ name: input.company }];
+          if (input.notes) body.biographies = [{ value: input.notes, contentType: "TEXT_PLAIN" }];
+
+          const res = await fetch("https://people.googleapis.com/v1/people:createContact", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+              return `Google Contacts permission denied. Reconnect Google Contacts at /people to grant the write scope.`;
+            }
+            return `Google Contacts error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+          }
+          return `Contact "${data.names?.[0]?.displayName ?? input.name}" added to Google Contacts.`;
+        }
+
+        // For update/delete — find by name first
+        const search = (input.name_search as string).toLowerCase();
+        const params = new URLSearchParams({ personFields, pageSize: "1000" });
+        const listRes = await fetch(`https://people.googleapis.com/v1/people/me/connections?${params}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const listData = await listRes.json();
+        if (!listRes.ok) return `Google Contacts lookup error: ${listData.error?.message ?? `HTTP ${listRes.status}`}`;
+        const connections = (listData.connections ?? []) as Array<{
+          resourceName: string;
+          etag: string;
+          names?: Array<{ displayName?: string }>;
+        }>;
+        const match = connections.find((c) =>
+          (c.names?.[0]?.displayName ?? "").toLowerCase().includes(search)
+        );
+        if (!match) return `No Google Contact found matching "${input.name_search}".`;
+
+        if (toolName === "delete_google_contact") {
+          const res = await fetch(
+            `https://people.googleapis.com/v1/${match.resourceName}:deleteContact`,
+            { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (res.status === 204 || res.status === 200) {
+            return `Deleted "${match.names?.[0]?.displayName ?? input.name_search}" from Google Contacts.`;
+          }
+          const data = await res.json().catch(() => ({}));
+          return `Google Contacts error: ${(data as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`}`;
+        }
+
+        // update_google_contact — must include etag + updatePersonFields query param
+        const updateFields: string[] = [];
+        const patch: Record<string, unknown> = { etag: match.etag };
+        if (input.new_name !== undefined) {
+          patch.names = [{ givenName: input.new_name }];
+          updateFields.push("names");
+        }
+        if (input.new_email !== undefined) {
+          patch.emailAddresses = [{ value: input.new_email }];
+          updateFields.push("emailAddresses");
+        }
+        if (input.new_phone !== undefined) {
+          patch.phoneNumbers = [{ value: input.new_phone }];
+          updateFields.push("phoneNumbers");
+        }
+        if (input.new_company !== undefined) {
+          patch.organizations = [{ name: input.new_company }];
+          updateFields.push("organizations");
+        }
+        if (input.new_notes !== undefined) {
+          patch.biographies = [{ value: input.new_notes, contentType: "TEXT_PLAIN" }];
+          updateFields.push("biographies");
+        }
+        if (updateFields.length === 0) return "No fields to update.";
+
+        const updateUrl = `https://people.googleapis.com/v1/${match.resourceName}:updateContact?updatePersonFields=${updateFields.join(",")}`;
+        const updateRes = await fetch(updateUrl, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        const updateData = await updateRes.json();
+        if (!updateRes.ok) return `Google Contacts error: ${updateData.error?.message ?? `HTTP ${updateRes.status}`}`;
+        return `Contact "${updateData.names?.[0]?.displayName ?? match.names?.[0]?.displayName}" updated.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Google Contacts operation failed: ${msg}`;
+      }
+    }
+
+    // ── Drive (write operations) ──────────────────────────────────────────────
+    case "upload_drive_file":
+    case "create_drive_folder": {
+      try {
+        const { refreshDriveToken } = await import("@/lib/drive-token");
+        const accessToken = await refreshDriveToken(uid);
+
+        if (toolName === "create_drive_folder") {
+          const body: Record<string, unknown> = {
+            name: input.name,
+            mimeType: "application/vnd.google-apps.folder",
+          };
+          if (input.parent_folder_id) body.parents = [input.parent_folder_id];
+          const res = await fetch("https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Drive error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+          return `Folder "${data.name}" created (id: ${data.id}).`;
+        }
+
+        // upload_drive_file — multipart upload
+        const sourceMime = (input.mime_type as string) ?? "text/plain";
+        const metadata: Record<string, unknown> = { name: input.name };
+        if (input.parent_folder_id) metadata.parents = [input.parent_folder_id];
+        if (sourceMime === "application/vnd.google-apps.document") {
+          metadata.mimeType = "application/vnd.google-apps.document";
+        }
+
+        const boundary = `----------os-${Date.now()}`;
+        const head =
+          `--${boundary}\r\n` +
+          `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+          JSON.stringify(metadata) +
+          `\r\n--${boundary}\r\n` +
+          `Content-Type: ${sourceMime === "application/vnd.google-apps.document" ? "text/plain" : sourceMime}\r\n\r\n`;
+        const tail = `\r\n--${boundary}--`;
+        const body = Buffer.concat([
+          Buffer.from(head, "utf8"),
+          Buffer.from(input.content as string, "utf8"),
+          Buffer.from(tail, "utf8"),
+        ]);
+
+        const res = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": `multipart/related; boundary=${boundary}`,
+              "Content-Length": String(body.length),
+            },
+            body: new Uint8Array(body),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Drive error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+        return `Uploaded "${data.name}" to Drive (id: ${data.id}).${data.webViewLink ? `\nLink: ${data.webViewLink}` : ""}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Drive upload failed: ${msg}`;
+      }
+    }
+
+    case "update_drive_file": {
+      try {
+        const { refreshDriveToken } = await import("@/lib/drive-token");
+        const accessToken = await refreshDriveToken(uid);
+        const mimeType = (input.mime_type as string) ?? "text/plain";
+        const fileId = encodeURIComponent(input.file_id as string);
+        const res = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+          {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": mimeType },
+            body: input.content as string,
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Drive error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+        return `File ${data.id} updated.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Drive update failed: ${msg}`;
+      }
+    }
+
+    case "rename_drive_file": {
+      try {
+        const { refreshDriveToken } = await import("@/lib/drive-token");
+        const accessToken = await refreshDriveToken(uid);
+        const fileId = encodeURIComponent(input.file_id as string);
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name`,
+          {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: input.new_name }),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Drive error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+        return `File renamed to "${data.name}".`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Drive rename failed: ${msg}`;
+      }
+    }
+
+    case "move_drive_file": {
+      try {
+        const { refreshDriveToken } = await import("@/lib/drive-token");
+        const accessToken = await refreshDriveToken(uid);
+        const fileId = encodeURIComponent(input.file_id as string);
+        // Need current parents to remove them
+        const getRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const getData = await getRes.json();
+        if (!getRes.ok) return `Drive error: ${getData.error?.message ?? `HTTP ${getRes.status}`}`;
+        const currentParents = (getData.parents ?? []) as string[];
+
+        const params = new URLSearchParams({
+          addParents: input.new_parent_folder_id as string,
+          removeParents: currentParents.join(","),
+          fields: "id,name,parents",
+        });
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?${params}`,
+          { method: "PATCH", headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Drive error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+        return `File "${data.name}" moved to folder ${input.new_parent_folder_id}.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Drive move failed: ${msg}`;
+      }
+    }
+
+    case "delete_drive_file": {
+      try {
+        const { refreshDriveToken } = await import("@/lib/drive-token");
+        const accessToken = await refreshDriveToken(uid);
+        const fileId = encodeURIComponent(input.file_id as string);
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}`,
+          { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (res.status === 204 || res.status === 200) return `File ${input.file_id} deleted.`;
+        const data = await res.json().catch(() => ({}));
+        return `Drive error: ${(data as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Drive delete failed: ${msg}`;
+      }
+    }
+
+    case "share_drive_file": {
+      try {
+        const { refreshDriveToken } = await import("@/lib/drive-token");
+        const accessToken = await refreshDriveToken(uid);
+        const fileId = encodeURIComponent(input.file_id as string);
+        const role = (input.role as string) ?? "reader";
+
+        const permission: Record<string, unknown> = { role };
+        if (input.anyone_with_link) {
+          permission.type = "anyone";
+        } else if (input.email) {
+          permission.type = "user";
+          permission.emailAddress = input.email;
+        } else {
+          return "Provide either an email to share with or set anyone_with_link to true.";
+        }
+
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?fields=id,type,role`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(permission),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Drive error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+        return input.anyone_with_link
+          ? `File is now accessible by anyone with the link (${role}).`
+          : `Shared with ${input.email} as ${role}.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Drive share failed: ${msg}`;
+      }
+    }
+
+    // ── Gmail (write operations) ──────────────────────────────────────────────
+    case "send_email":
+    case "reply_to_email": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+
+        // Helper to base64url-encode a UTF-8 string (RFC 4648 §5).
+        const b64url = (s: string): string =>
+          Buffer.from(s, "utf8")
+            .toString("base64")
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_")
+            .replace(/=+$/, "");
+
+        let to: string;
+        let cc: string | undefined;
+        let bcc: string | undefined;
+        let subject: string;
+        const body = input.body as string;
+        let threadId: string | undefined;
+        let inReplyTo: string | undefined;
+        let references: string | undefined;
+
+        if (toolName === "reply_to_email") {
+          // Fetch original message to extract headers + thread
+          const origRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(input.message_id as string)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Message-Id&metadataHeaders=References`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          const orig = await origRes.json();
+          if (!origRes.ok) return `Gmail error: ${orig.error?.message ?? "could not fetch original"}`;
+          const headers: { name: string; value: string }[] = orig.payload?.headers ?? [];
+          const getH = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+          threadId = orig.threadId;
+          const origSubject = getH("Subject");
+          subject = origSubject.toLowerCase().startsWith("re:") ? origSubject : `Re: ${origSubject}`;
+          to = getH("From");
+          if (input.reply_all) {
+            const origTo = getH("To");
+            const origCc = getH("Cc");
+            cc = [origTo, origCc].filter(Boolean).join(", ") || undefined;
+          }
+          inReplyTo = getH("Message-Id");
+          const origRefs = getH("References");
+          references = [origRefs, inReplyTo].filter(Boolean).join(" ");
+        } else {
+          to = input.to as string;
+          cc = input.cc as string | undefined;
+          bcc = input.bcc as string | undefined;
+          subject = input.subject as string;
+        }
+
+        // Build RFC 2822 message
+        const lines: string[] = [`To: ${to}`];
+        if (cc) lines.push(`Cc: ${cc}`);
+        if (bcc) lines.push(`Bcc: ${bcc}`);
+        lines.push(`Subject: ${subject}`);
+        if (inReplyTo) lines.push(`In-Reply-To: ${inReplyTo}`);
+        if (references) lines.push(`References: ${references}`);
+        lines.push(`Content-Type: text/plain; charset="UTF-8"`);
+        lines.push(`MIME-Version: 1.0`);
+        lines.push("");
+        lines.push(body);
+        const raw = b64url(lines.join("\r\n"));
+
+        const sendBody: Record<string, unknown> = { raw };
+        if (threadId) sendBody.threadId = threadId;
+
+        const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(sendBody),
+        });
+        const data = await res.json();
+        if (!res.ok) return `Gmail error: ${data.error?.message ?? "send failed"}`;
+        return toolName === "reply_to_email"
+          ? `Reply sent in thread ${threadId}.`
+          : `Email sent to ${to} (subject: "${subject}").`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail send failed: ${msg}`;
+      }
+    }
+
+    case "archive_email":
+    case "trash_email":
+    case "mark_email_read":
+    case "mark_email_unread":
+    case "label_email": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const messageId = encodeURIComponent(input.message_id as string);
+
+        if (toolName === "trash_email") {
+          const res = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`,
+            { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            return `Gmail error: ${(data as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`}`;
+          }
+          return `Email moved to Trash.`;
+        }
+
+        // Modify labels
+        let addLabelIds: string[] = [];
+        let removeLabelIds: string[] = [];
+
+        if (toolName === "archive_email") {
+          removeLabelIds = ["INBOX"];
+        } else if (toolName === "mark_email_read") {
+          removeLabelIds = ["UNREAD"];
+        } else if (toolName === "mark_email_unread") {
+          addLabelIds = ["UNREAD"];
+        } else if (toolName === "label_email") {
+          // Look up label id by name
+          const labelsRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          const labelsData = await labelsRes.json();
+          if (!labelsRes.ok) return `Gmail error: ${labelsData.error?.message ?? "labels lookup failed"}`;
+          const labels = (labelsData.labels ?? []) as Array<{ id: string; name: string }>;
+          const labelName = (input.label_name as string).toLowerCase();
+          const match = labels.find((l) => l.name.toLowerCase() === labelName);
+          if (!match) return `No label named "${input.label_name}" exists. Use create_gmail_label first or list_gmail_labels to see what's available.`;
+          if (input.add) addLabelIds = [match.id];
+          else removeLabelIds = [match.id];
+        }
+
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ addLabelIds, removeLabelIds }),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) return `Gmail error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+
+        const labelDescription =
+          toolName === "archive_email" ? "archived"
+          : toolName === "mark_email_read" ? "marked read"
+          : toolName === "mark_email_unread" ? "marked unread"
+          : `label "${input.label_name}" ${input.add ? "added" : "removed"}`;
+        return `Email ${labelDescription}.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail operation failed: ${msg}`;
+      }
+    }
+
+    case "list_gmail_labels": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const data = await res.json();
+        if (!res.ok) return `Gmail error: ${data.error?.message ?? "labels lookup failed"}`;
+        const labels = (data.labels ?? []) as Array<{ id: string; name: string; type: string }>;
+        const userLabels = labels.filter((l) => l.type === "user").map((l) => l.name).sort();
+        const systemLabels = labels.filter((l) => l.type === "system").map((l) => l.name).sort();
+        const parts: string[] = [];
+        if (userLabels.length) parts.push(`**User labels (${userLabels.length}):** ${userLabels.join(", ")}`);
+        if (systemLabels.length) parts.push(`**System labels:** ${systemLabels.join(", ")}`);
+        return parts.length ? parts.join("\n") : "No labels found.";
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail labels lookup failed: ${msg}`;
+      }
+    }
+
+    case "create_gmail_label": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: input.name, labelListVisibility: "labelShow", messageListVisibility: "show" }),
+        });
+        const data = await res.json();
+        if (!res.ok) return `Gmail error: ${data.error?.message ?? `HTTP ${res.status}`}`;
+        return `Label "${data.name}" created.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail label create failed: ${msg}`;
+      }
+    }
+
+    case "delete_gmail_label": {
+      try {
+        const accessToken = await refreshGmailToken(uid);
+        // Find label id by name
+        const labelsRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const labelsData = await labelsRes.json();
+        if (!labelsRes.ok) return `Gmail error: ${labelsData.error?.message ?? "labels lookup failed"}`;
+        const labels = (labelsData.labels ?? []) as Array<{ id: string; name: string }>;
+        const name = (input.name as string).toLowerCase();
+        const match = labels.find((l) => l.name.toLowerCase() === name);
+        if (!match) return `No label named "${input.name}" exists.`;
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/labels/${encodeURIComponent(match.id)}`,
+          { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (res.status === 204 || res.status === 200) return `Label "${input.name}" deleted.`;
+        const data = await res.json().catch(() => ({}));
+        return `Gmail error: ${(data as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Gmail label delete failed: ${msg}`;
+      }
+    }
+
+    // ── Calendar (write CRUD) ─────────────────────────────────────────────────
+    case "update_calendar_event":
+    case "delete_calendar_event":
+    case "get_calendar_event": {
+      try {
+        const accessToken = await refreshCalendarToken(uid);
+
+        // Resolve event_id — either passed directly, or look up by title + date.
+        let eventId = input.event_id as string | undefined;
+        if (!eventId) {
+          const titleSearch = (input.title_search as string | undefined)?.toLowerCase();
+          const date = input.date as string | undefined;
+          if (!titleSearch || !date) {
+            return "Provide either event_id, or both title_search and date (YYYY-MM-DD).";
+          }
+          const timeMin = new Date(date + "T00:00:00").toISOString();
+          const timeMax = new Date(date + "T23:59:59").toISOString();
+          const listUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=50`;
+          const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const listData = await listRes.json();
+          if (!listRes.ok) return `Calendar lookup error: ${listData.error?.message ?? "Unknown"}`;
+          const events = (listData.items ?? []) as Array<{ id: string; summary?: string }>;
+          const matches = events.filter((e) => (e.summary ?? "").toLowerCase().includes(titleSearch));
+          if (matches.length === 0) return `No event matching "${input.title_search}" found on ${date}.`;
+          if (matches.length > 1) {
+            return `Multiple events match "${input.title_search}" on ${date}: ${matches.map((m) => `"${m.summary ?? "(no title)"}" (id: ${m.id})`).join("; ")}. Pass event_id to disambiguate.`;
+          }
+          eventId = matches[0].id;
+        }
+
+        const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`;
+
+        if (toolName === "get_calendar_event") {
+          const res = await fetch(baseUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const data = await res.json();
+          if (!res.ok) return `Calendar error: ${data.error?.message ?? "Unknown"}`;
+          const start = data.start?.dateTime ?? data.start?.date ?? "?";
+          const end = data.end?.dateTime ?? data.end?.date ?? "?";
+          const parts = [
+            `**${data.summary ?? "(no title)"}**`,
+            `${start} → ${end}`,
+          ];
+          if (data.location) parts.push(`Location: ${data.location}`);
+          if (data.description) parts.push(`Notes: ${data.description}`);
+          if (data.attendees?.length) parts.push(`Attendees: ${(data.attendees as Array<{ email: string }>).map((a) => a.email).join(", ")}`);
+          parts.push(`(id: ${data.id})`);
+          return parts.join("\n");
+        }
+
+        if (toolName === "delete_calendar_event") {
+          const res = await fetch(baseUrl, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
+          if (res.status === 204 || res.status === 200) return `Event ${eventId} deleted.`;
+          const data = await res.json().catch(() => ({}));
+          return `Calendar error: ${(data as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`}`;
+        }
+
+        // update_calendar_event — patch only the fields the user supplied
+        const patch: Record<string, unknown> = {};
+        if (input.new_title !== undefined) patch.summary = input.new_title;
+        if (input.new_location !== undefined) patch.location = input.new_location;
+        if (input.new_description !== undefined) patch.description = input.new_description;
+        if (input.new_start_datetime !== undefined) patch.start = { dateTime: input.new_start_datetime, timeZone: "America/New_York" };
+        if (input.new_end_datetime !== undefined) patch.end = { dateTime: input.new_end_datetime, timeZone: "America/New_York" };
+        if (Object.keys(patch).length === 0) return "No fields to update — provide at least one new_* field.";
+
+        const res = await fetch(baseUrl, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        const data = await res.json();
+        if (!res.ok) return `Calendar error: ${data.error?.message ?? "Unknown"}`;
+        return `Event "${data.summary ?? eventId}" updated.`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        return `Calendar operation failed: ${msg}`;
+      }
+    }
+
+    // ── News Feed ────────────────────────────────────────────────────────────
+    case "get_news_feed": {
+      const status = (input.status as string) || "unread";
+      const lim    = (input.limit  as number) || 10;
+      const tag    = input.tag as string | undefined;
+
+      let q = db.collection(`users/${uid}/news_items`).where("status", "==", status);
+      if (tag) q = q.where("tags", "array-contains", tag);
+      const snap = await q.orderBy("relevance_score", "desc").limit(lim).get();
+
+      if (snap.empty) return `No ${status} news items found.`;
+      const lines = snap.docs.map((d) => {
+        const n = d.data();
+        return `- [${n.relevance_score}/10] **${n.title}** (${n.feed_name}) — ${n.url}`;
+      });
+      return `**${status} news** (${lines.length} items):\n${lines.join("\n")}`;
+    }
+
+    case "save_article": {
+      const now = new Date().toISOString();
+      await db.collection(`users/${uid}/books`).add({
+        title:      input.title as string,
+        author:     (input.feed_name as string) || "Unknown",
+        status:     "want_to_read",
+        highlights: [],
+        url:        input.url as string,
+        tags:       (input.tags as string[]) ?? [],
+        created_at: now,
+        updated_at: now,
+      });
+      return `"${input.title as string}" saved to your reading list.`;
+    }
+
+    case "add_news_feed": {
+      const now = new Date().toISOString();
+      const ref = await db.collection(`users/${uid}/news_feeds`).add({
+        name:       input.name as string,
+        url:        input.url  as string,
+        type:       input.type as string,
+        tags:       (input.tags as string[]) ?? [],
+        enabled:    true,
+        created_at: now,
+      });
+      await ref.update({ id: ref.id });
+      return `Feed "${input.name as string}" added. It will appear in your next hourly refresh.`;
+    }
+
+    // ── Weather ───────────────────────────────────────────────────────────────
+    case "get_weather": {
+      const weatherSnap = await db.doc(`users/${uid}/settings/weather`).get();
+      if (!weatherSnap.exists) {
+        return "Weather location not configured. Ask the user to go to Settings and detect their location.";
+      }
+      const { latitude, longitude, city, units } = weatherSnap.data() as {
+        latitude: number; longitude: number; city: string; units: "fahrenheit" | "celsius";
+      };
+      const wd = await fetchWeatherData(latitude, longitude, units ?? "fahrenheit", city);
+      const deg = wd.units === "celsius" ? "°C" : "°F";
+      const nextThree = wd.daily.slice(1, 4).map((d) =>
+        `${d.date}: ${d.condition}, High ${d.temp_max}${deg}, Low ${d.temp_min}${deg}`
+      ).join("\n");
+      return `**Current weather in ${wd.city}:** ${wd.current.condition}, ${wd.current.temp}${deg} (feels like ${wd.current.feels_like}${deg}). Humidity ${wd.current.humidity}%, Wind ${wd.current.wind_speed} ${wd.units === "fahrenheit" ? "mph" : "km/h"}. UV index ${wd.current.uv_index}.\n**Today:** High ${wd.daily[0].temp_max}${deg}, Low ${wd.daily[0].temp_min}${deg}.\n**Next 3 days:**\n${nextThree}`;
+    }
+
+    case "create_reminder": {
+      const text = (input.text as string ?? "").trim();
+      const fire_at = (input.fire_at as string ?? "").trim();
+      if (!text || !fire_at) return "Missing text or fire_at.";
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(fire_at)) {
+        return "fire_at must be in YYYY-MM-DDTHH:MM format (e.g. 2026-06-04T10:00).";
+      }
+      const tzDoc = await db.doc(`users/${uid}/settings/timezone`).get();
+      const tz = (tzDoc.data()?.home_timezone ?? tzDoc.data()?.current_timezone ?? "UTC") as string;
+      const ref = await db.collection(`users/${uid}/reminders`).add({
+        text,
+        fire_at,
+        tz,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      });
+      return `Reminder set ✓ (id: ${ref.id}). I'll push a notification with "${text}" at ${fire_at} (${tz}).`;
+    }
+
+    case "list_reminders": {
+      const snap = await db.collection(`users/${uid}/reminders`)
+        .where("status", "==", "pending")
+        .orderBy("fire_at", "asc")
+        .get();
+      if (snap.empty) return "No pending reminders.";
+      const lines = snap.docs.map((d) => {
+        const r = d.data();
+        return `• [${d.id}] "${r.text}" at ${r.fire_at} (${r.tz})`;
+      });
+      return `**Pending reminders:**\n${lines.join("\n")}`;
+    }
+
+    case "cancel_reminder": {
+      const id = (input.id as string ?? "").trim();
+      if (!id) return "Missing reminder id.";
+      const ref = db.doc(`users/${uid}/reminders/${id}`);
+      const snap = await ref.get();
+      if (!snap.exists) return `No reminder found with id ${id}.`;
+      const r = snap.data()!;
+      if (r.status !== "pending") return `Reminder is already ${r.status as string}.`;
+      await ref.update({ status: "cancelled" });
+      return `Reminder cancelled: "${r.text as string}" scheduled for ${r.fire_at as string}.`;
+    }
+
+    case "get_app_settings": {
+      const [tzSnap, wxSnap] = await Promise.all([
+        db.doc(`users/${uid}/settings/timezone`).get(),
+        db.doc(`users/${uid}/settings/weather`).get(),
+      ]);
+      const tz = tzSnap.data() ?? {};
+      const wx = wxSnap.data() ?? {};
+      return [
+        `**Home timezone:** ${(tz.home_timezone ?? tz.current_timezone ?? "not set") as string}`,
+        `**Weather location:** ${(wx.city ?? "not set") as string}`,
+        `**Weather units:** ${(wx.units ?? "fahrenheit") as string}`,
+      ].join("\n");
+    }
+
+    case "update_app_setting": {
+      const setting = (input.setting as string ?? "").trim();
+      const value   = (input.value   as string ?? "").trim();
+      if (!value) return "Value cannot be empty.";
+
+      if (setting === "home_timezone") {
+        // Validate IANA timezone
+        try {
+          Intl.DateTimeFormat(undefined, { timeZone: value });
+        } catch {
+          return `Invalid timezone "${value}". Use an IANA timezone name, e.g. "America/Chicago".`;
+        }
+        await db.doc(`users/${uid}/settings/timezone`).set(
+          { home_timezone: value, updated_at: new Date().toISOString() },
+          { merge: true }
+        );
+        return `Home timezone updated to **${value}**.`;
+      }
+
+      if (setting === "weather_units") {
+        if (value !== "fahrenheit" && value !== "celsius") {
+          return "weather_units must be 'fahrenheit' or 'celsius'.";
+        }
+        await db.doc(`users/${uid}/settings/weather`).set({ units: value }, { merge: true });
+        return `Weather units updated to **${value}**.`;
+      }
+
+      if (setting === "weather_location") {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=1`,
+          { headers: { "User-Agent": "personal-os/1.0" } }
+        );
+        const geoData = await geoRes.json() as Array<{ lat: string; lon: string; display_name: string }>;
+        if (!geoData.length) {
+          return `Could not find "${value}". Try a more specific name, e.g. "Austin, Texas".`;
+        }
+        const { lat, lon, display_name } = geoData[0];
+        const city = display_name.split(",").slice(0, 2).join(",").trim();
+        await db.doc(`users/${uid}/settings/weather`).set(
+          { latitude: parseFloat(lat), longitude: parseFloat(lon), city },
+          { merge: true }
+        );
+        return `Weather location updated to **${city}** (${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}).`;
+      }
+
+      return `Unknown setting "${setting}". Valid: home_timezone, weather_units, weather_location.`;
+    }
+
+    case "get_dashboard_layout": {
+      const snap = await db.doc(`users/${uid}/settings/dashboard`).get();
+      const data  = snap.data() ?? {};
+      const hidden: string[] = data.hiddenWidgets ?? [];
+      const order:  string[] = data.widgetOrder   ?? [];
+
+      const LABELS: Record<string, string> = {
+        what_matters:"What Actually Matters", system_audit:"System Audit", xp:"XP / Level",
+        quick_links:"Quick Links", daily_briefing:"AI Briefing", insights:"AI Insights",
+        decision_review:"Decision Reviews", birthday:"Upcoming Birthdays", verse:"Verse of the Day",
+        tasks_habits:"Tasks & Habits", hydration_mood:"Hydration & Mood",
+        calendar_nutrition:"Calendar & Nutrition", health_journal:"Health & Journal",
+        goals_projects:"Goals & Projects", finance:"Finance Summary", budget_savings:"Budget & Savings",
+        weekly_review:"Weekly Review", api_usage:"API Usage", email_agent:"Email Agent",
+        unsubscribe:"Unsubscribe Manager", gmail:"Gmail Inbox", achievements:"Achievements",
+        news_feed:"News Feed", weather:"Weather",
+      };
+
+      const visible = order.filter(id => !hidden.includes(id)).map((id, i) => `${i + 1}. ${LABELS[id] ?? id}`);
+      const hiddenLabels = hidden.map(id => LABELS[id] ?? id);
+      return [
+        `**Visible (top → bottom):**\n${visible.join("\n") || "(none)"}`,
+        hiddenLabels.length ? `\n**Hidden:** ${hiddenLabels.join(", ")}` : "",
+      ].join("");
+    }
+
+    case "manage_dashboard": {
+      const action      = (input.action as string ?? "").trim();
+      const widgetInput = (input.widget as string ?? "").toLowerCase().trim();
+
+      const LABELS: Record<string, string> = {
+        what_matters:"what actually matters", system_audit:"system audit", xp:"xp / level",
+        quick_links:"quick links", daily_briefing:"ai briefing", insights:"ai insights",
+        decision_review:"decision reviews", birthday:"upcoming birthdays", verse:"verse of the day",
+        tasks_habits:"tasks & habits", hydration_mood:"hydration & mood",
+        calendar_nutrition:"calendar & nutrition", health_journal:"health & journal",
+        goals_projects:"goals & projects", finance:"finance summary", budget_savings:"budget & savings",
+        weekly_review:"weekly review", api_usage:"api usage", email_agent:"email agent",
+        unsubscribe:"unsubscribe manager", gmail:"gmail inbox", achievements:"achievements",
+        news_feed:"news feed", weather:"weather",
+      };
+
+      const widgetId =
+        // Exact match first
+        Object.entries(LABELS).find(([, label]) => label === widgetInput)?.[0] ??
+        // Fuzzy fallback
+        Object.entries(LABELS).find(([, label]) =>
+          label.includes(widgetInput) || widgetInput.includes(label)
+        )?.[0];
+      if (!widgetId) {
+        return `Widget "${input.widget as string}" not found. Valid widgets: ${Object.values(LABELS).join(", ")}.`;
+      }
+
+      const snap = await db.doc(`users/${uid}/settings/dashboard`).get();
+      const data  = snap.data() ?? {};
+      const allIds = Object.keys(LABELS);
+      let order:  string[] = data.widgetOrder?.length  ? [...data.widgetOrder]  : [...allIds];
+      let hidden: string[] = data.hiddenWidgets?.length ? [...data.hiddenWidgets] : [];
+
+      if (!order.includes(widgetId)) order.push(widgetId);
+
+      if (action === "hide") {
+        if (!hidden.includes(widgetId)) hidden.push(widgetId);
+      } else if (action === "show") {
+        hidden = hidden.filter((id: string) => id !== widgetId);
+      } else if (action === "move_to_top") {
+        order = [widgetId, ...order.filter((id: string) => id !== widgetId)];
+      } else if (action === "move_to_bottom") {
+        order = [...order.filter((id: string) => id !== widgetId), widgetId];
+      } else if (action === "move_up") {
+        const idx = order.indexOf(widgetId);
+        if (idx > 0) [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+      } else if (action === "move_down") {
+        const idx = order.indexOf(widgetId);
+        if (idx < order.length - 1) [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
+      } else {
+        return `Unknown action "${action}". Valid: show, hide, move_to_top, move_to_bottom, move_up, move_down.`;
+      }
+
+      await db.doc(`users/${uid}/settings/dashboard`).set({ widgetOrder: order, hiddenWidgets: hidden });
+      const displayLabel = Object.entries(LABELS).find(([id]) => id === widgetId)?.[1] ?? widgetId;
+      return `Dashboard updated: **${displayLabel}** → ${action.replace(/_/g, " ")}.`;
+    }
+
+    case "get_integration_status": {
+      const [gmailSnap, healthSnap, contactsSnap, calendarSnap, driveSnap, plaidSettingsSnap] =
+        await Promise.all([
+          db.doc(`users/${uid}/integrations/gmail`).get(),
+          db.doc(`users/${uid}/integrations/google_health`).get(),
+          db.doc(`users/${uid}/integrations/google_contacts`).get(),
+          db.doc(`users/${uid}/integrations/google_calendar`).get(),
+          db.doc(`users/${uid}/integrations/google_drive`).get(),
+          db.doc(`users/${uid}/settings/plaid`).get(),
+        ]);
+
+      const connected = (snap: FirebaseFirestore.DocumentSnapshot, tokenField = "access_token") => {
+        if (!snap.exists) return false;
+        const d = snap.data()!;
+        return !!(d[tokenField] || d.access_token_encrypted || d.refresh_token);
+      };
+      const lastSync = (snap: FirebaseFirestore.DocumentSnapshot, field = "last_synced") =>
+        (snap.data()?.[field] as string | undefined)?.slice(0, 10) ?? "unknown";
+
+      const plaidItemsSnap = await db.collection(`users/${uid}/plaid_items`).limit(1).get();
+      const plaidConnected = !plaidItemsSnap.empty;
+
+      return [
+        `**Gmail:** ${connected(gmailSnap) ? `✅ Connected` : "❌ Not connected"}`,
+        `**Plaid:** ${plaidConnected ? `✅ Connected (last sync: ${lastSync(plaidSettingsSnap)})` : "❌ Not connected"}`,
+        `**Google Health:** ${connected(healthSnap) ? `✅ Connected (last sync: ${lastSync(healthSnap, "last_sync")})` : "❌ Not connected"}`,
+        `**Google Contacts:** ${connected(contactsSnap) ? `✅ Connected (last sync: ${lastSync(contactsSnap)})` : "❌ Not connected"}`,
+        `**Google Calendar:** ${connected(calendarSnap) ? `✅ Connected` : "❌ Not connected"}`,
+        `**Google Drive:** ${connected(driveSnap) ? `✅ Connected` : "❌ Not connected"}`,
+      ].join("\n");
+    }
+
+    case "trigger_plaid_sync": {
+      try {
+        const { recurring_count, transaction_count } = await syncUserPlaid(uid, db);
+        return `Plaid sync complete: ${transaction_count} transactions and ${recurring_count} recurring streams updated.`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        if (msg === "No connected accounts") return "No Plaid accounts connected. Please link a bank account first.";
+        return `Plaid sync failed: ${msg}`;
+      }
+    }
+
+    default:
+      return `Unknown tool: ${toolName}`;
+  }
+}
