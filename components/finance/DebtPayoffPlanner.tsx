@@ -1,9 +1,12 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   RiMoneyDollarCircleLine, RiAddLine, RiEditLine, RiDeleteBinLine,
-  RiCheckLine, RiCloseLine, RiArrowDownLine,
+  RiCheckLine, RiArrowDownLine, RiArrowUpLine,
 } from "react-icons/ri";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDebts } from "@/hooks/useDebts";
 import { calculatePayoff, formatPayoffDuration } from "@/lib/debt-calculator";
 import type { Debt, DebtType } from "@/types";
@@ -115,15 +118,64 @@ function DebtForm({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function DebtPayoffPlanner() {
+  const { user } = useAuth();
   const { debts, loading, addDebt, updateDebt, deleteDebt } = useDebts();
-  const [showForm, setShowForm]   = useState(false);
-  const [editDebt, setEditDebt]   = useState<Debt | null>(null);
-  const [method, setMethod]       = useState<"avalanche" | "snowball">("avalanche");
-  const [extra, setExtra]         = useState(0);
+  const [showForm, setShowForm]     = useState(false);
+  const [editDebt, setEditDebt]     = useState<Debt | null>(null);
+  const [method, setMethod]         = useState<"avalanche" | "snowball" | "custom">("avalanche");
+  const [extra, setExtra]           = useState(0);
+  const [customOrder, setCustomOrder] = useState<string[]>([]);
+
+  // Load saved custom order from Firestore
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, "users", user.uid, "settings", "debt_payoff")).then((snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.custom_order)) setCustomOrder(data.custom_order);
+      }
+    });
+  }, [user]);
+
+  // Persist custom order
+  const saveCustomOrder = useCallback(async (order: string[]) => {
+    if (!user) return;
+    await setDoc(doc(db, "users", user.uid, "settings", "debt_payoff"), {
+      custom_order: order,
+      updated_at: new Date().toISOString(),
+    }, { merge: true });
+  }, [user]);
+
+  // Sorted debts based on active method
+  const sortedDebts = useMemo(() => {
+    if (method === "custom") {
+      const orderMap = new Map(customOrder.map((id, i) => [id, i]));
+      return [...debts].sort((a, b) => {
+        const ai = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+        const bi = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
+        return ai - bi;
+      });
+    }
+    return debts; // calculatePayoff handles avalanche/snowball sorting internally
+  }, [debts, method, customOrder]);
+
+  const moveDebt = useCallback((id: string, direction: "up" | "down") => {
+    const current = sortedDebts.map((d) => d.id);
+    const idx = current.indexOf(id);
+    if (idx === -1) return;
+    const newOrder = [...current];
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= newOrder.length) return;
+    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+    setCustomOrder(newOrder);
+    saveCustomOrder(newOrder);
+  }, [sortedDebts, saveCustomOrder]);
 
   const plan = useMemo(
-    () => calculatePayoff(debts, method, extra),
-    [debts, method, extra]
+    () => method === "custom"
+      ? calculatePayoff(sortedDebts, "avalanche", extra) // custom order, avalanche math
+      : calculatePayoff(debts, method, extra),
+    [debts, sortedDebts, method, extra]
   );
 
   const totalBalance = debts.reduce((s, d) => s + d.balance, 0);
@@ -173,7 +225,7 @@ export default function DebtPayoffPlanner() {
       {/* Debt cards */}
       {debts.length > 0 && (
         <div className="space-y-3">
-          {debts.map((debt) => {
+          {sortedDebts.map((debt, idx) => {
             const pct = debt.original_balance && debt.original_balance > 0
               ? Math.min(100, ((debt.original_balance - debt.balance) / debt.original_balance) * 100)
               : null;
@@ -194,6 +246,16 @@ export default function DebtPayoffPlanner() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="text-sm font-semibold text-text-primary">{fmt(debt.balance)}</span>
+                    {method === "custom" && (
+                      <>
+                        <button onClick={() => moveDebt(debt.id, "up")} disabled={idx === 0} className="btn-ghost p-1 disabled:opacity-30" title="Move up">
+                          <RiArrowUpLine className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => moveDebt(debt.id, "down")} disabled={idx === sortedDebts.length - 1} className="btn-ghost p-1 disabled:opacity-30" title="Move down">
+                          <RiArrowDownLine className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                     <button onClick={() => { setEditDebt(debt); setShowForm(false); }} className="btn-ghost p-1.5 ml-1">
                       <RiEditLine className="w-3.5 h-3.5" />
                     </button>
@@ -230,7 +292,7 @@ export default function DebtPayoffPlanner() {
           {/* Method toggle */}
           <div className="space-y-2">
             <div className="flex gap-2">
-              {(["avalanche", "snowball"] as const).map((m) => (
+              {(["avalanche", "snowball", "custom"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setMethod(m)}
@@ -240,14 +302,16 @@ export default function DebtPayoffPlanner() {
                       : "bg-white/5 border-white/10 text-text-secondary hover:bg-white/10"
                   }`}
                 >
-                  {m === "avalanche" ? "Avalanche" : "Snowball"}
+                  {m === "avalanche" ? "Avalanche" : m === "snowball" ? "Snowball" : "Custom"}
                 </button>
               ))}
             </div>
             <p className="text-xs text-text-muted">
               {method === "avalanche"
                 ? "Avalanche: pay minimums on all, throw extra at the highest interest rate first. Minimizes total interest paid."
-                : "Snowball: pay minimums on all, throw extra at the smallest balance first. Builds momentum with quick wins."}
+                : method === "snowball"
+                ? "Snowball: pay minimums on all, throw extra at the smallest balance first. Builds momentum with quick wins."
+                : "Custom: use the ↑↓ arrows on each debt to set your own payoff order. Your order is saved automatically."}
             </p>
           </div>
 

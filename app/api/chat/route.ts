@@ -978,6 +978,17 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "reorder_debts",
+    description: "Set a custom payoff order for the user's debts by specifying debt names in the desired order (first = paid off first). Also switches the planner to Custom mode.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        order: { type: "array", items: { type: "string" }, description: "Debt names in desired payoff order, first to last." },
+      },
+      required: ["order"],
+    },
+  },
+  {
     name: "get_fire_projection",
     description: "Get the user's FIRE (Financial Independence) projection — FI number, progress %, projected date, and time remaining.",
     input_schema: {
@@ -3811,6 +3822,24 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       const debtName = doc.data().name as string;
       await doc.ref.delete();
       return `Deleted debt: "${debtName}".`;
+    }
+
+    case "reorder_debts": {
+      const names = (input.order as string[]).map((n) => n.toLowerCase());
+      const snap = await db.collection(`users/${uid}/debts`).get();
+      const matched: string[] = [];
+      const unmatched: string[] = [];
+      for (const name of names) {
+        const d = snap.docs.find((doc) => (doc.data().name as string).toLowerCase().includes(name));
+        if (d) matched.push(d.id); else unmatched.push(name);
+      }
+      // Append any debts not mentioned at the end
+      const remaining = snap.docs.filter((d) => !matched.includes(d.id)).map((d) => d.id);
+      const finalOrder = [...matched, ...remaining];
+      await db.doc(`users/${uid}/settings/debt_payoff`).set({ custom_order: finalOrder, updated_at: new Date().toISOString() }, { merge: true });
+      const orderedNames = finalOrder.map((id) => snap.docs.find((d) => d.id === id)?.data().name as string).filter(Boolean);
+      const msg = unmatched.length ? ` (couldn't match: ${unmatched.join(", ")})` : "";
+      return `Custom payoff order saved: ${orderedNames.map((n, i) => `${i + 1}. ${n}`).join(", ")}.${msg} Switch to Custom mode in the Debt Payoff Planner to use this order.`;
     }
 
     case "get_fire_projection": {
