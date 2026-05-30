@@ -1,7 +1,7 @@
 "use client";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { RiPhoneLine, RiPhoneFill } from "react-icons/ri";
+import { RiPhoneLine, RiPhoneFill, RiArrowDropDownLine } from "react-icons/ri";
 
 type Status = "idle" | "connecting" | "listening" | "speaking";
 
@@ -9,11 +9,34 @@ type Props = {
   onTranscript?: (text: string) => void;
 };
 
+const VOICES = [
+  { id: "alloy",   label: "Alloy",   desc: "Neutral" },
+  { id: "echo",    label: "Echo",    desc: "Clear, male" },
+  { id: "fable",   label: "Fable",   desc: "Expressive" },
+  { id: "onyx",    label: "Onyx",    desc: "Deep, male" },
+  { id: "nova",    label: "Nova",    desc: "Bright, female" },
+  { id: "shimmer", label: "Shimmer", desc: "Soft, female" },
+  { id: "verse",   label: "Verse",   desc: "Conversational" },
+  { id: "coral",   label: "Coral",   desc: "Warm, female" },
+  { id: "sage",    label: "Sage",    desc: "Calm" },
+  { id: "ash",     label: "Ash",     desc: "Crisp" },
+  { id: "ballad",  label: "Ballad",  desc: "Melodic" },
+] as const;
+
 export function RealtimeVoice({ onTranscript }: Props) {
   const { user } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const active = status !== "idle";
 
+  const [voice, setVoice] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("realtime-voice") ?? "alloy";
+    }
+    return "alloy";
+  });
+  const [showPicker, setShowPicker] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -22,6 +45,15 @@ export function RealtimeVoice({ onTranscript }: Props) {
   const playCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+
+  useEffect(() => {
+    if (!showPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setShowPicker(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showPicker]);
 
   const stopSession = useCallback(() => {
     const ws = wsRef.current;
@@ -156,7 +188,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({ voice: "alloy" }),
+      body: JSON.stringify({ voice }),
     });
     if (!sessionRes.ok) {
       console.error("Failed to get realtime session token");
@@ -177,6 +209,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
           type: "session.update",
           session: {
             type: "realtime",
+            voice: voice,
             instructions:
               "You are a personal life assistant with access to the user's tasks, health, habits, calendar, finance, and more. Be conversational and concise — you are speaking, not writing.",
             output_modalities: ["audio"],
@@ -228,7 +261,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
       console.error("Realtime WebSocket error", e);
       stopSession();
     };
-  }, [user, handleMessage, stopSession]);
+  }, [user, voice, handleMessage, stopSession]);
 
   const label = {
     idle: "Start voice session",
@@ -238,21 +271,56 @@ export function RealtimeVoice({ onTranscript }: Props) {
   }[status];
 
   return (
-    <button
-      onClick={active ? stopSession : startSession}
-      disabled={status === "connecting"}
-      className={`p-2.5 rounded-lg border transition-colors disabled:opacity-50 ${
-        status === "speaking"
-          ? "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
-          : status === "listening"
-          ? "bg-red-500/20 text-red-400 border-red-500/30 animate-pulse"
-          : status === "connecting"
-          ? "bg-white/10 text-text-secondary border-white/15 animate-pulse"
-          : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
-      }`}
-      title={label}
-    >
-      {active ? <RiPhoneFill className="w-5 h-5" /> : <RiPhoneLine className="w-5 h-5" />}
-    </button>
+    <div ref={containerRef} className="relative flex items-center gap-0.5">
+      {/* Voice dropdown */}
+      {showPicker && (
+        <div className="absolute bottom-full left-0 mb-1 w-44 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+          {VOICES.map((v) => (
+            <div
+              key={v.id}
+              onClick={() => {
+                setVoice(v.id);
+                localStorage.setItem("realtime-voice", v.id);
+                setShowPicker(false);
+              }}
+              className="flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer hover:bg-white/10 transition-colors"
+            >
+              <span className="text-text-primary font-medium">{v.label}</span>
+              <span className="text-text-secondary text-xs">{v.desc}</span>
+              {voice === v.id && <span className="text-accent text-xs ml-1">✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Phone button */}
+      <button
+        onClick={active ? stopSession : startSession}
+        disabled={status === "connecting"}
+        className={`p-2.5 rounded-lg border transition-colors disabled:opacity-50 ${
+          status === "speaking"
+            ? "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
+            : status === "listening"
+            ? "bg-red-500/20 text-red-400 border-red-500/30 animate-pulse"
+            : status === "connecting"
+            ? "bg-white/10 text-text-secondary border-white/15 animate-pulse"
+            : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
+        }`}
+        title={label}
+      >
+        {active ? <RiPhoneFill className="w-5 h-5" /> : <RiPhoneLine className="w-5 h-5" />}
+      </button>
+
+      {/* Chevron — only when idle */}
+      {!active && (
+        <button
+          onClick={() => setShowPicker((v) => !v)}
+          className="p-1 rounded text-text-secondary hover:text-text-primary transition-colors"
+          title={`Voice: ${voice}`}
+        >
+          <RiArrowDropDownLine className="w-4 h-4" />
+        </button>
+      )}
+    </div>
   );
 }
