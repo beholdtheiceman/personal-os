@@ -12,6 +12,7 @@ import { getConstitutionContext } from "@/lib/constitution";
 import { getSeasonContext } from "@/lib/season";
 import { getLifeContextForChat } from "@/lib/life-context";
 import type { RecurrenceCadence } from "@/types";
+import { mergeNotificationSettings } from "@/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1256,12 +1257,8 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "get_notification_settings",
-    description: "Read current notification settings — which categories are enabled and at what times.",
-    input_schema: {
-      type: "object" as const,
-      properties: {},
-      required: [],
-    },
+    description: "Read the user's current notification settings — which categories are enabled, at what times, and any active snooze. Call this before update_notification_setting so you can report what's changing.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
   },
   {
     name: "list_media",
@@ -2242,6 +2239,76 @@ const TOOLS: Anthropic.Tool[] = [
       },
       required: ["id"],
     },
+  },
+  {
+    name: "update_notification_setting",
+    description: "Enable or disable a notification category, or change its scheduled time or day. Valid category keys: morning_briefing, streak_alert, task_reminder, goal_deadline, journal_reminder, health_reminder, weekly_review, birthday_reminder, savings_milestone, progress_midday, progress_evening, decision_review, networth_reminder, time_summary, goal_inactivity, subscription_renewal, spending_trend, season_checkin. Time format: 'HH:00' (hour precision only, e.g. '07:00'). day_of_week: 0=Sun…6=Sat (only for weekly_review). days_before: integer (for goal_deadline, birthday_reminder, subscription_renewal).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category:    { type: "string", description: "Notification category key" },
+        enabled:     { type: "boolean", description: "Enable or disable this category" },
+        time:        { type: "string", description: "Scheduled time as HH:00, e.g. '09:00'" },
+        day_of_week: { type: "number", description: "Day of week (0=Sun) — weekly_review only" },
+        days_before: { type: "number", description: "Days before deadline — goal_deadline, birthday_reminder, subscription_renewal" },
+      },
+      required: ["category"],
+    },
+  },
+  {
+    name: "snooze_all_notifications",
+    description: "Temporarily mute all push notification categories until a given local datetime. One-off reminders created with create_reminder are NOT affected. To unsnooze early, call this with a past datetime.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        until: { type: "string", description: "Local datetime to snooze until, in YYYY-MM-DDTHH:MM format" },
+      },
+      required: ["until"],
+    },
+  },
+  {
+    name: "get_app_settings",
+    description: "Read the user's current app settings: home timezone, weather units (fahrenheit/celsius), and weather location city.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "update_app_setting",
+    description: "Update a specific app setting. Available settings: 'home_timezone' (IANA timezone string, e.g. 'America/Chicago'), 'weather_units' ('fahrenheit' or 'celsius'), 'weather_location' (city name — geocoded server-side to lat/lon via Nominatim).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        setting: { type: "string", description: "One of: home_timezone, weather_units, weather_location" },
+        value:   { type: "string", description: "The new value" },
+      },
+      required: ["setting", "value"],
+    },
+  },
+  {
+    name: "get_dashboard_layout",
+    description: "Read the user's current dashboard widget order and which widgets are hidden.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "manage_dashboard",
+    description: "Show, hide, or reorder a dashboard widget. Use the human-readable widget name. Valid widgets: What Actually Matters, System Audit, XP / Level, Quick Links, AI Briefing, AI Insights, Decision Reviews, Upcoming Birthdays, Verse of the Day, Tasks & Habits, Hydration & Mood, Calendar & Nutrition, Health & Journal, Goals & Projects, Finance Summary, Budget & Savings, Weekly Review, API Usage, Email Agent, Unsubscribe Manager, Gmail Inbox, Achievements, News Feed, Weather.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", description: "One of: show, hide, move_to_top, move_to_bottom, move_up, move_down" },
+        widget: { type: "string", description: "Widget label name as listed in this tool's description" },
+      },
+      required: ["action", "widget"],
+    },
+  },
+  {
+    name: "get_integration_status",
+    description: "Check which integrations are connected and when each last synced. Covers: Gmail, Plaid, Google Health, Google Contacts, Google Calendar, Google Drive. Read-only — disconnecting must be done in the Settings UI.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "trigger_plaid_sync",
+    description: "Manually trigger a Plaid sync right now to pull in the latest bank and credit card transactions, without waiting for the nightly cron.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
   },
 ];
 
@@ -4297,17 +4364,55 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
     }
 
     case "get_notification_settings": {
-      const doc = await db.doc(`users/${uid}/settings/notifications`).get();
-      if (!doc.exists) return "No notification settings configured yet.";
-      const data = doc.data() ?? {};
-      const categories = ["morning_briefing", "streak_alert", "task_reminder", "goal_deadline", "journal_reminder", "health_reminder", "weekly_review"];
-      const lines: string[] = [];
-      for (const c of categories) {
-        const cfg = data[c] as { enabled?: boolean; time?: string } | undefined;
-        if (!cfg) continue;
-        lines.push(`${c.replace(/_/g, " ")}: ${cfg.enabled ? "enabled" : "disabled"}${cfg.time ? ` at ${cfg.time}` : ""}`);
+      const snap = await db.doc(`users/${uid}/settings/notifications`).get();
+      const raw = snap.data() as Record<string, unknown> | undefined;
+      const settings = mergeNotificationSettings(raw);
+      const snoozeUntil = raw?.snooze_until as string | undefined;
+      const lines = (Object.keys(settings) as Array<keyof typeof settings>).map((k) => {
+        const cat = settings[k] as { enabled: boolean; time?: string; day_of_week?: number; days_before?: number };
+        const parts: string[] = [`${cat.enabled ? "✅" : "⬜"} **${k}**`];
+        if (cat.time) parts.push(`at ${cat.time}`);
+        if (cat.day_of_week !== undefined) parts.push(`day ${cat.day_of_week}`);
+        if (cat.days_before !== undefined) parts.push(`${cat.days_before}d before`);
+        return parts.join(" ");
+      });
+      const snoozeNote = snoozeUntil ? `\n\n⏸ All notifications snoozed until **${snoozeUntil}**` : "";
+      return `**Notification Settings:**\n${lines.join("\n")}${snoozeNote}`;
+    }
+
+    case "update_notification_setting": {
+      const category = (input.category as string ?? "").trim();
+      const validCategories = [
+        "morning_briefing","streak_alert","task_reminder","goal_deadline","journal_reminder",
+        "health_reminder","weekly_review","birthday_reminder","savings_milestone","progress_midday",
+        "progress_evening","decision_review","networth_reminder","time_summary","goal_inactivity",
+        "subscription_renewal","spending_trend","season_checkin",
+      ];
+      if (!validCategories.includes(category)) {
+        return `Unknown category "${category}". Valid: ${validCategories.join(", ")}.`;
       }
-      return lines.length ? lines.join("\n") : "No notification categories configured.";
+      const update: Record<string, unknown> = {};
+      if (input.enabled !== undefined) update[`${category}.enabled`] = input.enabled;
+      if (input.time     !== undefined) update[`${category}.time`]    = input.time;
+      if (input.day_of_week !== undefined) update[`${category}.day_of_week`] = input.day_of_week;
+      if (input.days_before !== undefined) update[`${category}.days_before`] = input.days_before;
+      if (Object.keys(update).length === 0) {
+        return "Nothing to update — provide at least one of: enabled, time, day_of_week, days_before.";
+      }
+      await db.doc(`users/${uid}/settings/notifications`).set(update, { merge: true });
+      const summary = Object.entries(update)
+        .map(([k, v]) => `${k.split(".")[1]} → ${v}`)
+        .join(", ");
+      return `Updated **${category}**: ${summary}.`;
+    }
+
+    case "snooze_all_notifications": {
+      const until = (input.until as string ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(until)) {
+        return "until must be in YYYY-MM-DDTHH:MM format.";
+      }
+      await db.doc(`users/${uid}/settings/notifications`).set({ snooze_until: until }, { merge: true });
+      return `All notifications snoozed until **${until}**. One-off reminders are not affected and will still fire.`;
     }
 
     case "list_media": {
