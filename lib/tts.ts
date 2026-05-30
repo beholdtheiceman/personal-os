@@ -45,9 +45,10 @@ export async function speak(text: string, voice = "nova"): Promise<void> {
   if (typeof window === "undefined") return;
 
   const cleaned = stripMarkdown(text);
-  if (!cleaned) return;
+  if (!cleaned) { console.warn("[TTS] stripped text is empty, skipping"); return; }
 
-  cleanupActive(); // stop anything currently playing
+  console.log("[TTS] speaking:", cleaned.slice(0, 80) + (cleaned.length > 80 ? "…" : ""));
+  cleanupActive();
 
   try {
     const res = await fetch("/api/tts", {
@@ -56,9 +57,14 @@ export async function speak(text: string, voice = "nova"): Promise<void> {
       body: JSON.stringify({ text: cleaned, voice }),
     });
 
-    if (!res.ok) return;
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.status.toString());
+      console.error("[TTS] API error:", res.status, err);
+      return;
+    }
 
     const blob = await res.blob();
+    console.log("[TTS] got audio blob:", blob.size, "bytes, type:", blob.type);
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
 
@@ -71,9 +77,11 @@ export async function speak(text: string, voice = "nova"): Promise<void> {
       if (activeAudio === audio) activeAudio = null;
     };
 
-    audio.play();
-  } catch {
-    // Silently fail — TTS is non-critical
+    audio.play().catch((e: unknown) => {
+      console.error("[TTS] audio.play() blocked:", e);
+    });
+  } catch (e) {
+    console.error("[TTS] unexpected error:", e);
   }
 }
 

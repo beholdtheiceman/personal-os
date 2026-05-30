@@ -18,6 +18,7 @@ export function useTTS() {
 
   /** Call after an assistant response is ready. No-ops when TTS is disabled. */
   function speakResponse(text: string) {
+    console.log("[TTS] speakResponse called — enabled:", enabled, "text length:", text?.length);
     if (enabled && text) speak(text).catch(() => {});
   }
 
