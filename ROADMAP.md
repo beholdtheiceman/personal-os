@@ -83,6 +83,10 @@
 
 - **Achievements** — Xbox-style milestone system (35 achievements, ~740G Gamerscore); 3 point tiers (10/25/50G); static definitions in `lib/achievements.ts` across 9 categories (Tasks, Habits, Health, Journal, Goals & Finance, Reading, People, AI & App, Secret); unlock state in `users/{uid}/achievements/{achievementId}`; shared `checkAndAward(uid, id)` helper with Firestore dedup, Web Audio unlock sound (`/sounds/achievement-unlock.mp3`), and toast notification; 3 secret achievements (Night Owl, Early Bird, The Completionist — auto-checked after every unlock); `/achievements` page with full category grid (locked = dimmed + lock icon, secret+locked = ???); dashboard widget showing last 3 unlocks + running Gamerscore; wired into Tasks, Habits, Health, Journal, Chat (ChatInterface + ChatPanel), Hydration, Workouts
 
+- **One-off Reminders** — `users/{uid}/reminders` Firestore collection; chat tools: `create_reminder`, `list_reminders`, `cancel_reminder`; Claude resolves relative phrases ("in 2 hours", "next Thursday at 10am") using local date + time injected into system prompt; fires via existing hourly cron with `>=` comparison (never drops missed reminders); bypasses DND and snooze; hour precision
+
+- **Expanded Agent Control** — 9 chat tools: `get_notification_settings`, `update_notification_setting`, `snooze_all_notifications` (temporary global mute with bypass for reminders), `get_app_settings`, `update_app_setting` (timezone, weather units, weather location via Nominatim geocode), `get_dashboard_layout`, `manage_dashboard` (show/hide/reorder any of 24 widgets), `get_integration_status` (Gmail, Plaid, Health, Contacts, Calendar, Drive), `trigger_plaid_sync`
+
 ---
 
 ## 🧭 Life OS Core ← Build This Next
@@ -232,7 +236,6 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
 - **Rate & offer aggregator** *(3–4 days)* — Pulls from Doctor of Credit RSS, DepositAccounts RSS, and r/churning / r/personalfinance / r/CreditCards (Reddit JSON API). Claude Haiku parses each item into structured offer data: `{institution, apy, bonus_amount, spend_requirement, spend_timeframe_days, new_customer_only, expires_at, ...}`. A personal rate profile (existing institutions, cards opened in last 24 months, current cards, avg monthly spend from Plaid, available balance to deploy) drives an eligibility layer that flags which offers you can actually get and estimates their dollar value for your situation. The `/rate-tracker` page shows offers sorted by eligible-and-highest-value first, with eligibility warnings ("you're over Chase 5/24") and freshness indicators. FRED API adds benchmark rates (Fed Funds, T-bills) as context. Push alerts fire when a new high-value eligible offer is found. No affiliate links, no "one-tap apply" — links open the offer page for you to apply manually. Chat tools: `get_rate_offers`, `get_benchmark_rates`, `mark_offer_taken`. Cron: every 6 hours. Cost: free (FRED key is free; no other keys needed for v1).
 
 ### AI / Automation
-- **Natural language one-off reminders** — set a timed push notification from chat ("remind me to call Dr. Smith next Thursday"); stored separately from recurring tasks, fires once via the notification cron
 - **Weekly email digest** — Sunday summary email (wins, gaps, upcoming week) as an alternative/complement to the push notification weekly review
 - **Auto-tag journal entries** — Claude Haiku post-processes new journal entries to extract mood, topics, and people mentioned; stored as searchable tags
 
@@ -321,15 +324,6 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
   - **Active trip mode** — "What should I do near me?", "find somewhere to eat that fits my diet", "what's the weather tomorrow?", "I spent $47 on dinner" (logs to trip budget); context-aware because the agent knows your location, itinerary, budget remaining, and dietary preferences
   - **Packing assistant** — "Am I ready to pack?" runs through the checklist and surfaces missing items; "what should I pack for 5 days in Tokyo in October?" generates a context-aware list
   - **Post-trip** — Triggers the debrief flow, suggests People CRM updates for anyone met on the trip, flags any expenses that haven't been logged yet
-
-### Expanded Agent Control (Settings, Reminders & Full App Config)
-- **Goal: zero things that require navigating the UI when the agent can do it faster.** The chat already covers 30+ tools across tasks, health, finance, habits, and more. This pass closes the remaining gaps — primarily settings, notification configuration, and any system state that currently requires a UI visit:
-  - **Settings tools** — `update_setting` covering: notification preferences (per-category enable/disable/time), home timezone, home location (for weather), theme/appearance, dashboard widget order and visibility, default views. "Turn off my mid-day progress reminders" or "set my morning briefing to 7am" should just work.
-  - **Notification management** — Full CRUD on all 15 notification categories via chat. Also: "snooze all notifications until Monday", "pause habit reminders this week", "what notifications do I have enabled?" — a conversational interface over the existing NotificationSettings Firestore doc.
-  - **One-off reminders** *(already noted under AI/Automation — formalized here)* — "Remind me to call Dr. Smith next Thursday at 10am", "ping me in 2 hours about the contract", "remind me every Monday morning to log my weight". Stored separately from recurring tasks; fire once via the notification cron; Claude confirms with the exact time it will fire.
-  - **Integration management** — "Is my Google Health connected?", "disconnect Plaid", "when did I last sync Google Contacts?" — status and control over OAuth integrations without touching Settings UI.
-  - **Dashboard control** — "Add the habit tracker widget to my dashboard", "move finance summary to the top", "hide the mood widget". Agent calls the same `useDashboardSettings` hook logic via a tool rather than requiring the Customizer panel.
-  - **Voice-first parity** — Every one of these tools must work via voice input through the Web Speech API (and later the Realtime API). The test: a user should be able to configure their entire app without ever touching the screen. This is the long-term north star for agent control — the UI is for browsing and glancing, the agent is for doing.
 
 ### Accountability & Commitment Contracts
 - **Commitment system** — A different motivational layer than XP and streaks; based on declared intent and outcome logging:
