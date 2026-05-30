@@ -65,7 +65,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
   }, []);
 
   const handleMessage = useCallback(
-    async (event: MessageEvent, ws: WebSocket, idToken: string) => {
+    async (event: MessageEvent, ws: WebSocket) => {
       const msg = JSON.parse(event.data as string) as Record<string, unknown>;
       switch (msg.type) {
         case "response.audio.delta":
@@ -84,11 +84,12 @@ export function RealtimeVoice({ onTranscript }: Props) {
         case "response.function_call_arguments.done": {
           let toolResult: string;
           try {
+            const freshToken = await user!.getIdToken();
             const res = await fetch("/api/tools/execute", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${idToken}`,
+                Authorization: `Bearer ${freshToken}`,
               },
               body: JSON.stringify({
                 name: msg.name,
@@ -119,7 +120,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
           break;
       }
     },
-    [onTranscript, playChunk],
+    [onTranscript, playChunk, user],
   );
 
   const startSession = useCallback(async () => {
@@ -213,7 +214,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
       setStatus("listening");
     };
 
-    ws.onmessage = (event) => handleMessage(event, ws, idToken);
+    ws.onmessage = (event) => handleMessage(event, ws);
     ws.onclose = () => stopSession();
     ws.onerror = (e) => {
       console.error("Realtime WebSocket error", e);

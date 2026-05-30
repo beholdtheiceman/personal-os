@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth } from "@/lib/firebase-admin";
 import { executeTool, type ToolInput } from "@/lib/tool-executor";
+import { TOOLS } from "@/lib/chat-tools";
+
+const VALID_TOOL_NAMES = new Set(TOOLS.map((t) => t.name));
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -25,6 +28,9 @@ export async function POST(req: NextRequest) {
   const { name, arguments: args } = body;
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "Missing tool name" }, { status: 400 });
+  }
+  if (!VALID_TOOL_NAMES.has(name)) {
+    return NextResponse.json({ error: "Unknown tool" }, { status: 400 });
   }
 
   try {
