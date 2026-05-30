@@ -10,14 +10,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "Realtime voice not configured" }, { status: 503 });
+  }
+
   const body = await req.json().catch(() => ({}));
-  const model = (body.model as string) ?? "gpt-4o-realtime-preview-2024-12-17";
-  const voice = (body.voice as string) ?? "alloy";
+
+  const ALLOWED_MODELS = new Set(["gpt-4o-realtime-preview-2024-12-17"]);
+  const ALLOWED_VOICES = new Set(["alloy", "echo", "fable", "onyx", "nova", "shimmer"]);
+
+  const model = ALLOWED_MODELS.has(body.model as string) ? (body.model as string) : "gpt-4o-realtime-preview-2024-12-17";
+  const voice = ALLOWED_VOICES.has(body.voice as string) ? (body.voice as string) : "alloy";
 
   const res = await fetch("https://api.openai.com/v1/realtime/sessions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ model, voice }),
@@ -25,7 +34,8 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const err = await res.text();
-    return NextResponse.json({ error: err }, { status: res.status });
+    console.error("OpenAI Realtime session error:", err);
+    return NextResponse.json({ error: "Failed to create realtime session" }, { status: res.status });
   }
 
   const data = await res.json();
