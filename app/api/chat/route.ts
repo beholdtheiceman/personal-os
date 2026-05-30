@@ -13,6 +13,7 @@ import { getSeasonContext } from "@/lib/season";
 import { getLifeContextForChat } from "@/lib/life-context";
 import type { RecurrenceCadence } from "@/types";
 import { mergeNotificationSettings } from "@/types";
+import { syncUserPlaid } from "@/lib/plaid-sync";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -5665,6 +5666,185 @@ async function executeTool(uid: string, toolName: string, input: ToolInput, toda
       if (r.status !== "pending") return `Reminder is already ${r.status as string}.`;
       await ref.update({ status: "cancelled" });
       return `Reminder cancelled: "${r.text as string}" scheduled for ${r.fire_at as string}.`;
+    }
+
+    case "get_app_settings": {
+      const [tzSnap, wxSnap] = await Promise.all([
+        db.doc(`users/${uid}/settings/timezone`).get(),
+        db.doc(`users/${uid}/settings/weather`).get(),
+      ]);
+      const tz = tzSnap.data() ?? {};
+      const wx = wxSnap.data() ?? {};
+      return [
+        `**Home timezone:** ${(tz.home_timezone ?? tz.current_timezone ?? "not set") as string}`,
+        `**Weather location:** ${(wx.city ?? "not set") as string}`,
+        `**Weather units:** ${(wx.units ?? "fahrenheit") as string}`,
+      ].join("\n");
+    }
+
+    case "update_app_setting": {
+      const setting = (input.setting as string ?? "").trim();
+      const value   = (input.value   as string ?? "").trim();
+      if (!value) return "Value cannot be empty.";
+
+      if (setting === "home_timezone") {
+        await db.doc(`users/${uid}/settings/timezone`).set(
+          { home_timezone: value, updated_at: new Date().toISOString() },
+          { merge: true }
+        );
+        return `Home timezone updated to **${value}**.`;
+      }
+
+      if (setting === "weather_units") {
+        if (value !== "fahrenheit" && value !== "celsius") {
+          return "weather_units must be 'fahrenheit' or 'celsius'.";
+        }
+        await db.doc(`users/${uid}/settings/weather`).set({ units: value }, { merge: true });
+        return `Weather units updated to **${value}**.`;
+      }
+
+      if (setting === "weather_location") {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&limit=1`,
+          { headers: { "User-Agent": "personal-os/1.0" } }
+        );
+        const geoData = await geoRes.json() as Array<{ lat: string; lon: string; display_name: string }>;
+        if (!geoData.length) {
+          return `Could not find "${value}". Try a more specific name, e.g. "Austin, Texas".`;
+        }
+        const { lat, lon, display_name } = geoData[0];
+        const city = display_name.split(",").slice(0, 2).join(",").trim();
+        await db.doc(`users/${uid}/settings/weather`).set(
+          { latitude: parseFloat(lat), longitude: parseFloat(lon), city },
+          { merge: true }
+        );
+        return `Weather location updated to **${city}** (${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}).`;
+      }
+
+      return `Unknown setting "${setting}". Valid: home_timezone, weather_units, weather_location.`;
+    }
+
+    case "get_dashboard_layout": {
+      const snap = await db.doc(`users/${uid}/settings/dashboard`).get();
+      const data  = snap.data() ?? {};
+      const hidden: string[] = data.hiddenWidgets ?? [];
+      const order:  string[] = data.widgetOrder   ?? [];
+
+      const LABELS: Record<string, string> = {
+        what_matters:"What Actually Matters", system_audit:"System Audit", xp:"XP / Level",
+        quick_links:"Quick Links", daily_briefing:"AI Briefing", insights:"AI Insights",
+        decision_review:"Decision Reviews", birthday:"Upcoming Birthdays", verse:"Verse of the Day",
+        tasks_habits:"Tasks & Habits", hydration_mood:"Hydration & Mood",
+        calendar_nutrition:"Calendar & Nutrition", health_journal:"Health & Journal",
+        goals_projects:"Goals & Projects", finance:"Finance Summary", budget_savings:"Budget & Savings",
+        weekly_review:"Weekly Review", api_usage:"API Usage", email_agent:"Email Agent",
+        unsubscribe:"Unsubscribe Manager", gmail:"Gmail Inbox", achievements:"Achievements",
+        news_feed:"News Feed", weather:"Weather",
+      };
+
+      const visible = order.filter(id => !hidden.includes(id)).map((id, i) => `${i + 1}. ${LABELS[id] ?? id}`);
+      const hiddenLabels = hidden.map(id => LABELS[id] ?? id);
+      return [
+        `**Visible (top → bottom):**\n${visible.join("\n") || "(none)"}`,
+        hiddenLabels.length ? `\n**Hidden:** ${hiddenLabels.join(", ")}` : "",
+      ].join("");
+    }
+
+    case "manage_dashboard": {
+      const action      = (input.action as string ?? "").trim();
+      const widgetInput = (input.widget as string ?? "").toLowerCase().trim();
+
+      const LABELS: Record<string, string> = {
+        what_matters:"what actually matters", system_audit:"system audit", xp:"xp / level",
+        quick_links:"quick links", daily_briefing:"ai briefing", insights:"ai insights",
+        decision_review:"decision reviews", birthday:"upcoming birthdays", verse:"verse of the day",
+        tasks_habits:"tasks & habits", hydration_mood:"hydration & mood",
+        calendar_nutrition:"calendar & nutrition", health_journal:"health & journal",
+        goals_projects:"goals & projects", finance:"finance summary", budget_savings:"budget & savings",
+        weekly_review:"weekly review", api_usage:"api usage", email_agent:"email agent",
+        unsubscribe:"unsubscribe manager", gmail:"gmail inbox", achievements:"achievements",
+        news_feed:"news feed", weather:"weather",
+      };
+
+      const widgetId = Object.entries(LABELS).find(([, label]) =>
+        label.includes(widgetInput) || widgetInput.includes(label)
+      )?.[0];
+      if (!widgetId) {
+        return `Widget "${input.widget as string}" not found. Valid widgets: ${Object.values(LABELS).join(", ")}.`;
+      }
+
+      const snap = await db.doc(`users/${uid}/settings/dashboard`).get();
+      const data  = snap.data() ?? {};
+      const allIds = Object.keys(LABELS);
+      let order:  string[] = data.widgetOrder?.length  ? [...data.widgetOrder]  : [...allIds];
+      let hidden: string[] = data.hiddenWidgets?.length ? [...data.hiddenWidgets] : [];
+
+      if (!order.includes(widgetId)) order.push(widgetId);
+
+      if (action === "hide") {
+        if (!hidden.includes(widgetId)) hidden.push(widgetId);
+      } else if (action === "show") {
+        hidden = hidden.filter((id: string) => id !== widgetId);
+      } else if (action === "move_to_top") {
+        order = [widgetId, ...order.filter((id: string) => id !== widgetId)];
+      } else if (action === "move_to_bottom") {
+        order = [...order.filter((id: string) => id !== widgetId), widgetId];
+      } else if (action === "move_up") {
+        const idx = order.indexOf(widgetId);
+        if (idx > 0) [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+      } else if (action === "move_down") {
+        const idx = order.indexOf(widgetId);
+        if (idx < order.length - 1) [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
+      } else {
+        return `Unknown action "${action}". Valid: show, hide, move_to_top, move_to_bottom, move_up, move_down.`;
+      }
+
+      await db.doc(`users/${uid}/settings/dashboard`).set({ widgetOrder: order, hiddenWidgets: hidden });
+      const displayLabel = Object.entries(LABELS).find(([id]) => id === widgetId)?.[1] ?? widgetId;
+      return `Dashboard updated: **${displayLabel}** → ${action.replace(/_/g, " ")}.`;
+    }
+
+    case "get_integration_status": {
+      const [gmailSnap, healthSnap, contactsSnap, calendarSnap, driveSnap, plaidSettingsSnap] =
+        await Promise.all([
+          db.doc(`users/${uid}/integrations/gmail`).get(),
+          db.doc(`users/${uid}/integrations/google_health`).get(),
+          db.doc(`users/${uid}/integrations/google_contacts`).get(),
+          db.doc(`users/${uid}/integrations/google_calendar`).get(),
+          db.doc(`users/${uid}/integrations/google_drive`).get(),
+          db.doc(`users/${uid}/settings/plaid`).get(),
+        ]);
+
+      const connected = (snap: FirebaseFirestore.DocumentSnapshot, tokenField = "access_token") => {
+        if (!snap.exists) return false;
+        const d = snap.data()!;
+        return !!(d[tokenField] || d.access_token_encrypted || d.refresh_token);
+      };
+      const lastSync = (snap: FirebaseFirestore.DocumentSnapshot, field = "last_synced") =>
+        (snap.data()?.[field] as string | undefined)?.slice(0, 10) ?? "unknown";
+
+      const plaidItemsSnap = await db.collection(`users/${uid}/plaid_items`).limit(1).get();
+      const plaidConnected = !plaidItemsSnap.empty;
+
+      return [
+        `**Gmail:** ${connected(gmailSnap) ? `✅ Connected` : "❌ Not connected"}`,
+        `**Plaid:** ${plaidConnected ? `✅ Connected (last sync: ${lastSync(plaidSettingsSnap)})` : "❌ Not connected"}`,
+        `**Google Health:** ${connected(healthSnap) ? `✅ Connected (last sync: ${lastSync(healthSnap, "last_sync")})` : "❌ Not connected"}`,
+        `**Google Contacts:** ${connected(contactsSnap) ? `✅ Connected (last sync: ${lastSync(contactsSnap)})` : "❌ Not connected"}`,
+        `**Google Calendar:** ${connected(calendarSnap) ? `✅ Connected` : "❌ Not connected"}`,
+        `**Google Drive:** ${connected(driveSnap) ? `✅ Connected` : "❌ Not connected"}`,
+      ].join("\n");
+    }
+
+    case "trigger_plaid_sync": {
+      try {
+        const { recurring_count, transaction_count } = await syncUserPlaid(uid, db);
+        return `Plaid sync complete: ${transaction_count} transactions and ${recurring_count} recurring streams updated.`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        if (msg === "No connected accounts") return "No Plaid accounts connected. Please link a bank account first.";
+        return `Plaid sync failed: ${msg}`;
+      }
     }
 
     default:
