@@ -24,13 +24,15 @@ export function RealtimeVoice({ onTranscript }: Props) {
   const nextPlayTimeRef = useRef<number>(0);
 
   const stopSession = useCallback(() => {
-    wsRef.current?.close();
+    const ws = wsRef.current;
+    if (!ws) return;           // already stopped — idempotent guard
+    wsRef.current = null;      // null immediately to prevent re-entry
+    ws.close();
     processorRef.current?.disconnect();
     sourceRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     audioCtxRef.current?.close();
     playCtxRef.current?.close();
-    wsRef.current = null;
     audioCtxRef.current = null;
     processorRef.current = null;
     sourceRef.current = null;
@@ -200,7 +202,10 @@ export function RealtimeVoice({ onTranscript }: Props) {
         for (let i = 0; i < float32.length; i++) {
           pcm16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
         }
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+        const bytes = new Uint8Array(pcm16.buffer);
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
         ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio: base64 }));
       };
       source.connect(processor);
