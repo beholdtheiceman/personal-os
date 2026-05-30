@@ -20,6 +20,7 @@ export default function FinanceTracker() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [viewMonth, setViewMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const [drillCategory, setDrillCategory] = useState<string | null>(null);
   const { plaidTransactions } = usePlaid();
 
   useEffect(() => {
@@ -193,15 +194,15 @@ export default function FinanceTracker() {
               {expenseByCategory.map(([cat, amount]) => {
                 const pct = totalExpense > 0 ? (amount / totalExpense) * 100 : 0;
                 return (
-                  <div key={cat}>
+                  <button key={cat} onClick={() => setDrillCategory(cat)} className="w-full text-left group cursor-pointer">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-text-secondary">{cat}</span>
+                      <span className="text-text-secondary group-hover:text-accent transition-colors underline-offset-2 group-hover:underline">{cat}</span>
                       <span className="text-text-primary font-medium tabular-nums">{fmt(amount)}</span>
                     </div>
                     <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                       <div className="h-full bg-danger/60 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -216,6 +217,45 @@ export default function FinanceTracker() {
           onClose={() => { setShowForm(false); setEditing(null); }}
         />
       )}
+
+      {drillCategory && (() => {
+        const txns = monthTransactions.filter((t) => t.type === "expense" && t.category === drillCategory);
+        const total = txns.reduce((s, t) => s + t.amount, 0);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setDrillCategory(null)}>
+            <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-md max-h-[80vh] flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+                <div>
+                  <h3 className="text-sm font-semibold text-text-primary">{drillCategory}</h3>
+                  <p className="text-xs text-text-muted">{format(parseISO(`${viewMonth}-01`), "MMMM yyyy")} · {txns.length} charge{txns.length !== 1 ? "s" : ""}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-danger tabular-nums">{fmt(total)}</span>
+                  <button onClick={() => setDrillCategory(null)} className="text-text-muted hover:text-text-primary text-lg leading-none">&times;</button>
+                </div>
+              </div>
+              <div className="overflow-y-auto p-3 space-y-1.5">
+                {txns.map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-bg-tertiary transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-medium text-text-primary truncate">{t.description || t.category}</span>
+                        {t.source === "plaid" && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-accent/20 text-accent shrink-0">
+                            {t.pending ? "Pending" : "Plaid"}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-text-muted">{format(parseISO(t.date), "MMM d, yyyy")}</span>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-text-primary">{fmt(t.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
