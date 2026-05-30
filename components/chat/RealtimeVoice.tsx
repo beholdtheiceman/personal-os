@@ -1,7 +1,6 @@
 "use client";
 import { useRef, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { toOpenAITools, TOOLS } from "@/lib/chat-tools";
 import { RiPhoneLine, RiPhoneFill } from "react-icons/ri";
 
 type Status = "idle" | "connecting" | "listening" | "speaking";
@@ -22,12 +21,16 @@ export function RealtimeVoice({ onTranscript }: Props) {
   const streamRef = useRef<MediaStream | null>(null);
   const playCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
   const stopSession = useCallback(() => {
     const ws = wsRef.current;
     if (!ws) return;           // already stopped — idempotent guard
     wsRef.current = null;      // null immediately to prevent re-entry
     ws.close();
+    activeSourcesRef.current.forEach((s) => { try { s.stop(); } catch { /* already ended */ } });
+    activeSourcesRef.current = [];
+    nextPlayTimeRef.current = 0;
     processorRef.current?.disconnect();
     sourceRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -62,18 +65,30 @@ export function RealtimeVoice({ onTranscript }: Props) {
     const startAt = Math.max(nextPlayTimeRef.current, ctx.currentTime);
     src.start(startAt);
     nextPlayTimeRef.current = startAt + buffer.duration;
+    activeSourcesRef.current.push(src);
+    src.onended = () => {
+      activeSourcesRef.current = activeSourcesRef.current.filter((s) => s !== src);
+    };
   }, []);
 
   const handleMessage = useCallback(
     async (event: MessageEvent, ws: WebSocket) => {
       const msg = JSON.parse(event.data as string) as Record<string, unknown>;
       switch (msg.type) {
-        case "response.audio.delta":
+        case "response.output_audio.delta":
           playChunk(msg.delta as string);
           setStatus("speaking");
           break;
 
-        case "response.audio.done":
+        case "response.output_audio.done":
+          setStatus("listening");
+          break;
+
+        case "input_audio_buffer.speech_started":
+          // Stop every scheduled source node immediately so interruption is instant.
+          activeSourcesRef.current.forEach((s) => { try { s.stop(); } catch { /* already ended */ } });
+          activeSourcesRef.current = [];
+          nextPlayTimeRef.current = 0;
           setStatus("listening");
           break;
 
@@ -151,8 +166,8 @@ export function RealtimeVoice({ onTranscript }: Props) {
     const { client_secret } = await sessionRes.json() as { client_secret: { value: string } };
 
     const ws = new WebSocket(
-      "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
-      ["realtime", `openai-insecure-api-key.${client_secret.value}`, "openai-beta.realtime-v1"],
+      "wss://api.openai.com/v1/realtime?model=gpt-realtime-2",
+      ["realtime", `openai-insecure-api-key.${client_secret.value}`],
     );
     wsRef.current = ws;
 
@@ -161,26 +176,19 @@ export function RealtimeVoice({ onTranscript }: Props) {
         JSON.stringify({
           type: "session.update",
           session: {
+            type: "realtime",
             instructions:
               "You are a personal life assistant with access to the user's tasks, health, habits, calendar, finance, and more. Be conversational and concise — you are speaking, not writing.",
-            tools: toOpenAITools(TOOLS),
-            tool_choice: "auto",
-            turn_detection: {
-              type: "server_vad",
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 700,
-            },
-            input_audio_format: "pcm16",
-            output_audio_format: "pcm16",
-            input_audio_transcription: { model: "whisper-1" },
+            output_modalities: ["audio"],
           },
         }),
       );
 
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
       } catch {
         console.error("Microphone access denied");
         ws.close();
