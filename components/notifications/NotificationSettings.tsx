@@ -175,7 +175,7 @@ export default function NotificationSettings() {
     });
   }, [user]);
 
-  const update = (key: keyof NotificationSettings, patch: Partial<NotificationCategory>) => {
+  const update = (key: Exclude<keyof NotificationSettings, "snooze_until">, patch: Partial<NotificationCategory>) => {
     setSettings((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   };
 
