@@ -171,6 +171,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
   );
 
   const startSession = useCallback(async () => {
+    setShowPicker(false);
     if (!user) return;
     setStatus("connecting");
 
@@ -276,19 +277,20 @@ export function RealtimeVoice({ onTranscript }: Props) {
       {showPicker && (
         <div className="absolute bottom-full left-0 mb-1 w-44 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
           {VOICES.map((v) => (
-            <div
+            <button
               key={v.id}
+              type="button"
               onClick={() => {
                 setVoice(v.id);
                 localStorage.setItem("realtime-voice", v.id);
                 setShowPicker(false);
               }}
-              className="flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer hover:bg-white/10 transition-colors"
+              className="w-full flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer hover:bg-white/10 transition-colors"
             >
               <span className="text-text-primary font-medium">{v.label}</span>
               <span className="text-text-secondary text-xs">{v.desc}</span>
               {voice === v.id && <span className="text-accent text-xs ml-1">✓</span>}
-            </div>
+            </button>
           ))}
         </div>
       )}
