@@ -13,7 +13,9 @@ import {
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
+import { nextReminderFireAt } from "@/lib/recurrence";
 import { mergeNotificationSettings } from "@/types";
+import type { ReminderRecurrence } from "@/types";
 
 export async function GET(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
@@ -171,7 +173,9 @@ export async function GET(req: NextRequest) {
       if (n) await send(n.title, n.body, n.tag ?? "season-checkin");
     }
 
-    // ── One-off reminders: bypass DND and snooze, always fire when due ────────
+    // ── Custom reminders: bypass DND and snooze, always fire when due ─────────
+    // One-time reminders fire once then go "fired"; recurring ones re-schedule
+    // their fire_at to the next future occurrence and stay "pending".
     try {
       const currentLocalStr = `${timeInfo.localDate}T${String(timeInfo.localHour).padStart(2, "0")}:00`;
       const dueSnap = await db.collection(`users/${uid}/reminders`)
@@ -185,10 +189,18 @@ export async function GET(req: NextRequest) {
             body: r.text as string,
             tag: `reminder-${reminderDoc.id}`,
           });
-          await reminderDoc.ref.update({
-            status: "fired",
-            fired_at: new Date().toISOString(),
-          });
+          const recurrence = r.recurrence as ReminderRecurrence | null | undefined;
+          if (recurrence) {
+            await reminderDoc.ref.update({
+              fire_at: nextReminderFireAt(recurrence, r.fire_at as string, currentLocalStr),
+              fired_at: new Date().toISOString(),
+            });
+          } else {
+            await reminderDoc.ref.update({
+              status: "fired",
+              fired_at: new Date().toISOString(),
+            });
+          }
           fired.push(`reminder-${reminderDoc.id}`);
         }
       }

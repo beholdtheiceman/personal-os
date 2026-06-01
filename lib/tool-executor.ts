@@ -6,10 +6,18 @@ import { refreshGmailToken as _refreshGmailToken } from "@/lib/gmail-token";
 import { computeNextDue, isWithinRecurrence } from "@/lib/recurrence";
 import { fetchWeatherData } from "@/lib/weather";
 import { syncUserPlaid } from "@/lib/plaid-sync";
-import type { RecurrenceCadence } from "@/types";
+import type { RecurrenceCadence, ReminderRecurrence } from "@/types";
 import { mergeNotificationSettings } from "@/types";
 
 export type ToolInput = Record<string, unknown>;
+
+// Human-readable cadence labels for reminder confirmations and listings.
+const RECURRENCE_LABEL: Record<ReminderRecurrence, string> = {
+  daily: "every day",
+  weekdays: "every weekday (Mon–Fri)",
+  weekends: "every weekend (Sat–Sun)",
+  weekly: "weekly",
+};
 
 function makeToday(localDate?: string) {
   return localDate ?? new Date().toISOString().slice(0, 10);
@@ -3378,6 +3386,15 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(fire_at)) {
         return "fire_at must be in YYYY-MM-DDTHH:MM format (e.g. 2026-06-04T10:00).";
       }
+      const VALID_RECURRENCE: ReminderRecurrence[] = ["daily", "weekdays", "weekends", "weekly"];
+      const rawRecurrence = (input.recurrence as string ?? "").trim();
+      let recurrence: ReminderRecurrence | null = null;
+      if (rawRecurrence) {
+        if (!VALID_RECURRENCE.includes(rawRecurrence as ReminderRecurrence)) {
+          return `recurrence must be one of: ${VALID_RECURRENCE.join(", ")} (or omitted for a one-time reminder).`;
+        }
+        recurrence = rawRecurrence as ReminderRecurrence;
+      }
       const tzDoc = await db.doc(`users/${uid}/settings/timezone`).get();
       const tz = (tzDoc.data()?.home_timezone ?? tzDoc.data()?.current_timezone ?? "UTC") as string;
       const ref = await db.collection(`users/${uid}/reminders`).add({
@@ -3385,9 +3402,11 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
         fire_at,
         tz,
         status: "pending",
+        recurrence,
         created_at: new Date().toISOString(),
       });
-      return `Reminder set ✓ (id: ${ref.id}). I'll push a notification with "${text}" at ${fire_at} (${tz}).`;
+      const cadence = recurrence ? ` and repeat ${RECURRENCE_LABEL[recurrence]}` : "";
+      return `Reminder set ✓ (id: ${ref.id}). I'll push a notification with "${text}" at ${fire_at} (${tz})${cadence}.`;
     }
 
     case "list_reminders": {
@@ -3398,7 +3417,8 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       if (snap.empty) return "No pending reminders.";
       const lines = snap.docs.map((d) => {
         const r = d.data();
-        return `• [${d.id}] "${r.text}" at ${r.fire_at} (${r.tz})`;
+        const rec = r.recurrence ? ` — repeats ${RECURRENCE_LABEL[r.recurrence as ReminderRecurrence] ?? r.recurrence}` : "";
+        return `• [${d.id}] "${r.text}" at ${r.fire_at} (${r.tz})${rec}`;
       });
       return `**Pending reminders:**\n${lines.join("\n")}`;
     }
