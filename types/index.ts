@@ -169,14 +169,18 @@ export function mergeNotificationSettings(
 }
 
 // ─── Reminders ────────────────────────────────────────────────────────────────
+// How a custom reminder repeats. Omitted/null = one-time (fires once, then done).
+export type ReminderRecurrence = "daily" | "weekdays" | "weekends" | "weekly";
+
 export interface Reminder {
   id?: string;               // Firestore doc ID, set after fetch
   text: string;              // "Call Dr. Smith"
   fire_at: string;           // local wall-clock "YYYY-MM-DDTHH:MM" (no UTC offset)
   tz: string;                // user's tz at creation, e.g. "America/Chicago"
   status: "pending" | "fired" | "cancelled";
+  recurrence?: ReminderRecurrence | null; // null/undefined = one-time
   created_at: string;        // ISO UTC
-  fired_at?: string;         // ISO UTC, written when push is sent
+  fired_at?: string;         // ISO UTC of the most recent push sent
 }
 
 // ─── XP / Gamification ───────────────────────────────────────────────────────

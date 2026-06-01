@@ -2092,12 +2092,13 @@ export const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "create_reminder",
-    description: "Set a one-time push notification reminder for the user. Resolve any relative time expression ('in 2 hours', 'next Thursday at 10am', 'tomorrow morning') to an absolute local datetime using today's date and the current local time from your context — both are injected into your system prompt. Always confirm the resolved datetime back to the user so they can verify. Hour precision only: the system fires on the hour, so round to the nearest hour and confirm what you stored (e.g. '10:30am' → store '10:00', confirm 'I\\'ll remind you at 10am').",
+    description: "Set a custom push notification reminder for the user — one-time OR recurring. Resolve any relative time expression ('in 2 hours', 'next Thursday at 10am', 'tomorrow morning', 'every day at 1pm') to an absolute local datetime using today's date and the current local time from your context — both are injected into your system prompt. For a recurring reminder, set `fire_at` to the FIRST occurrence and set `recurrence`; it then re-fires on that cadence automatically until cancelled. Use this for any repeating custom nudge the built-in notification categories don't cover (e.g. 'remind me to log my meals at 1pm and 7pm every day' → create two daily reminders). Always confirm the resolved time and cadence back to the user. Hour precision only: the system fires on the hour, so round to the nearest hour and confirm what you stored (e.g. '10:30am' → store '10:00', confirm 'I\\'ll remind you at 10am').",
     input_schema: {
       type: "object" as const,
       properties: {
-        text:    { type: "string", description: "What to remind the user about, e.g. 'Call Dr. Smith'" },
-        fire_at: { type: "string", description: "Absolute local datetime in YYYY-MM-DDTHH:MM format (hour precision, no seconds, no timezone offset)" },
+        text:       { type: "string", description: "What to remind the user about, e.g. 'Call Dr. Smith'" },
+        fire_at:    { type: "string", description: "Absolute local datetime in YYYY-MM-DDTHH:MM format (hour precision, no seconds, no timezone offset). For a recurring reminder this is the first occurrence." },
+        recurrence: { type: "string", enum: ["daily", "weekdays", "weekends", "weekly"], description: "Optional. Omit for a one-time reminder. 'daily' = every day, 'weekdays' = Mon–Fri, 'weekends' = Sat–Sun, 'weekly' = same day each week. Re-fires on this cadence until cancelled." },
       },
       required: ["text", "fire_at"],
     },
