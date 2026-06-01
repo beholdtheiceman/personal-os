@@ -248,7 +248,7 @@ export default function ChatInterface() {
   };
 
   // ── Save message to Firestore ────────────────────────────────────────────
-  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id" | "image">) => {
+  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id">) => {
     if (!user) return null;
     const ref = await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
     // Update chat metadata
@@ -390,14 +390,38 @@ export default function ChatInterface() {
 
     const savedUserRef = offRecord
       ? null
-      : await saveMessage(chatId, { role: "user", content: userMsg.content, timestamp: userMsg.timestamp });
+      : await saveMessage(chatId, {
+          role: "user",
+          content: userMsg.content,
+          timestamp: userMsg.timestamp,
+          // Persist the attached image so it survives reloads and stays in the
+          // conversation on later turns — otherwise the model loses the picture
+          // after the first turn and falsely claims it "can't read images".
+          ...(imageToSend ? { image: imageToSend } : {}),
+        });
 
     await checkAndAward(user.uid, "hello_world");
     if (messages.length + 1 >= 500) await checkAndAward(user.uid, "power_user");
 
+    // Build the history sent to the API. Any user message that carried an image
+    // is sent as a multimodal [image, text] content array so the picture stays in
+    // the conversation on every turn — not just the turn it was uploaded. Carrying
+    // it forward is what stops the model from losing the image and then claiming it
+    // "can't read images" on a follow-up question.
+    const toApiContent = (m: AssistantMessage): string | unknown[] => {
+      if (m.role === "user" && m.image) {
+        const mediaType = m.image.match(/^data:(image\/\w+);base64,/)?.[1] ?? "image/jpeg";
+        const data = m.image.replace(/^data:image\/\w+;base64,/, "");
+        return [
+          { type: "image", source: { type: "base64", media_type: mediaType, data } },
+          ...(m.content ? [{ type: "text", text: m.content }] : []),
+        ];
+      }
+      return m.content;
+    };
     const history = [...messages.slice(-19), userMsg].map((m) => ({
       role: m.role,
-      content: m.content,
+      content: toApiContent(m),
     }));
 
     const placeholderId = (Date.now() + 1).toString();
@@ -407,12 +431,6 @@ export default function ChatInterface() {
 
     try {
       const idToken = await user.getIdToken();
-      const imageMimeType = imageToSend
-        ? (imageToSend.match(/^data:(image\/\w+);base64,/)?.[1] ?? "image/jpeg")
-        : undefined;
-      const imageBase64 = imageToSend
-        ? imageToSend.replace(/^data:image\/\w+;base64,/, "")
-        : undefined;
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -426,8 +444,6 @@ export default function ChatInterface() {
           localTime: new Date().toLocaleTimeString("en-US", {
             hour12: false, hour: "2-digit", minute: "2-digit",
           }),
-          imageBase64,
-          imageMimeType,
           fileText: fileToSend?.type === "text" ? fileToSend.text : undefined,
           fileName: fileToSend?.name,
           filePdfBase64: fileToSend?.type === "pdf" ? fileToSend.base64 : undefined,
