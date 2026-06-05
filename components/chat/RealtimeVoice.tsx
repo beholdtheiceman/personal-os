@@ -7,6 +7,7 @@ type Status = "idle" | "connecting" | "listening" | "speaking";
 
 type Props = {
   onTranscript?: (text: string) => void;
+  compact?: boolean;
 };
 
 const VOICES = [
@@ -23,7 +24,7 @@ const VOICES = [
   { id: "ballad",  label: "Ballad",  desc: "Melodic" },
 ] as const;
 
-export function RealtimeVoice({ onTranscript }: Props) {
+export function RealtimeVoice({ onTranscript, compact = false }: Props) {
   const { user } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const active = status !== "idle";
@@ -163,7 +164,7 @@ export function RealtimeVoice({ onTranscript }: Props) {
         }
 
         case "error":
-          console.error("Realtime API error:", msg);
+          console.error("Realtime API error:", JSON.stringify(msg.error ?? msg, null, 2));
           break;
       }
     },
@@ -210,10 +211,23 @@ export function RealtimeVoice({ onTranscript }: Props) {
           type: "session.update",
           session: {
             type: "realtime",
-            voice: voice,
             instructions:
               "You are a personal life assistant with access to the user's tasks, health, habits, calendar, finance, and more. Be conversational and concise — you are speaking, not writing.",
             output_modalities: ["audio"],
+            audio: {
+              input: {
+                // Server VAD with a higher threshold + longer trailing silence so
+                // ambient noise or the tail of the user's own speech doesn't trip a
+                // false barge-in that cancels the model's reply (reason: turn_detected).
+                turn_detection: {
+                  type: "server_vad",
+                  threshold: 0.9,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 700,
+                },
+              },
+              output: { voice: voice },
+            },
           },
         }),
       );
@@ -299,7 +313,9 @@ export function RealtimeVoice({ onTranscript }: Props) {
       <button
         onClick={active ? stopSession : startSession}
         disabled={status === "connecting"}
-        className={`p-2.5 rounded-lg border transition-colors disabled:opacity-50 ${
+        className={`rounded-lg transition-colors disabled:opacity-50 ${
+          compact ? "p-1.5" : "p-2.5 border"
+        } ${
           status === "speaking"
             ? "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
             : status === "listening"
@@ -310,7 +326,9 @@ export function RealtimeVoice({ onTranscript }: Props) {
         }`}
         title={label}
       >
-        {active ? <RiPhoneFill className="w-5 h-5" /> : <RiPhoneLine className="w-5 h-5" />}
+        {active
+          ? <RiPhoneFill className={compact ? "w-4 h-4" : "w-5 h-5"} />
+          : <RiPhoneLine className={compact ? "w-4 h-4" : "w-5 h-5"} />}
       </button>
 
       {/* Chevron — only when idle */}

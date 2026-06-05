@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import toast from "react-hot-toast";
 import SkillPicker from "./SkillPicker";
 import ActiveSkillBadge from "./ActiveSkillBadge";
+import { RealtimeVoice } from "@/components/chat/RealtimeVoice";
 import { useSkills } from "@/hooks/useSkills";
 import type { Skill } from "@/lib/skills";
 import { useTTS } from "@/hooks/useTTS";
@@ -610,6 +611,7 @@ export default function ChatPanel() {
               >
                 {recording ? <RiMicOffLine className="w-4 h-4" /> : <RiMicLine className="w-4 h-4" />}
               </button>
+              <RealtimeVoice compact />
               <button
                 onClick={tts.toggle}
                 className={`p-1.5 rounded-lg transition-colors ${
