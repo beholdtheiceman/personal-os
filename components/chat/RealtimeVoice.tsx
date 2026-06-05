@@ -2,6 +2,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { RiPhoneLine, RiPhoneFill, RiArrowDropDownLine } from "react-icons/ri";
+import toast from "react-hot-toast";
 
 type Status = "idle" | "connecting" | "listening" | "speaking";
 
@@ -58,9 +59,8 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
 
   const stopSession = useCallback(() => {
     const ws = wsRef.current;
-    if (!ws) return;           // already stopped — idempotent guard
     wsRef.current = null;      // null immediately to prevent re-entry
-    ws.close();
+    ws?.close();               // ws may be null if we failed before connecting (still clean up audio below)
     activeSourcesRef.current.forEach((s) => { try { s.stop(); } catch { /* already ended */ } });
     activeSourcesRef.current = [];
     nextPlayTimeRef.current = 0;
@@ -176,11 +176,36 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
     if (!user) return;
     setStatus("connecting");
 
+    // iOS Safari/Chrome require getUserMedia + AudioContext to be created inside
+    // the user gesture (this tap), BEFORE any async network round-trip. The old
+    // code did this inside ws.onopen — after the socket connected — so iOS had
+    // already lost user activation and rejected the mic, snapping the button
+    // straight back to idle. Acquire the mic and prime both contexts up front.
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch {
+      toast.error("Microphone is blocked. Allow mic access for this site, then tap the phone again.");
+      setStatus("idle");
+      return;
+    }
+    streamRef.current = stream;
+
+    const inputCtx = new AudioContext({ sampleRate: 24000 });
+    audioCtxRef.current = inputCtx;
+    const playCtx = new AudioContext({ sampleRate: 24000 });
+    playCtxRef.current = playCtx;
+    nextPlayTimeRef.current = playCtx.currentTime;
+    // Resume while still in the gesture — iOS starts AudioContexts suspended.
+    try { await inputCtx.resume(); await playCtx.resume(); } catch { /* best effort */ }
+
     let idToken: string;
     try {
       idToken = await user.getIdToken();
     } catch {
-      setStatus("idle");
+      stopSession();
       return;
     }
 
@@ -193,8 +218,8 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
       body: JSON.stringify({ voice }),
     });
     if (!sessionRes.ok) {
-      console.error("Failed to get realtime session token");
-      setStatus("idle");
+      toast.error("Couldn't start the voice session (server error).");
+      stopSession();
       return;
     }
     const { client_secret } = await sessionRes.json() as { client_secret: { value: string } };
@@ -205,7 +230,7 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
     );
     wsRef.current = ws;
 
-    ws.onopen = async () => {
+    ws.onopen = () => {
       ws.send(
         JSON.stringify({
           type: "session.update",
@@ -232,21 +257,11 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
         }),
       );
 
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        });
-      } catch {
-        console.error("Microphone access denied");
-        ws.close();
-        return;
-      }
-      streamRef.current = stream;
-
-      const ctx = new AudioContext({ sampleRate: 24000 });
-      audioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
+      // Mic + context were already acquired in the gesture above (iOS requirement).
+      const ctx = audioCtxRef.current;
+      const activeStream = streamRef.current;
+      if (!ctx || !activeStream) { stopSession(); return; }
+      const source = ctx.createMediaStreamSource(activeStream);
       sourceRef.current = source;
       // ScriptProcessorNode is deprecated but has the widest browser support;
       // migrate to AudioWorklet if latency becomes a concern.
