@@ -11,7 +11,6 @@ export async function POST(req: NextRequest) {
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  console.log("[realtime/session] key present:", !!apiKey, "| length:", apiKey?.length ?? 0, "| NODE_ENV:", process.env.NODE_ENV);
   if (!apiKey) {
     return NextResponse.json({ error: "Realtime voice not configured" }, { status: 503 });
   }
@@ -23,8 +22,9 @@ export async function POST(req: NextRequest) {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      "OpenAI-Beta": "realtime=v1",
     },
-    body: JSON.stringify({ model: "gpt-4o-realtime-preview", voice: voice ?? "alloy" }),
+    body: JSON.stringify({ model: "gpt-4o-realtime-preview-2024-12-17", voice: voice ?? "alloy" }),
   });
 
   if (!res.ok) {
