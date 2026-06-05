@@ -225,7 +225,7 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
     const { client_secret } = await sessionRes.json() as { client_secret: { value: string } };
 
     const ws = new WebSocket(
-      "wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17",
+      "wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5",
       ["realtime", `openai-insecure-api-key.${client_secret.value}`],
     );
     wsRef.current = ws;
