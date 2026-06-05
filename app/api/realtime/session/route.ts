@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
+  console.log("[realtime/session] key present:", !!apiKey, "| length:", apiKey?.length ?? 0, "| NODE_ENV:", process.env.NODE_ENV);
   if (!apiKey) {
     return NextResponse.json({ error: "Realtime voice not configured" }, { status: 503 });
   }
