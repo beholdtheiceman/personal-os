@@ -15,16 +15,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Realtime voice not configured" }, { status: 503 });
   }
 
-  const { voice } = await req.json().catch(() => ({ voice: "alloy" }));
-
-  const res = await fetch("https://api.openai.com/v1/realtime/sessions", {
+  const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "OpenAI-Beta": "realtime=v1",
     },
-    body: JSON.stringify({ model: "gpt-4o-realtime-preview-2024-12-17", voice: voice ?? "alloy" }),
+    body: "{}",
   });
 
   if (!res.ok) {
@@ -33,6 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create realtime session" }, { status: res.status });
   }
 
-  const data = await res.json() as { client_secret: { value: string; expires_at: number } };
-  return NextResponse.json({ client_secret: data.client_secret });
+  // client_secrets endpoint returns { value, expires_at, ... } at the top level
+  const data = await res.json() as { value: string; expires_at: number };
+  return NextResponse.json({ client_secret: { value: data.value, expires_at: data.expires_at } });
 }
