@@ -9,6 +9,7 @@ type Status = "idle" | "connecting" | "listening" | "speaking";
 type Props = {
   onTranscript?: (text: string) => void;
   compact?: boolean;
+  float?: boolean;
 };
 
 const VOICES = [
@@ -25,7 +26,7 @@ const VOICES = [
   { id: "ballad",  label: "Ballad",  desc: "Melodic" },
 ] as const;
 
-export function RealtimeVoice({ onTranscript, compact = false }: Props) {
+export function RealtimeVoice({ onTranscript, compact = false, float = false }: Props) {
   const { user } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const active = status !== "idle";
@@ -304,7 +305,7 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
     <div ref={containerRef} className="relative flex items-center gap-0.5">
       {/* Voice dropdown */}
       {showPicker && (
-        <div className="absolute bottom-full left-0 mb-1 w-44 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+        <div className={`absolute bottom-full mb-1 w-44 bg-[#1a1a2e] border border-white/15 rounded-lg shadow-xl z-50 py-1 overflow-hidden ${float ? "right-0" : "left-0"}`}>
           {VOICES.map((v) => (
             <button
               key={v.id}
@@ -328,22 +329,32 @@ export function RealtimeVoice({ onTranscript, compact = false }: Props) {
       <button
         onClick={active ? stopSession : startSession}
         disabled={status === "connecting"}
-        className={`rounded-lg transition-colors disabled:opacity-50 ${
-          compact ? "p-1.5" : "p-2.5 border"
-        } ${
-          status === "speaking"
-            ? "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
-            : status === "listening"
-            ? "bg-red-500/20 text-red-400 border-red-500/30 animate-pulse"
-            : status === "connecting"
-            ? "bg-white/10 text-text-secondary border-white/15 animate-pulse"
-            : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
+        className={`transition-all disabled:opacity-50 flex items-center justify-center ${
+          float
+            ? `w-12 h-12 rounded-full shadow-lg hover:scale-105 active:scale-95 ${
+                status === "speaking"
+                  ? "bg-green-500 text-white shadow-green-500/40 animate-pulse"
+                  : status === "listening"
+                  ? "bg-red-500 text-white shadow-red-500/40 animate-pulse"
+                  : status === "connecting"
+                  ? "bg-accent/70 text-white animate-pulse"
+                  : "bg-accent text-white shadow-accent/30 hover:bg-accent-hover"
+              }`
+            : `rounded-lg ${compact ? "p-1.5" : "p-2.5 border"} ${
+                status === "speaking"
+                  ? "bg-green-500/20 text-green-400 border-green-500/30 animate-pulse"
+                  : status === "listening"
+                  ? "bg-red-500/20 text-red-400 border-red-500/30 animate-pulse"
+                  : status === "connecting"
+                  ? "bg-white/10 text-text-secondary border-white/15 animate-pulse"
+                  : "bg-white/10 text-text-secondary hover:text-text-primary border-white/15"
+              }`
         }`}
         title={label}
       >
         {active
-          ? <RiPhoneFill className={compact ? "w-4 h-4" : "w-5 h-5"} />
-          : <RiPhoneLine className={compact ? "w-4 h-4" : "w-5 h-5"} />}
+          ? <RiPhoneFill className={float ? "w-5 h-5" : compact ? "w-4 h-4" : "w-5 h-5"} />
+          : <RiPhoneLine className={float ? "w-5 h-5" : compact ? "w-4 h-4" : "w-5 h-5"} />}
       </button>
 
       {/* Chevron — only when idle */}
