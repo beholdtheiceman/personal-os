@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import { getEnv } from "@/lib/env";
 import { getUserLocalDate, getLocalTimeInfo } from "@/lib/timezone";
+import { recordCronRun } from "@/lib/cron-log";
 
 interface HealthDataResponse {
   connected: boolean;
@@ -43,7 +44,35 @@ function buildHealthLog(today: string, data: HealthDataResponse) {
     ...(readiness_score !== null && { readiness_score }),
     notes: noteParts.join(" · "),
     logged_at: new Date().toISOString(),
+    auto_synced: true,
   };
+}
+
+// Partial update used to refresh an existing *auto-synced* log as the day's
+// data improves. Only includes fields Google actually returned, so a later run
+// with missing data can't clobber good values with defaults. Never touches a
+// manually-entered log (those carry auto_synced: false / no flag).
+function buildHealthLogRefresh(data: HealthDataResponse) {
+  const out: Record<string, unknown> = {
+    logged_at: new Date().toISOString(),
+    auto_synced: true,
+  };
+  if (data.sleep_hours != null) out.sleep_hours = data.sleep_hours;
+  if (data.sleep_quality != null) out.sleep_quality = data.sleep_quality;
+  if (data.sleep_efficiency != null) out.sleep_efficiency = data.sleep_efficiency;
+  if ((data.exercises?.length ?? 0) > 0) {
+    out.exercise_done = true;
+    out.exercise_description = data.exercises!.map((e) => e.name).join(", ");
+  }
+  if (typeof data.readiness_score === "number") {
+    out.readiness_score = data.readiness_score;
+    out.energy_level = Math.max(1, Math.round(data.readiness_score / 10));
+  }
+  const noteParts: string[] = ["Auto-synced"];
+  if (data.steps != null) noteParts.push(`${(data.steps as number).toLocaleString()} steps`);
+  if (data.resting_heart_rate != null) noteParts.push(`${data.resting_heart_rate} bpm resting HR`);
+  out.notes = noteParts.join(" · ");
+  return out;
 }
 
 // ── POST — manual client-triggered sync + log ──────────────────────────────
@@ -115,7 +144,8 @@ export async function GET(req: NextRequest) {
 
   const db = getAdminDb();
   let checked = 0;
-  let synced = 0;
+  let created = 0;
+  let refreshed = 0;
   let skipped = 0;
 
   try {
@@ -133,10 +163,14 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // ── Skip if already manually logged today ────────────────────────────
+      // ── Respect manual logs; refresh our own auto logs ───────────────────
+      // Runs several times a day. A manually entered/edited log
+      // (auto_synced !== true) is never touched. A prior auto-sync is refreshed
+      // as the day's wearable data arrives.
       const logRef = db.doc(`users/${uid}/health/${today}`);
       const logSnap = await logRef.get();
-      if (logSnap.exists) {
+      const existing = logSnap.exists ? logSnap.data() : null;
+      if (existing && existing.auto_synced !== true) {
         skipped++;
         continue;
       }
@@ -158,17 +192,29 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // ── Write pre-populated health log ───────────────────────────────────
-      const logDoc = buildHealthLog(today, data);
-      await logRef.set(logDoc);
-      synced++;
+      // ── Create or refresh the health log ─────────────────────────────────
+      if (existing) {
+        await logRef.set(buildHealthLogRefresh(data), { merge: true });
+        refreshed++;
+      } else {
+        await logRef.set(buildHealthLog(today, data));
+        created++;
+      }
     }
 
-    return NextResponse.json({ checked, synced, skipped });
+    await recordCronRun("health-sync", "ok", { checked, created, refreshed, skipped });
+    return NextResponse.json({ checked, created, refreshed, skipped });
   } catch (err) {
     console.error("auto-sync error:", err);
+    await recordCronRun("health-sync", "error", {
+      error: String(err),
+      checked,
+      created,
+      refreshed,
+      skipped,
+    });
     return NextResponse.json(
-      { error: String(err), checked, synced, skipped },
+      { error: String(err), checked, created, refreshed, skipped },
       { status: 500 },
     );
   }

@@ -176,6 +176,8 @@ export default function HealthTracker() {
         date: today,
         id: today,
         logged_at: new Date().toISOString(),
+        // Manual entry — the auto-sync cron must never overwrite this.
+        auto_synced: false,
       });
       toast.success("Health log saved");
       await checkAndAward(user.uid, "body_check");
