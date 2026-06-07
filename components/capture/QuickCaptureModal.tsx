@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuickCapture } from "@/contexts/QuickCaptureContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
@@ -18,7 +18,7 @@ const CONTEXT_TYPES = [
 ];
 
 export default function QuickCaptureModal() {
-  const { isOpen, close } = useQuickCapture();
+  const { isOpen, open, close } = useQuickCapture();
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
   const [contextType, setContextType] = useState("general_debrief");
@@ -27,6 +27,17 @@ export default function QuickCaptureModal() {
   const [error, setError] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Voice/chat client-tool bus: open (and optionally prefill) on os:open-quick-capture.
+  useEffect(() => {
+    const h = (e: Event) => {
+      open();
+      const t = (e as CustomEvent).detail?.text;
+      if (typeof t === "string" && t) setText(t);
+    };
+    window.addEventListener("os:open-quick-capture", h);
+    return () => window.removeEventListener("os:open-quick-capture", h);
+  }, [open]);
 
   if (!isOpen) return null;
 

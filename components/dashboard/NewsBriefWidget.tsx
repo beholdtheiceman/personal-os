@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { collection, query, where, limit, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { RiNewspaperLine, RiExternalLinkLine } from "react-icons/ri";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
 import type { NewsBrief, NewsItem } from "@/types";
 
 export default function NewsBriefWidget() {
@@ -15,18 +16,22 @@ export default function NewsBriefWidget() {
   const [useFallback, setUseFallback] = useState(false);
 
   // Fetch the daily brief
-  useEffect(() => {
+  const fetchBrief = useCallback(async () => {
     if (!user) return;
-    user.getIdToken().then((token) =>
-      fetch("/api/news/brief", { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.brief) { setBrief(d.brief); setLoading(false); }
-          else         { setUseFallback(true); setLoading(false); }
-        })
-        .catch(() => { setUseFallback(true); setLoading(false); })
-    );
+    try {
+      const token = await user.getIdToken();
+      const d = await fetch("/api/news/brief", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json());
+      if (d.brief) { setBrief(d.brief); setUseFallback(false); }
+      else         { setUseFallback(true); }
+    } catch {
+      setUseFallback(true);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => { void fetchBrief(); }, [fetchBrief]);
+  useWidgetRefresh("news", fetchBrief);
 
   // Fallback: live snapshot of top 3 unread articles when no brief exists
   useEffect(() => {

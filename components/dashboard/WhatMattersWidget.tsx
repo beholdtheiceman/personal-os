@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuth } from "firebase/auth";
 import { RiRefreshLine, RiSparklingLine } from "react-icons/ri";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
 
 interface WhatMattersDoc {
   content: string;
@@ -37,7 +38,7 @@ export default function WhatMattersWidget() {
     fetchSignal();
   }, [fetchSignal]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     if (!user || refreshing) return;
     setRefreshing(true);
     try {
@@ -55,7 +56,9 @@ export default function WhatMattersWidget() {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [user, refreshing, today]);
+
+  useWidgetRefresh("what-matters", handleRefresh);
 
   const isStale = doc?.date && doc.date !== today;
 

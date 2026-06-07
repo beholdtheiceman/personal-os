@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuth } from "firebase/auth";
 import { RiLineChartLine } from "react-icons/ri";
 import Link from "next/link";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
 import type { CategoryTrend } from "@/lib/spending-trends";
 
 export default function SpendingTrendsWidget() {
@@ -11,23 +12,24 @@ export default function SpendingTrendsWidget() {
   const [trends, setTrends] = useState<CategoryTrend[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchTrends = useCallback(async () => {
     if (!user) return;
-    (async () => {
-      try {
-        const token = await getAuth().currentUser?.getIdToken();
-        const res = await fetch("/api/finance/trends", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setTrends(data.trends ?? []);
-      } catch {
-        // silently fail
-      } finally {
-        setLoading(false);
-      }
-    })();
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      const res = await fetch("/api/finance/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setTrends(data.trends ?? []);
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => { void fetchTrends(); }, [fetchTrends]);
+  useWidgetRefresh("spending-trends", fetchTrends);
 
   const atRisk = trends.filter((t) => t.overspendAmount > 0);
 

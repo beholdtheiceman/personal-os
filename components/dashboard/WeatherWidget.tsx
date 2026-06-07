@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { RiSunLine } from "react-icons/ri";
 import { wmoEmoji } from "@/lib/weather";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
 import type { WeatherResponse } from "@/types";
 
 const DAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -14,24 +15,25 @@ export default function WeatherWidget() {
   const [noLocation, setNoLocation] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchWeather = useCallback(async () => {
     if (!user) return;
-    (async () => {
-      try {
-        const token = await user.getIdToken();
-        const res = await fetch("/api/weather", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.status === 400) { setNoLocation(true); return; }
-        if (!res.ok) return;
-        setWeather(await res.json());
-      } catch {
-        // silently skip
-      } finally {
-        setLoading(false);
-      }
-    })();
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/weather", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 400) { setNoLocation(true); return; }
+      if (!res.ok) return;
+      setWeather(await res.json());
+    } catch {
+      // silently skip
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => { void fetchWeather(); }, [fetchWeather]);
+  useWidgetRefresh("weather", fetchWeather);
 
   if (loading) return null;
 

@@ -2242,15 +2242,6 @@ export const TOOLS: Anthropic.Tool[] = [
     input_schema: { type: "object" as const, properties: {}, required: [] },
   },
   {
-    name: "switch_dashboard_tab",
-    description: "Switch the active tab/section on the dashboard.",
-    input_schema: {
-      type: "object" as const,
-      properties: { tab: { type: "string", description: "Tab name to activate." } },
-      required: ["tab"],
-    },
-  },
-  {
     name: "open_quick_capture",
     description: "Open the quick-capture modal so the user can jot something down.",
     input_schema: {
@@ -2264,7 +2255,10 @@ export const TOOLS: Anthropic.Tool[] = [
     description: "Start a focus session / focus timer.",
     input_schema: {
       type: "object" as const,
-      properties: { minutes: { type: "number", description: "Optional length in minutes." } },
+      properties: {
+        minutes: { type: "number", description: "Optional length in minutes (default 25)." },
+        task: { type: "string", description: "Optional name of what the user is focusing on." },
+      },
       required: [],
     },
   },
@@ -2277,7 +2271,6 @@ export const CLIENT_TOOL_NAMES = new Set<string>([
   "open_quick_link",
   "refresh_widget",
   "regenerate_daily_summary",
-  "switch_dashboard_tab",
   "open_quick_capture",
   "start_focus_timer",
 ]);

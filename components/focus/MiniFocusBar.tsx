@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { RiPauseLine, RiPlayLine, RiStopLine } from "react-icons/ri";
 import { useTimer } from "@/contexts/TimerContext";
 import { usePlayer } from "@/contexts/PlayerContext";
@@ -11,8 +12,19 @@ function fmtTime(sec: number) {
 }
 
 export default function MiniFocusBar() {
-  const { status, taskName, secondsRemaining, durationMin, pause, resume, stop } = useTimer();
+  const { status, taskName, secondsRemaining, durationMin, start, pause, resume, stop } = useTimer();
   const { currentTrack } = usePlayer();
+
+  // Voice/chat client-tool bus: start a focus session on os:start-focus-timer.
+  useEffect(() => {
+    const h = (e: Event) => {
+      const d = (e as CustomEvent).detail ?? {};
+      const minutes = typeof d.minutes === "number" ? d.minutes : 25;
+      start(typeof d.task === "string" && d.task ? d.task : "Focus session", minutes);
+    };
+    window.addEventListener("os:start-focus-timer", h);
+    return () => window.removeEventListener("os:start-focus-timer", h);
+  }, [start]);
 
   if (status === "idle") return null;
 

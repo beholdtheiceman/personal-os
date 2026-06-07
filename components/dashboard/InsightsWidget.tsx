@@ -3,10 +3,13 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { RiSparklingLine, RiRefreshLine, RiArrowDownSLine, RiArrowUpSLine, RiDatabase2Line } from "react-icons/ri";
 import { useInsights } from "@/hooks/useInsights";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
 
 export default function InsightsWidget() {
   const { latest, loading, generating, hasToday, generate } = useInsights();
   const [expanded, setExpanded] = useState(true);
+
+  useWidgetRefresh("insights", generate);
 
   if (loading) return null;
 
