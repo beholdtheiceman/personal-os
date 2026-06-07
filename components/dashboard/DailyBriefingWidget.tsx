@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,7 +28,7 @@ export default function DailyBriefingWidget() {
     });
   }, [user, today]);
 
-  const generate = async () => {
+  const generate = useCallback(async () => {
     if (!user) return;
     setGenerating(true);
     setExpanded(true);
@@ -44,7 +44,20 @@ export default function DailyBriefingWidget() {
     } finally {
       setGenerating(false);
     }
-  };
+  }, [user, tz]);
+
+  useEffect(() => {
+    const onRegen = () => { void generate(); };
+    const onRefresh = (e: Event) => {
+      if ((e as CustomEvent).detail?.widget === "daily-briefing") void generate();
+    };
+    window.addEventListener("os:regenerate-daily-summary", onRegen);
+    window.addEventListener("os:refresh-widget", onRefresh);
+    return () => {
+      window.removeEventListener("os:regenerate-daily-summary", onRegen);
+      window.removeEventListener("os:refresh-widget", onRefresh);
+    };
+  }, [generate]);
 
   if (loading) return null;
 

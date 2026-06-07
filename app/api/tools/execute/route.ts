@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth } from "@/lib/firebase-admin";
 import { executeTool, type ToolInput } from "@/lib/tool-executor";
-import { TOOLS } from "@/lib/chat-tools";
+import { TOOLS, isClientTool } from "@/lib/chat-tools";
 
 const VALID_TOOL_NAMES = new Set(TOOLS.map((t) => t.name));
 
@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
   }
   if (!VALID_TOOL_NAMES.has(name)) {
     return NextResponse.json({ error: "Unknown tool" }, { status: 400 });
+  }
+  if (isClientTool(name)) {
+    return NextResponse.json({ error: "Client tool cannot run on server" }, { status: 400 });
   }
 
   try {

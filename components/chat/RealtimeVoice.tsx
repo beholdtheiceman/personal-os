@@ -1,9 +1,13 @@
 "use client";
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { RiPhoneLine, RiPhoneFill, RiArrowDropDownLine } from "react-icons/ri";
 import toast from "react-hot-toast";
 import type { OpenAIRealtimeTool } from "@/lib/chat-tools";
+import { isClientTool } from "@/lib/chat-tools";
+import { runClientTool } from "@/lib/client-actions";
+import { useQuickLinks } from "@/hooks/useQuickLinks";
 
 type Status = "idle" | "connecting" | "listening" | "speaking";
 
@@ -29,6 +33,10 @@ const VOICES = [
 
 export function RealtimeVoice({ onTranscript, compact = false, float = false }: Props) {
   const { user } = useAuth();
+  const router = useRouter();
+  const { links } = useQuickLinks();
+  const linksRef = useRef(links);
+  useEffect(() => { linksRef.current = links; }, [links]);
   const [status, setStatus] = useState<Status>("idle");
   const active = status !== "idle";
 
@@ -133,21 +141,27 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
 
         case "response.function_call_arguments.done": {
           let toolResult: string;
+          const toolName = msg.name as string;
+          const toolArgs = JSON.parse(msg.arguments as string) as Record<string, unknown>;
           try {
-            const freshToken = await user!.getIdToken();
-            const res = await fetch("/api/tools/execute", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${freshToken}`,
-              },
-              body: JSON.stringify({
-                name: msg.name,
-                arguments: JSON.parse(msg.arguments as string),
-              }),
-            });
-            const data = await res.json() as { result?: string; error?: string };
-            toolResult = data.result ?? data.error ?? "done";
+            if (isClientTool(toolName)) {
+              toolResult = await runClientTool(toolName, toolArgs, {
+                navigate: (p) => router.push(p),
+                getQuickLinks: () => linksRef.current.map((l) => ({ title: l.title, url: l.url })),
+              });
+            } else {
+              const freshToken = await user!.getIdToken();
+              const res = await fetch("/api/tools/execute", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${freshToken}`,
+                },
+                body: JSON.stringify({ name: toolName, arguments: toolArgs }),
+              });
+              const data = await res.json() as { result?: string; error?: string };
+              toolResult = data.result ?? data.error ?? "done";
+            }
           } catch (err) {
             toolResult = err instanceof Error ? err.message : "tool error";
           }
@@ -170,7 +184,7 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
           break;
       }
     },
-    [onTranscript, playChunk, user],
+    [onTranscript, playChunk, user, router],
   );
 
   const startSession = useCallback(async () => {

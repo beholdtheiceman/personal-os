@@ -2193,7 +2193,96 @@ export const TOOLS: Anthropic.Tool[] = [
     description: "Manually trigger a Plaid sync right now to pull in the latest bank and credit card transactions, without waiting for the nightly cron.",
     input_schema: { type: "object" as const, properties: {}, required: [] },
   },
+  // ── Client / UI actions (executed in the browser) ──
+  {
+    name: "navigate_to_page",
+    description: "Open / navigate to a page in the app. Use when the user says 'go to', 'open', 'show me' a section.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        page: {
+          type: "string",
+          enum: [
+            "achievements","bible","calendar","chat","constitution","content","dashboard",
+            "decisions","discord","drive","finance","focus","gmail","goals","habits","health",
+            "journal","life-context","meal-planner","media","memory","news","nutrition","people",
+            "projects","reading","season","settings","share","tasks","time","weather","workout",
+          ],
+          description: "Which page to open.",
+        },
+      },
+      required: ["page"],
+    },
+  },
+  {
+    name: "open_quick_link",
+    description: "Open one of the user's saved Quick Links by its title (e.g. 'open my bank link'). Opens in a new tab.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title_search: { type: "string", description: "Partial title of the quick link to match." },
+      },
+      required: ["title_search"],
+    },
+  },
+  {
+    name: "refresh_widget",
+    description: "Refresh / reload a dashboard widget that is on screen so it shows the latest data.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        widget: { type: "string", description: "Widget key, e.g. 'daily-briefing', 'weather', 'finance', 'news', 'mood', 'hydration'." },
+      },
+      required: ["widget"],
+    },
+  },
+  {
+    name: "regenerate_daily_summary",
+    description: "Regenerate the Daily Briefing / daily summary and refresh it on screen.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "switch_dashboard_tab",
+    description: "Switch the active tab/section on the dashboard.",
+    input_schema: {
+      type: "object" as const,
+      properties: { tab: { type: "string", description: "Tab name to activate." } },
+      required: ["tab"],
+    },
+  },
+  {
+    name: "open_quick_capture",
+    description: "Open the quick-capture modal so the user can jot something down.",
+    input_schema: {
+      type: "object" as const,
+      properties: { text: { type: "string", description: "Optional prefilled text." } },
+      required: [],
+    },
+  },
+  {
+    name: "start_focus_timer",
+    description: "Start a focus session / focus timer.",
+    input_schema: {
+      type: "object" as const,
+      properties: { minutes: { type: "number", description: "Optional length in minutes." } },
+      required: [],
+    },
+  },
 ];
+
+// Names of tools that execute in the BROWSER, not on the server.
+// RealtimeVoice dispatches these via lib/client-actions.ts instead of POSTing to /api/tools/execute.
+export const CLIENT_TOOL_NAMES = new Set<string>([
+  "navigate_to_page",
+  "open_quick_link",
+  "refresh_widget",
+  "regenerate_daily_summary",
+  "switch_dashboard_tab",
+  "open_quick_capture",
+  "start_focus_timer",
+]);
+
+export const isClientTool = (name: string) => CLIENT_TOOL_NAMES.has(name);
 
 // Convert Anthropic tool definitions to OpenAI Realtime API format.
 // Anthropic: { name, description, input_schema: { type, properties, required } }
