@@ -3,6 +3,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { RiPhoneLine, RiPhoneFill, RiArrowDropDownLine } from "react-icons/ri";
 import toast from "react-hot-toast";
+import type { OpenAIRealtimeTool } from "@/lib/chat-tools";
 
 type Status = "idle" | "connecting" | "listening" | "speaking";
 
@@ -210,20 +211,26 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
       return;
     }
 
-    const sessionRes = await fetch("/api/realtime/session", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ voice }),
-    });
+    const [sessionRes, toolsRes] = await Promise.all([
+      fetch("/api/realtime/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ voice }),
+      }),
+      fetch("/api/realtime/tools", {
+        headers: { Authorization: `Bearer ${idToken}` },
+      }),
+    ]);
+
     if (!sessionRes.ok) {
       toast.error("Couldn't start the voice session (server error).");
       stopSession();
       return;
     }
     const { client_secret } = await sessionRes.json() as { client_secret: { value: string } };
+    const voiceTools: OpenAIRealtimeTool[] = toolsRes.ok
+      ? ((await toolsRes.json()) as { tools: OpenAIRealtimeTool[] }).tools
+      : [];
 
     const ws = new WebSocket(
       "wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5",
@@ -238,7 +245,8 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
           session: {
             type: "realtime",
             instructions:
-              "You are a personal life assistant with access to the user's tasks, health, habits, calendar, finance, and more. Be conversational and concise — you are speaking, not writing.",
+              "You are Larry's personal AI assistant with full access to his life operating system. You can read and write tasks, habits, health logs, workouts, nutrition, journal entries, goals, finances, subscriptions, calendar events, Gmail, Google Drive, contacts (CRM), second brain notes, meal plans, recipes, shopping lists, reminders, news feed, weather, and app settings. When Larry asks you to do something — add a task, log a meal, build a meal plan, generate a workout plan, send an email, create a calendar event, search his notes — call the appropriate tool and confirm what you did. Be concise and conversational since you are speaking, not writing. Never say you can't do something that a tool supports. Today's date is " + new Date().toISOString().slice(0, 10) + ".",
+            tools: voiceTools,
             output_modalities: ["audio"],
             audio: {
               input: {
