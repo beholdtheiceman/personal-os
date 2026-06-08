@@ -125,7 +125,7 @@ export interface NotificationSettings {
   subscription_renewal: NotificationCategory; // fires days_before next_billing_date
   spending_trend: NotificationCategory;     // mid-month alert when pace projects overspend on a budget category
   season_checkin: NotificationCategory;    // nudge when active season is 4+ weeks old with no recent check-in
-  unsubscribe_review: NotificationCategory;
+  unsubscribe_review: NotificationCategory;    // weekly digest of unsubscribe recommendations
   snooze_until?: string;     // local datetime "YYYY-MM-DDTHH:MM"; all notifications skip while now < this
 }
 
@@ -148,7 +148,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   subscription_renewal: { enabled: false, time: "09:00", days_before: 3 },
   spending_trend:       { enabled: false, time: "12:00" },
   season_checkin:       { enabled: false, time: "09:00" },
-  unsubscribe_review:   { enabled: true },
+  unsubscribe_review:   { enabled: false },
 };
 
 // Deep-merges a stored settings doc onto the defaults. A shallow spread
