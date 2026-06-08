@@ -25,6 +25,7 @@ export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "api_usage",            label: "API Usage" },
   { id: "email_agent",          label: "Email Agent" },
   { id: "unsubscribe",          label: "Unsubscribe Manager" },
+  { id: "unsubscribe_review",   label: "Unsubscribe Review" },
   { id: "gmail",                label: "Gmail Inbox" },
   { id: "achievements",         label: "Achievements" },
   { id: "news_feed",            label: "News Feed" },

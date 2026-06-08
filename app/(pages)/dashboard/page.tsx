@@ -26,6 +26,7 @@ import XPWidget from "@/components/xp/XPWidget";
 import ApiUsageWidget from "@/components/dashboard/ApiUsageWidget";
 import EmailAgentWidget from "@/components/dashboard/EmailAgentWidget";
 import UnsubscribeWidget from "@/components/dashboard/UnsubscribeWidget";
+import UnsubscribeReviewWidget from "@/components/dashboard/UnsubscribeReviewWidget";
 import QuickLinksWidget from "@/components/dashboard/QuickLinksWidget";
 import HydrationDashboardWidget from "@/components/dashboard/HydrationDashboardWidget";
 import BudgetDashboardWidget from "@/components/dashboard/BudgetDashboardWidget";
@@ -635,6 +636,9 @@ export default function DashboardPage() {
 
       case "unsubscribe":
         return gmailConnected ? <UnsubscribeWidget key="unsubscribe" /> : null;
+
+      case "unsubscribe_review":
+        return gmailConnected ? <UnsubscribeReviewWidget key="unsubscribe_review" /> : null;
 
       case "achievements":
         return <AchievementsWidget key="achievements" />;
