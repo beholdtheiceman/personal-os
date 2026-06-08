@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb, getAdminAuth } from "@/lib/firebase-admin";
 import { sendPushToUser } from "@/lib/send-push";
-import { refreshGmailToken } from "@/lib/gmail-token";
+import { refreshGmailToken, extractEmailBody } from "@/lib/gmail-token";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 import { getISOWeek, getISOWeekYear } from "date-fns";
@@ -101,22 +101,6 @@ async function searchGmailSenders(accessToken: string): Promise<SenderGroup[]> {
   return [...senderMap.values()].sort((a, b) => b.emailIds.length - a.emailIds.length);
 }
 
-function extractTextBody(payload: Record<string, unknown>): string {
-  const mimeType = payload?.mimeType as string | undefined;
-  const body = payload?.body as { data?: string } | undefined;
-  if (mimeType === "text/plain" && body?.data) {
-    return Buffer.from(body.data, "base64url").toString("utf-8").slice(0, 2000);
-  }
-  const parts = payload?.parts as Record<string, unknown>[] | undefined;
-  if (parts) {
-    for (const part of parts) {
-      const text = extractTextBody(part);
-      if (text) return text;
-    }
-  }
-  return "";
-}
-
 async function fetchEmailBodies(
   accessToken: string,
   emailIds: string[],
@@ -136,7 +120,7 @@ async function fetchEmailBodies(
           (data.payload?.headers ?? []).find(
             (h) => h.name.toLowerCase() === "subject",
           )?.value ?? "";
-        const body = extractTextBody(data.payload as Record<string, unknown>);
+        const body = data.payload ? extractEmailBody(data.payload as Parameters<typeof extractEmailBody>[0]).slice(0, 2000) : "";
         return { subject, body };
       } catch {
         return { subject: "", body: "" };
@@ -149,16 +133,24 @@ async function evaluateSender(
   sender: SenderGroup,
   emails: Array<{ subject: string; body: string }>,
 ): Promise<{ verdict: "unsubscribe" | "keep" | "maybe"; reason: string } | null> {
+  function sanitize(s: string): string {
+    return s.replace(/[\r\n]/g, " ");
+  }
+  const safeName = sanitize(sender.senderName);
+  const safeEmail = sanitize(sender.senderEmail);
+
   const emailBlocks = emails
     .map(
-      (e, i) =>
-        `Email ${i + 1} subject: ${e.subject || "(none)"}\nEmail ${i + 1} body:\n${e.body || "(empty)"}`,
+      (e, i) => {
+        const safeSubject = sanitize(e.subject || "(none)").slice(0, 200);
+        return `Email ${i + 1} subject: ${safeSubject}\nEmail ${i + 1} body:\n${e.body || "(empty)"}`;
+      },
     )
     .join("\n\n");
 
   const prompt = `You are helping Larry decide whether to unsubscribe from a mailing list.
 
-Sender: ${sender.senderName} (${sender.senderEmail})
+Sender: ${safeName} (${safeEmail})
 Emails this week: ${sender.emailIds.length}
 
 ${emailBlocks}
@@ -184,7 +176,7 @@ verdict must be exactly one of: unsubscribe, keep, maybe
       if (["unsubscribe", "keep", "maybe"].includes(parsed.verdict)) {
         return {
           verdict: parsed.verdict as "unsubscribe" | "keep" | "maybe",
-          reason: String(parsed.reason ?? ""),
+          reason: String(parsed.reason ?? "").replace(/[\r\n]/g, " ").slice(0, 200),
         };
       }
     } catch {
@@ -275,8 +267,8 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getAdminDb();
-  const usersSnap = await db.collectionGroup("memory").get();
-  const uids = [...new Set(usersSnap.docs.map((d) => d.ref.path.split("/")[1]))];
+  const usersSnap = await db.collection("users").get();
+  const uids = usersSnap.docs.map((d) => d.id);
 
   const results = await Promise.allSettled(uids.map((uid) => processUser(uid)));
   const summary = results.map((r) =>
