@@ -11,6 +11,23 @@ import { useQuickLinks } from "@/hooks/useQuickLinks";
 
 type Status = "idle" | "connecting" | "listening" | "speaking";
 
+// Tool outputs are appended to the Realtime session's server-side conversation and
+// re-processed on every subsequent turn. Read-heavy tools (inbox, tasks, Drive, health)
+// can return large JSON blobs that would otherwise bloat context and slow every later
+// reply. Cap what we feed back in — the model only needs enough to speak a concise answer.
+const MAX_TOOL_OUTPUT_CHARS = 4000;
+function capToolOutput(output: string): string {
+  if (output.length <= MAX_TOOL_OUTPUT_CHARS) return output;
+  const omitted = output.length - MAX_TOOL_OUTPUT_CHARS;
+  return output.slice(0, MAX_TOOL_OUTPUT_CHARS) + `\n…[truncated ${omitted} characters]`;
+}
+
+// Even capped, tool outputs accumulate in the session's server-side conversation across a
+// long call and are re-processed every turn, so later replies get progressively slower.
+// Keep only the most recent N function_call_output items; delete older ones via
+// conversation.item.delete. A rejected delete is harmless (logged, ignored).
+const MAX_KEPT_TOOL_OUTPUTS = 6;
+
 type Props = {
   onTranscript?: (text: string) => void;
   compact?: boolean;
@@ -57,6 +74,8 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
   const playCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  // FIFO of server-assigned ids for function_call_output items, so we can prune old ones.
+  const toolItemIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (!showPicker) return;
@@ -73,6 +92,7 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
     ws?.close();               // ws may be null if we failed before connecting (still clean up audio below)
     activeSourcesRef.current.forEach((s) => { try { s.stop(); } catch { /* already ended */ } });
     activeSourcesRef.current = [];
+    toolItemIdsRef.current = [];
     nextPlayTimeRef.current = 0;
     processorRef.current?.disconnect();
     sourceRef.current?.disconnect();
@@ -171,11 +191,30 @@ export function RealtimeVoice({ onTranscript, compact = false, float = false }: 
               item: {
                 type: "function_call_output",
                 call_id: msg.call_id,
-                output: toolResult,
+                output: capToolOutput(toolResult),
               },
             }),
           );
           ws.send(JSON.stringify({ type: "response.create" }));
+          break;
+        }
+
+        // Server confirms an item was added to the conversation. Track ids of our
+        // function_call_output items (the large, accumulating ones) and prune the oldest
+        // so the re-processed-every-turn context stays bounded over a long call.
+        // (GA may emit any of these names depending on lifecycle; we treat them the same.)
+        case "conversation.item.created":
+        case "conversation.item.added":
+        case "conversation.item.done": {
+          const item = msg.item as { id?: string; type?: string } | undefined;
+          if (item?.type === "function_call_output" && item.id) {
+            const ids = toolItemIdsRef.current;
+            if (!ids.includes(item.id)) ids.push(item.id);
+            while (ids.length > MAX_KEPT_TOOL_OUTPUTS && ws.readyState === WebSocket.OPEN) {
+              const oldId = ids.shift()!;
+              ws.send(JSON.stringify({ type: "conversation.item.delete", item_id: oldId }));
+            }
+          }
           break;
         }
 
