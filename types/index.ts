@@ -125,6 +125,7 @@ export interface NotificationSettings {
   subscription_renewal: NotificationCategory; // fires days_before next_billing_date
   spending_trend: NotificationCategory;     // mid-month alert when pace projects overspend on a budget category
   season_checkin: NotificationCategory;    // nudge when active season is 4+ weeks old with no recent check-in
+  unsubscribe_review: NotificationCategory;
   snooze_until?: string;     // local datetime "YYYY-MM-DDTHH:MM"; all notifications skip while now < this
 }
 
@@ -147,6 +148,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   subscription_renewal: { enabled: false, time: "09:00", days_before: 3 },
   spending_trend:       { enabled: false, time: "12:00" },
   season_checkin:       { enabled: false, time: "09:00" },
+  unsubscribe_review:   { enabled: true },
 };
 
 // Deep-merges a stored settings doc onto the defaults. A shallow spread
@@ -918,4 +920,25 @@ export interface LifeSeason {
   // Present on archived seasons only
   closed_at?: string;
   reflection?: string;
+}
+
+// ─── Email Unsubscribe Review ─────────────────────────────────────────────────
+export interface UnsubscribeRecommendation {
+  senderEmail: string;       // "deals@brand.com"
+  senderName: string;        // "Brand Weekly"
+  emailCount: number;        // emails found in the 7-day window
+  verdict: "unsubscribe" | "keep" | "maybe";
+  reason: string;            // one sentence from Claude
+  sampleSubjects: string[];  // up to 2 subject lines for display
+  emailId: string;           // most recent email ID — passed to /api/gmail/unsubscribe
+}
+
+export interface UnsubscribeReview {
+  week: string;                        // "2026-W24" (ISO 8601)
+  generatedAt: string;                 // ISO timestamp
+  status: "pending" | "acted";
+  actedAt?: string;                    // ISO timestamp
+  recommendations: UnsubscribeRecommendation[];
+  unsubscribedFrom: string[];          // senderEmails confirmed by user
+  skippedCount?: number;               // senders beyond the 20-cap
 }
