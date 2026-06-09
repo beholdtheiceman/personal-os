@@ -43,6 +43,7 @@ import WeatherWidget from "@/components/dashboard/WeatherWidget";
 import WhatMattersWidget from "@/components/dashboard/WhatMattersWidget";
 import SystemAuditWidget from "@/components/dashboard/SystemAuditWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
+import DayRecapButton from "@/components/capture/DayRecapButton";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
 
 interface CalendarEvent {
@@ -698,14 +699,17 @@ export default function DashboardPage() {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold text-text-primary">Dashboard</h1>
-          <button
-            onClick={() => setCustomizing(true)}
-            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary px-2.5 py-1.5 rounded-lg hover:bg-bg-tertiary border border-bg-border transition-colors"
-            title="Customize dashboard layout"
-          >
-            <RiLayoutLine className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Customize</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <DayRecapButton />
+            <button
+              onClick={() => setCustomizing(true)}
+              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary px-2.5 py-1.5 rounded-lg hover:bg-bg-tertiary border border-bg-border transition-colors"
+              title="Customize dashboard layout"
+            >
+              <RiLayoutLine className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Customize</span>
+            </button>
+          </div>
         </div>
 
         {widgetOrder

@@ -87,6 +87,8 @@
 
 - **Expanded Agent Control** — 9 chat tools: `get_notification_settings`, `update_notification_setting`, `snooze_all_notifications` (temporary global mute with bypass for reminders), `get_app_settings`, `update_app_setting` (timezone, weather units, weather location via Nominatim geocode), `get_dashboard_layout`, `manage_dashboard` (show/hide/reorder any of 24 widgets), `get_integration_status` (Gmail, Plaid, Health, Contacts, Calendar, Drive), `trigger_plaid_sync`
 
+- **Personal Assistant Mode (PA-1 → PA-6)** — Flips the app from 80% input to proactive output. PA-1: `lib/context-snapshot.ts` injects a real-time state snapshot (calendar, tasks, habits, hydration, finance, people, weather) into every chat and voice session. PA-2: `/api/ingest/day-recap` + `run_day_recap` chat tool + `DayRecapButton` — one conversation logs mood, nutrition, workouts, tasks, interactions, journal, and water with XP per module. PA-3a: `lib/categorize-transaction.ts` (Haiku batch) wired into `syncUserPlaid()` — all new transactions get `ai_category` + `ai_confidence`; low-confidence ones flagged `needs_review`. PA-3b: `/api/time/calendar-import` proposes draft time entries from calendar events; commit mode writes confirmed entries tagged `source: "calendar"`. PA-4: Morning briefing prompt enriched with people/finance signals; `DailyBriefingWidget` defaults to expanded; `daily_briefing` promoted to second widget in default layout. PA-5: `/api/habits/suggest` (Sonnet) returns 3 habit suggestions from goals + Constitution + season; `HabitSuggestionCard` + empty-state CTA in `HabitsTracker`. PA-6: `relationshipFollowupHandler`, `dayRecapHandler`, `transactionReviewHandler`, `timeEntriesPendingHandler` added to `lib/notification-handlers.ts`; all 4 wired into the hourly notifications cron with per-category settings UI.
+
 ---
 
 ## 🧭 Life OS Core ← Build This Next
@@ -430,3 +432,6 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
 ## 💡 Ideas / Parking Lot
 - Beeper Desktop API — MCP server covering WhatsApp, iMessage, Telegram, etc. Local-only, better as a Claude Desktop add-on
 - Net Worth snapshot carry-forward — when logging a new month, pre-populate from the previous month's entries as a starting point
+
+## ⚠️ Tech Debt / Migrations
+- **Google Fit / Health API deprecation** — The Health Tab's data sync depends on Google's Fit-era health APIs (sleep, steps, resting HR, exercise from Pixel Watch), which Google is winding down in favor of the Android-native **Health Connect** platform. This will eventually break `app/api/health/*` (auth, callback, data, auto-sync) and the nightly health auto-sync cron. Plan a migration to Health Connect (or an alternative source) before Google's shutdown date. Affects: Health Tab, sleep/steps/HR sync, the Sleep Optimization roadmap item, and any Family Health History features that lean on passive health data. *(Separately: the OAuth app was moved Testing → Production on 2026-06-05 to stop the 7-day refresh-token expiry — unrelated to this deprecation, but the same integration.)*

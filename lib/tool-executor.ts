@@ -74,6 +74,16 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
   const db = getAdminDb();
 
   switch (toolName) {
+    // ── End-of-day recap (PA-2) ─────────────────────────────────────────────────
+    case "run_day_recap": {
+      const text = (input.text as string | undefined)?.trim();
+      if (!text) return "No recap text provided.";
+      const { runDayRecap } = await import("@/lib/day-recap");
+      const result = await runDayRecap(uid, text, today());
+      if (result.actions.length === 0) return result.summary;
+      return `${result.summary}\n${result.actions.map((a) => `• ${a}`).join("\n")}`;
+    }
+
     // ── Tasks ──────────────────────────────────────────────────────────────────
     case "add_task": {
       await db.collection(`users/${uid}/tasks`).add({

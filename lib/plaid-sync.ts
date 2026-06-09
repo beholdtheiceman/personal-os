@@ -1,5 +1,7 @@
 import { plaidClient } from "@/lib/plaid";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { categorizeTransactions, type TxnToCategorize } from "@/lib/categorize-transaction";
+import { PLAID_CATEGORY_LABELS } from "@/lib/plaid-categories";
 
 type AdminDb = ReturnType<typeof getAdminDb>;
 
@@ -15,6 +17,7 @@ export async function syncUserPlaid(
 
   const allRecurring: object[] = [];
   const allTransactions: object[] = [];
+  const toCategorize: TxnToCategorize[] = [];
 
   for (const itemDoc of itemsSnap.docs) {
     const { access_token, institution_name } = itemDoc.data();
@@ -81,6 +84,12 @@ export async function syncUserPlaid(
           last_synced: new Date().toISOString(),
         };
         allTransactions.push(doc);
+        toCategorize.push({
+          transaction_id: doc.transaction_id,
+          merchant_name: doc.merchant_name,
+          plaid_category: doc.category,
+          amount: doc.amount,
+        });
         await db
           .doc(`users/${uid}/plaid_transactions/${tx.transaction_id}`)
           .set(doc, { merge: true });
@@ -88,6 +97,33 @@ export async function syncUserPlaid(
     } catch (e) {
       console.error("Transaction sync error for item", itemDoc.id, e);
     }
+  }
+
+  // ── AI categorization (PA-3a) ──
+  // Map each synced transaction onto the user's own budget categories (this month),
+  // falling back to Plaid's friendly labels. One Haiku batch call for the whole window.
+  // Best-effort: any failure leaves transactions with just their raw Plaid category.
+  try {
+    const month = new Date().toISOString().slice(0, 7);
+    const budgetSnap = await db.doc(`users/${uid}/budgets/${month}`).get();
+    const budgetCats = budgetSnap.exists ? Object.keys(budgetSnap.data()?.categories ?? {}) : [];
+    const candidates = Array.from(new Set([...budgetCats, ...Object.values(PLAID_CATEGORY_LABELS)]));
+
+    const results = await categorizeTransactions(toCategorize, candidates);
+    await Promise.all(
+      results.map((r) =>
+        db.doc(`users/${uid}/plaid_transactions/${r.transaction_id}`).set(
+          {
+            ai_category: r.ai_category,
+            ai_confidence: r.confidence,
+            needs_review: r.confidence < 0.8,
+          },
+          { merge: true },
+        ),
+      ),
+    );
+  } catch (e) {
+    console.error("Plaid AI categorization error for user", uid, e);
   }
 
   // Update last sync timestamp

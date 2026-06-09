@@ -10,6 +10,7 @@ import {
   birthdayReminderHandler, savingsMilestoneHandler, progressReminderHandler,
   decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
   subscriptionRenewalHandler, spendingTrendHandler, seasonCheckinHandler,
+  relationshipFollowupHandler, dayRecapHandler, transactionReviewHandler, timeEntriesPendingHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
@@ -171,6 +172,23 @@ export async function GET(req: NextRequest) {
     if (settings.season_checkin?.enabled && settings.season_checkin.time && isHour(timeInfo, settings.season_checkin.time)) {
       const n = await seasonCheckinHandler(uid);
       if (n) await send(n.title, n.body, n.tag ?? "season-checkin");
+    }
+    // ── Personal Assistant Mode nudges (PA-2/3a/3b/6) ─────────────────────────
+    if (settings.relationship_followup?.enabled && settings.relationship_followup.time && isHour(timeInfo, settings.relationship_followup.time)) {
+      const n = await relationshipFollowupHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "relationship-followup");
+    }
+    if (settings.day_recap?.enabled && settings.day_recap.time && isHour(timeInfo, settings.day_recap.time)) {
+      const n = await dayRecapHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "day-recap");
+    }
+    if (settings.transaction_review?.enabled && settings.transaction_review.time && isHour(timeInfo, settings.transaction_review.time)) {
+      const n = await transactionReviewHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "transaction-review");
+    }
+    if (settings.time_entries_pending?.enabled && settings.time_entries_pending.time && isHour(timeInfo, settings.time_entries_pending.time)) {
+      const n = await timeEntriesPendingHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "time-entries-pending");
     }
 
     // ── Custom reminders: bypass DND and snooze, always fire when due ─────────

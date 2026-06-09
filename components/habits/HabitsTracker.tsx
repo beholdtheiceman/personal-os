@@ -7,6 +7,7 @@ import { addUserDoc } from "@/lib/firestore-helpers";
 import { useAuth } from "@/contexts/AuthContext";
 import HabitCard from "./HabitCard";
 import HabitForm from "./HabitForm";
+import HabitSuggestionCard, { type HabitSuggestion } from "./HabitSuggestionCard";
 import LoadingDots from "@/components/ui/LoadingDots";
 import { RiAddLine, RiLoopLeftLine, RiNotificationLine, RiNotificationOffLine } from "react-icons/ri";
 import { format } from "date-fns";
@@ -39,6 +40,9 @@ export default function HabitsTracker() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  // PA-5: Claude-suggested starter habits for the empty state
+  const [suggestions, setSuggestions] = useState<HabitSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const todayStr = useToday();
   const { permission, enable } = useNotifications();
@@ -70,6 +74,34 @@ export default function HabitsTracker() {
       completions: [],
     });
     toast.success("Habit created");
+  };
+
+  const fetchSuggestions = async () => {
+    if (!user) return;
+    setLoadingSuggestions(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/habits/suggest", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+      if (!data.suggestions?.length) toast.error("Couldn't generate suggestions — try again.");
+    } catch {
+      toast.error("Couldn't generate suggestions — try again.");
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const acceptSuggestion = async (s: HabitSuggestion) => {
+    await addHabit({ name: s.name, category: s.category, target_days: s.target_days });
+    setSuggestions((prev) => prev.filter((x) => x.name !== s.name));
+  };
+
+  const skipSuggestion = (s: HabitSuggestion) => {
+    setSuggestions((prev) => prev.filter((x) => x.name !== s.name));
   };
 
   const updateHabit = async (id: string, data: Partial<Habit>) => {
@@ -198,13 +230,32 @@ export default function HabitsTracker() {
 
       {/* Habits list */}
       {habits.length === 0 ? (
-        <div className="card flex flex-col items-center py-16 text-center group">
-          <RiLoopLeftLine className="w-10 h-10 text-text-muted mb-3" />
-          <p className="text-text-secondary text-sm mb-4">No habits yet.</p>
-          <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
-            Add your first habit
-          </button>
-        </div>
+        suggestions.length > 0 ? (
+          <div className="space-y-3">
+            <p className="text-xs text-text-muted text-center">
+              Claude suggested these based on your goals, values, and current season. Add the ones that fit.
+            </p>
+            {suggestions.map((s) => (
+              <HabitSuggestionCard key={s.name} suggestion={s} onAdd={acceptSuggestion} onSkip={skipSuggestion} />
+            ))}
+            <button onClick={() => setShowForm(true)} className="w-full text-xs text-text-muted hover:text-text-primary py-2">
+              or add one manually
+            </button>
+          </div>
+        ) : (
+          <div className="card flex flex-col items-center py-16 text-center group">
+            <RiLoopLeftLine className="w-10 h-10 text-text-muted mb-3" />
+            <p className="text-text-secondary text-sm mb-4">No habits yet.</p>
+            <div className="flex flex-col items-center gap-2">
+              <button onClick={fetchSuggestions} disabled={loadingSuggestions} className="btn-primary text-sm disabled:opacity-50">
+                {loadingSuggestions ? "Thinking…" : "✨ Let Claude suggest your first habits"}
+              </button>
+              <button onClick={() => setShowForm(true)} className="text-xs text-text-muted hover:text-text-primary">
+                or add your first habit manually
+              </button>
+            </div>
+          </div>
+        )
       ) : (
         <div className="space-y-3 group">
           {habits.map((habit) => (

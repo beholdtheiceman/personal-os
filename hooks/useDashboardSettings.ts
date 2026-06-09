@@ -6,10 +6,11 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "what_matters",         label: "What Actually Matters" },
+  // PA-4: briefing elevated to the top (just under the one-line What Matters signal).
+  { id: "daily_briefing",       label: "AI Briefing" },
   { id: "system_audit",         label: "System Audit" },
   { id: "xp",                   label: "XP / Level" },
   { id: "quick_links",          label: "Quick Links" },
-  { id: "daily_briefing",       label: "AI Briefing" },
   { id: "insights",             label: "AI Insights" },
   { id: "decision_review",      label: "Decision Reviews" },
   { id: "birthday",             label: "Upcoming Birthdays" },

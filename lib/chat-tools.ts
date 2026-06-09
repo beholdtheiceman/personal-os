@@ -718,6 +718,17 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "run_day_recap",
+    description: "Process an end-of-day recap: take the user's free-form description of how their day went and log everything across modules at once — mood, meals/nutrition, workout, tasks they completed, new tasks, people they interacted with, a journal reflection, water, and any expenses. Use this when the user is recapping their day (e.g. 'today I worked out, had chicken and rice, finished the proposal, feeling about a 7'). Pass their full description verbatim as `text`. Returns a summary of what was logged.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "The user's full natural-language description of their day, verbatim." },
+      },
+      required: ["text"],
+    },
+  },
+  {
     name: "set_budget",
     description: "Set or update a monthly spending limit for a category. Use this when the user says things like 'set my grocery budget to $400' or 'limit dining to $200 this month'.",
     input_schema: {

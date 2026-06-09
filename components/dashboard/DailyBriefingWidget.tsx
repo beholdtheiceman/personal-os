@@ -17,7 +17,8 @@ export default function DailyBriefingWidget() {
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  // PA-4: the briefing is the home-screen anchor — show full prose by default.
+  const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
     if (!user) return;

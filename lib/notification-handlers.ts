@@ -140,6 +140,110 @@ export async function goalDeadlineHandler(uid: string, tz: string, daysBefore = 
   };
 }
 
+// ── Relationship Follow-up (PA-6) ─────────────────────────────────────────────
+// Surfaces contacts who have gone past their contact_frequency window without contact.
+// Mirrors hooks/usePeople.ts isOverdue thresholds.
+const FREQ_DAYS: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+
+export async function relationshipFollowupHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const todayStr = todayLocal(tz);
+  const now = localNow(tz);
+  const snap = await db.collection(`users/${uid}/people`).get();
+
+  const overdue = snap.docs.filter((d) => {
+    const p = d.data();
+    if (!p.contact_frequency || typeof p.last_contacted !== "string") return false;
+    const threshold = FREQ_DAYS[p.contact_frequency as string];
+    if (!threshold) return false;
+    const days = Math.floor((now.getTime() - new Date(p.last_contacted + "T12:00:00").getTime()) / 86400000);
+    return days > threshold;
+  });
+  if (overdue.length === 0) return null;
+
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/relationship_followup_${todayStr}`).get();
+  const alreadySent: string[] = sentDoc.exists ? (sentDoc.data()?.ids as string[]) ?? [] : [];
+  const fresh = overdue.filter((d) => !alreadySent.includes(d.id));
+  if (fresh.length === 0) return null;
+
+  await db.doc(`users/${uid}/notification_sent/relationship_followup_${todayStr}`).set(
+    { ids: [...alreadySent, ...fresh.map((d) => d.id)] },
+    { merge: true },
+  );
+
+  const names = fresh.slice(0, 3).map((d) => d.data().name as string);
+  return {
+    title: "👋 Time to reach out",
+    body: `${names.join(", ")}${fresh.length > 3 ? ` +${fresh.length - 3} more` : ""} ${fresh.length === 1 ? "is" : "are"} overdue for contact.`,
+    tag: "relationship-followup",
+  };
+}
+
+// ── Day Recap nudge (PA-2) ────────────────────────────────────────────────────
+// Evening prompt to run the end-of-day recap, unless the user already logged today
+// (a mood entry counts as "done").
+export async function dayRecapHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const todayStr = todayLocal(tz);
+
+  const moodDoc = await db.doc(`users/${uid}/mood/${todayStr}`).get();
+  if (moodDoc.exists) return null; // already reflected today
+
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/day_recap_${todayStr}`).get();
+  if (sentDoc.exists) return null;
+  await db.doc(`users/${uid}/notification_sent/day_recap_${todayStr}`).set({ sent: true });
+
+  return {
+    title: "🌙 Ready for your daily recap?",
+    body: "Tell me how your day went and I'll log it all in one go.",
+    tag: "day-recap",
+  };
+}
+
+// ── Uncategorized transactions (PA-3a) ────────────────────────────────────────
+// Nudge when Plaid transactions were categorized with low confidence and need a glance.
+export async function transactionReviewHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const todayStr = todayLocal(tz);
+  const snap = await db.collection(`users/${uid}/plaid_transactions`).where("needs_review", "==", true).get();
+  if (snap.empty) return null;
+
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/transaction_review_${todayStr}`).get();
+  if (sentDoc.exists) return null;
+  await db.doc(`users/${uid}/notification_sent/transaction_review_${todayStr}`).set({ sent: true });
+
+  return {
+    title: "💳 Transactions to review",
+    body: `${snap.size} transaction${snap.size > 1 ? "s" : ""} need${snap.size === 1 ? "s" : ""} a quick category check.`,
+    tag: "transaction-review",
+  };
+}
+
+// ── Calendar time entries pending (PA-3b) ─────────────────────────────────────
+// Evening nudge to import the day's calendar events into the time log, when calendar is
+// connected and no calendar-sourced time entries exist for today yet.
+export async function timeEntriesPendingHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const todayStr = todayLocal(tz);
+
+  const calConnected = (await db.doc(`users/${uid}/integrations/google_calendar`).get()).exists;
+  if (!calConnected) return null;
+
+  const entriesSnap = await db.collection(`users/${uid}/time_entries`)
+    .where("date", "==", todayStr).where("source", "==", "calendar").limit(1).get();
+  if (!entriesSnap.empty) return null; // already imported today
+
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/time_entries_pending_${todayStr}`).get();
+  if (sentDoc.exists) return null;
+  await db.doc(`users/${uid}/notification_sent/time_entries_pending_${todayStr}`).set({ sent: true });
+
+  return {
+    title: "⏱️ Log today's time?",
+    body: "Import today's calendar events into your time tracker in one tap.",
+    tag: "time-entries-pending",
+  };
+}
+
 // ── Savings Milestone ─────────────────────────────────────────────────────────
 export async function savingsMilestoneHandler(uid: string): Promise<NotifPayload | null> {
   const db = getAdminDb();

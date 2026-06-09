@@ -11,6 +11,7 @@ import { getLocalTimeInfo } from "@/lib/timezone";
 import { fetchWeatherData } from "@/lib/weather";
 import { getConstitutionContext } from "@/lib/constitution";
 import { getWhatMattersForContext } from "@/lib/what-matters";
+import { getPeopleSignals, getBudgetReds } from "@/lib/context-snapshot";
 
 // Returns RFC 3339 start/end-of-day strings in the user's local timezone so the
 // Google Calendar query covers exactly the user's local day, not UTC midnight→midnight.
@@ -144,7 +145,13 @@ async function collectContext(uid: string, today: string, tz: string) {
   // "What Actually Matters" signal (optional — prepend to briefing if available)
   const whatMattersCtx = await getWhatMattersForContext(uid).catch(() => null);
 
-  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx, whatMattersCtx };
+  // People + finance signals (PA-4) — reuse the shared snapshot helpers
+  const [peopleSignals, budgetReds] = await Promise.all([
+    getPeopleSignals(uid, today).catch(() => ({ birthdays: [] as string[], overdue: [] as string[] })),
+    getBudgetReds(uid, today.slice(0, 7)).catch(() => [] as string[]),
+  ]);
+
+  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx, whatMattersCtx, peopleSignals, budgetReds };
 }
 
 async function generateBriefing(uid: string, today: string, tz: string): Promise<{
@@ -196,10 +203,12 @@ Generate a concise, motivating morning briefing. Include:
 2. **Today's priorities** — top 3 tasks with brief reasoning
 3. **Habits** — which are due and any already done
 4. **Calendar** — key events for today
-5. **Goals check-in** — brief note on active goals
-6. One actionable insight or suggestion
+5. **People** — anyone to reach out to (overdue contacts, upcoming birthdays), only if relevant
+6. **Finance** — flag any budget category over or near its limit, only if relevant
+7. **Goals check-in** — brief note on active goals
+8. One actionable insight or suggestion
 
-Keep it under 250 words. Be direct and energizing. Use markdown headers.
+Keep it under 280 words. Be direct and energizing. Use markdown headers. Omit the People and Finance sections entirely if there's nothing to say there.
 
 ---
 TASKS:
@@ -216,6 +225,15 @@ ${healthLine}
 
 WEATHER:
 ${ctx.weatherLine ?? "Not configured"}
+
+PEOPLE:
+${[
+  ctx.peopleSignals.overdue.length ? `Overdue to contact: ${ctx.peopleSignals.overdue.join(", ")}` : "",
+  ctx.peopleSignals.birthdays.length ? `Birthdays soon: ${ctx.peopleSignals.birthdays.join(", ")}` : "",
+].filter(Boolean).join("\n") || "Nothing pressing"}
+
+FINANCE:
+${ctx.budgetReds.length ? `Budget categories over/near limit: ${ctx.budgetReds.join(", ")}` : "All budget categories on track"}
 
 ACTIVE GOALS:
 ${goalLines}`;

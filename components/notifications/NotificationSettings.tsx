@@ -150,6 +150,34 @@ const CATEGORIES: {
     icon: <RiLeafLine className="w-4 h-4" />,
     hasTime: true,
   },
+  {
+    key: "relationship_followup",
+    label: "Relationship Follow-Ups",
+    description: "Surfaces people you haven't contacted within their target frequency window so no one slips through the cracks",
+    icon: <RiHeartPulseLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "day_recap",
+    label: "End-of-Day Recap",
+    description: "Evening nudge to recap your day in one conversation — logs mood, meals, workout, tasks, and more at once",
+    icon: <RiMoonLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "transaction_review",
+    label: "Transactions to Review",
+    description: "Flags bank transactions the AI categorized with low confidence so you can confirm them quickly",
+    icon: <RiMoneyDollarCircleLine className="w-4 h-4" />,
+    hasTime: true,
+  },
+  {
+    key: "time_entries_pending",
+    label: "Calendar Time Import",
+    description: "Reminds you to import the day's calendar events into your time tracker with one tap",
+    icon: <RiTimerLine className="w-4 h-4" />,
+    hasTime: true,
+  },
 ];
 
 function fmt12h(time: string) {
