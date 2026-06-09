@@ -2288,6 +2288,21 @@ export const CLIENT_TOOL_NAMES = new Set<string>([
 
 export const isClientTool = (name: string) => CLIENT_TOOL_NAMES.has(name);
 
+// Tools that are irreversible or outbound — text chat pauses for explicit user confirmation
+// before executing. Voice uses the instruction-level confirm in the session prompt.
+export const DESTRUCTIVE_TOOL_NAMES = new Set<string>([
+  "unsubscribe_from_email",
+  "send_email", "reply_to_email", "trash_email", "delete_gmail_label",
+  "clear_shopping_list", "delete_shopping_item",
+  "delete_task", "delete_habit", "delete_meal", "delete_health_log",
+  "delete_journal_entry", "delete_goal", "delete_subscription", "delete_memory",
+  "delete_project", "delete_project_card", "delete_recipe",
+  "delete_interaction", "delete_person", "delete_second_brain_item",
+  "delete_calendar_event", "delete_debt", "delete_drive_file", "delete_google_contact",
+]);
+
+export const isDestructiveTool = (name: string) => DESTRUCTIVE_TOOL_NAMES.has(name);
+
 // Convert Anthropic tool definitions to OpenAI Realtime API format.
 // Anthropic: { name, description, input_schema: { type, properties, required } }
 // OpenAI:    { type: "function", name, description, parameters: { type, properties, required } }

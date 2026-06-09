@@ -9,7 +9,7 @@ import { getConstitutionContext } from "@/lib/constitution";
 import { getSeasonContext } from "@/lib/season";
 import { getLifeContextForChat } from "@/lib/life-context";
 import { buildContextSnapshot } from "@/lib/context-snapshot";
-import { TOOLS, isClientTool } from "@/lib/chat-tools";
+import { TOOLS, isClientTool, isDestructiveTool } from "@/lib/chat-tools";
 import { executeTool, type ToolInput } from "@/lib/tool-executor";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages, systemPrompt, uid, localDate, localTime, imageBase64, imageMimeType, fileText, fileName, filePdfBase64, chatId, isFirstMessage, offRecord, resume, clientResults } = await req.json();
+    const { messages, systemPrompt, uid, localDate, localTime, imageBase64, imageMimeType, fileText, fileName, filePdfBase64, chatId, isFirstMessage, offRecord, resume, clientResults, confirmedDestructiveIds } = await req.json();
 
     if (decoded.uid !== uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const today = () => makeToday(localDate as string | undefined);
@@ -101,8 +101,27 @@ export async function POST(req: NextRequest) {
         assistantContent: Anthropic.ContentBlockParam[];
         toolResults: Anthropic.ToolResultBlockParam[];
       };
+
+      // Execute destructive tools the user confirmed. The client POSTs their
+      // tool_use IDs; we find them in assistantContent and run them now.
+      const confirmedResults: Anthropic.ToolResultBlockParam[] = [];
+      if (confirmedDestructiveIds?.length) {
+        const toolUses = (r.assistantContent as Anthropic.ContentBlockParam[]).filter(
+          (b): b is Anthropic.ToolUseBlock =>
+            b.type === "tool_use" && (confirmedDestructiveIds as string[]).includes(b.id),
+        );
+        for (const tool of toolUses) {
+          const result = uid
+            ? await executeTool(uid, tool.name, tool.input as ToolInput, today, chatId)
+            : "Action skipped — user not authenticated.";
+          actions.push(result);
+          confirmedResults.push({ type: "tool_result", tool_use_id: tool.id, content: result });
+        }
+      }
+
       const allResults = [
         ...(r.toolResults ?? []),
+        ...confirmedResults,
         ...((clientResults ?? []) as Anthropic.ToolResultBlockParam[]),
       ];
       currentMessages = [
@@ -287,12 +306,16 @@ export async function POST(req: NextRequest) {
         );
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
         const pendingClientTools: { id: string; name: string; input: unknown }[] = [];
+        const pendingDestructiveTools: { id: string; name: string; input: unknown }[] = [];
 
         for (const tool of toolUseBlocks) {
-          // Client tools (navigation, widget refresh, etc.) can't run on the server —
-          // collect them and hand back to the browser (Phase 3, Pattern A).
           if (isClientTool(tool.name)) {
             pendingClientTools.push({ id: tool.id, name: tool.name, input: tool.input });
+            continue;
+          }
+          // Destructive tools pause for user confirmation in the browser.
+          if (isDestructiveTool(tool.name)) {
+            pendingDestructiveTools.push({ id: tool.id, name: tool.name, input: tool.input });
             continue;
           }
           const result = uid
@@ -302,16 +325,18 @@ export async function POST(req: NextRequest) {
           toolResults.push({ type: "tool_result", tool_use_id: tool.id, content: result });
         }
 
-        // Pause the loop: the browser must execute the client tool(s) and POST their
-        // results back to /api/chat with { resume, clientResults } to continue.
         if (pendingClientTools.length) {
           return NextResponse.json({
             pendingClientTools,
-            resume: {
-              priorMessages: currentMessages,
-              assistantContent: response.content,
-              toolResults,
-            },
+            resume: { priorMessages: currentMessages, assistantContent: response.content, toolResults },
+            actions,
+          });
+        }
+
+        if (pendingDestructiveTools.length) {
+          return NextResponse.json({
+            pendingDestructiveTools,
+            resume: { priorMessages: currentMessages, assistantContent: response.content, toolResults },
             actions,
           });
         }

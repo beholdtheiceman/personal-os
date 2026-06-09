@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIsTouch } from "@/hooks/useIsTouch";
 import { useQuickLinks } from "@/hooks/useQuickLinks";
 import { runClientTool } from "@/lib/client-actions";
+import { RiAlertLine } from "react-icons/ri";
 import {
   collection, addDoc, getDocs, query, orderBy, limit,
   onSnapshot, doc, updateDoc, setDoc, getDoc, writeBatch, deleteDoc,
@@ -104,6 +105,13 @@ export default function ChatInterface() {
   const [attachedFile, setAttachedFile] = useState<{ name: string; text: string; type: "text" } | { name: string; base64: string; type: "pdf" } | null>(null);
   const [chatsLoaded, setChatsLoaded] = useState(false);
   const [offRecord, setOffRecord] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    tools: { id: string; name: string; input: Record<string, unknown> }[];
+    resume: unknown;
+    chatId: string;
+    placeholderId: string;
+    combinedActions: string[];
+  } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
@@ -497,6 +505,12 @@ export default function ChatInterface() {
         if (data.actions?.length) combinedActions = [...combinedActions, ...data.actions];
       }
 
+      if (data.pendingDestructiveTools?.length) {
+        setPendingConfirm({ tools: data.pendingDestructiveTools, resume: data.resume, chatId, placeholderId, combinedActions });
+        setLoading(false);
+        return;
+      }
+
       const assistantMsg: AssistantMessage = {
         id: placeholderId,
         role: "assistant",
@@ -528,6 +542,32 @@ export default function ChatInterface() {
       setLoading(false);
       // Return focus to textarea so user can keep typing immediately
       setTimeout(() => textareaRef.current?.focus(), 0);
+    }
+  };
+
+  // ── Destructive-action confirm ───────────────────────────────────────────
+  const confirmDestructive = async (confirmed: boolean) => {
+    if (!pendingConfirm || !user) return;
+    const { tools, resume, chatId, placeholderId, combinedActions } = pendingConfirm;
+    setPendingConfirm(null);
+    setLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const body = confirmed
+        ? { uid: user.uid, chatId, systemPrompt: skills.effectiveSystemPrompt, localDate: format(new Date(), "yyyy-MM-dd"), localTime: new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" }), isFirstMessage: false, resume, confirmedDestructiveIds: tools.map((t) => t.id) }
+        : { uid: user.uid, chatId, systemPrompt: skills.effectiveSystemPrompt, localDate: format(new Date(), "yyyy-MM-dd"), localTime: new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" }), isFirstMessage: false, resume, clientResults: tools.map((t) => ({ type: "tool_result", tool_use_id: t.id, content: "Cancelled by user." })) };
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+      const data = await res.json();
+      const allActions = [...combinedActions, ...(data.actions ?? [])];
+      const assistantMsg: AssistantMessage = { id: placeholderId, role: "assistant", content: data.text ?? "", actions: allActions.length ? allActions : undefined, timestamp: new Date().toISOString() };
+      setMessages((prev) => prev.map((m) => m.id === placeholderId ? assistantMsg : m));
+      tts.speakResponse(assistantMsg.content);
+      if (!offRecord) await saveMessage(chatId, { role: "assistant", content: assistantMsg.content, timestamp: assistantMsg.timestamp, ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}) });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+      setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -755,6 +795,27 @@ export default function ChatInterface() {
                 </div>
               </div>
             ))
+          )}
+          {pendingConfirm && (
+            <div className="flex justify-start px-2">
+              <div className="max-w-[85%] md:max-w-[70%] rounded-2xl rounded-tl-sm px-4 py-3 border border-warning/40 space-y-3" style={{ background: "rgba(35,14,28,0.88)" }}>
+                <div className="flex items-center gap-2">
+                  <RiAlertLine className="w-4 h-4 text-warning shrink-0" />
+                  <p className="text-sm font-medium text-warning">Confirm action</p>
+                </div>
+                <div className="space-y-1.5">
+                  {pendingConfirm.tools.map((t) => (
+                    <p key={t.id} className="text-xs text-text-secondary font-mono bg-white/5 rounded px-2 py-1">
+                      {t.name}{Object.keys(t.input).length ? ` — ${JSON.stringify(t.input)}` : ""}
+                    </p>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => confirmDestructive(true)} className="text-xs px-3 py-1.5 rounded-lg bg-warning/20 text-warning hover:bg-warning/30 transition-colors font-medium">Confirm</button>
+                  <button onClick={() => confirmDestructive(false)} className="text-xs px-3 py-1.5 rounded-lg bg-white/10 text-text-secondary hover:bg-white/15 transition-colors">Cancel</button>
+                </div>
+              </div>
+            </div>
           )}
           <div ref={bottomRef} />
         </div>
