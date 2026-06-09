@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { getAuth } from "firebase/auth";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -10,6 +10,7 @@ import {
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmailAgentStatus } from "@/hooks/useEmailAgentStatus";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
 
 interface UnsubscribeSuggestion {
   sender: string;
@@ -29,7 +30,7 @@ export default function EmailAgentWidget() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis,  setAnalysis]  = useState<AnalysisResult | null>(null);
 
-  const runNow = async () => {
+  const runNow = useCallback(async () => {
     if (!user || running) return;
     setRunning(true);
     try {
@@ -49,7 +50,8 @@ export default function EmailAgentWidget() {
     } finally {
       setRunning(false);
     }
-  };
+  }, [user, running]);
+  useWidgetRefresh("email_agent", runNow);
 
   const analyzeInbox = async () => {
     if (!user || analyzing) return;

@@ -2,12 +2,16 @@
 import { RiDropLine, RiCheckLine } from "react-icons/ri";
 import { useHydration } from "@/hooks/useHydration";
 import Link from "next/link";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
+
+const noop = () => {};
 
 const RADIUS = 20;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function HydrationDashboardWidget() {
   const { glasses, goal, loading, increment } = useHydration();
+  useWidgetRefresh("hydration", noop);
 
   if (loading) return null;
 

@@ -2,6 +2,9 @@
 import { RiMoneyDollarCircleLine } from "react-icons/ri";
 import { useBudget } from "@/hooks/useBudget";
 import Link from "next/link";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
+
+const noop = () => {};
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -9,6 +12,7 @@ function fmt(n: number) {
 
 export default function BudgetDashboardWidget() {
   const { budget, actuals, loading } = useBudget();
+  useWidgetRefresh("budget", noop);
 
   if (loading) return null;
 

@@ -2,9 +2,13 @@
 import Link from "next/link";
 import { RiSaveLine } from "react-icons/ri";
 import { useSavingsGoals } from "@/hooks/useSavingsGoals";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
+
+const noop = () => {};
 
 export default function SavingsDashboardWidget() {
   const { active, loading } = useSavingsGoals();
+  useWidgetRefresh("savings", noop);
 
   if (loading || active.length === 0) return null;
 

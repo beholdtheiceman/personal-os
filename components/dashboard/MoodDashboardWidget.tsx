@@ -2,6 +2,9 @@
 import Link from "next/link";
 import { RiEmotionLine } from "react-icons/ri";
 import { useMood } from "@/hooks/useMood";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
+
+const noop = () => {};
 
 function scoreColor(score: number) {
   if (score <= 3) return "text-danger";
@@ -20,6 +23,7 @@ function scoreEmoji(score: number) {
 
 export default function MoodDashboardWidget() {
   const { today, history, loading } = useMood();
+  useWidgetRefresh("mood", noop);
 
   if (loading || (!today && history.length === 0)) return null;
 

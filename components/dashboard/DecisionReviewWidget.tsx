@@ -3,9 +3,13 @@ import Link from "next/link";
 import { useDecisions } from "@/hooks/useDecisions";
 import { RiLightbulbLine, RiArrowRightLine } from "react-icons/ri";
 import { format, parseISO } from "date-fns";
+import { useWidgetRefresh } from "@/hooks/useWidgetRefresh";
+
+const noop = () => {};
 
 export default function DecisionReviewWidget() {
   const { pendingReview, loading } = useDecisions();
+  useWidgetRefresh("decision_review", noop);
 
   if (loading || pendingReview.length === 0) return null;
 
