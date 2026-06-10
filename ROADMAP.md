@@ -180,6 +180,12 @@
 
 ## 📋 Roadmap
 
+> **Voice parity is a first-class requirement for all new features.** The infrastructure is already in place — every new feature just needs to follow these four rules:
+> 1. **Server-side tools** (Firestore reads/writes) — automatically available in voice sessions via `/api/realtime/tools`; no extra work needed beyond registering the tool definition.
+> 2. **New dashboard widgets** — wire `useWidgetRefresh("widget_key", callback)` inside the component so the voice agent can call `refresh_widget` to update it live.
+> 3. **Client-side actions** (UI navigation, modal opens, media control, scene transitions) — add to `CLIENT_TOOL_NAMES` in `lib/chat-tools.ts` and implement the handler in `lib/client-actions.ts`; both text chat and voice pick them up automatically.
+> 4. **Destructive tools** — add to `DESTRUCTIVE_TOOL_NAMES` in `lib/chat-tools.ts`; text chat gets the inline confirm card; voice gets instruction-level confirmation already baked into the session prompt.
+
 ### Gamification (Beyond XP)
 - **Streak XP multipliers** — habit streaks that reach 7 days apply a 1.5× XP multiplier on that habit; 30-day streaks apply 2×; multipliers stack with the existing streak bonus toasts and tie directly into the `Week One` / `The Long Game` / `Unbreakable` achievement milestones (hitting the achievement threshold also flips on the multiplier)
 - **Daily & weekly challenges** — 3 rotating daily challenges generated each morning (e.g. "Complete 2 tasks", "Hit your water goal", "Log a meal before noon"); weekly challenges are larger ("4 workouts this week", "Finish a book"); challenges are surfaced on the dashboard and in the morning briefing; completing them awards bonus XP and can drive progress toward existing achievements (e.g. daily challenges nudge toward `Perfect Day`)
@@ -306,6 +312,8 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
   - **AI gift suggestions** — Already on the roadmap; fits here as part of the deeper CRM layer
 
 ### Life Scenes / Orchestrated Modes
+> 🎙️ **Voice wiring required:** `activate_scene` and `deactivate_scene` are client-side tools (they update nav badge state and trigger UI transitions) → add to `CLIENT_TOOL_NAMES`. `set_media` controls the MiniPlayer client-side → also `CLIENT_TOOL_NAMES`. Notification suppression during a scene calls `update_notification_setting` (server tool, already voice-accessible). New scene widget → `useWidgetRefresh("scene", fn)`.
+
 - **Scene system** — A named bundle of tool calls Claude executes in sequence when you say the right thing. Not a new UI paradigm — just the chat's existing tool infrastructure given orchestration capability, a media player control hook, and a thin "active scene" state in Firestore the UI can react to. Built-in scenes to start:
   - **Deep Work** — Start a Pomodoro timer linked to your top-priority task, queue focus music from The Crate (mood-matched or scene-default), suppress non-urgent push notifications for the session duration, simplify the dashboard to a minimal "one thing" view
   - **Workout** — Pull up today's planned workout from the Workout Planner, queue an energizing playlist, start the workout timer
@@ -419,6 +427,8 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
 - **Alignment with Goals and habits** — OKRs sit above Goals in the hierarchy; Claude can suggest which existing goals and habits ladder up to each Objective, giving your day-to-day activity a clearer line of sight to what actually matters this quarter.
 
 ### SOPs & Personal Runbooks
+> 🎙️ **Voice wiring required:** Triggering and stepping through an SOP is a natural voice interaction. `run_sop` is a server tool (reads the SOP definition and returns the first step). Navigation steps within an SOP dispatch to existing `navigate_to_page` (already a client tool). Any SOP step that opens a modal (`open_quick_capture`, etc.) reuses existing client tools. The SOP runner itself stays server-side; it delegates to existing client tools for UI steps rather than adding new ones.
+
 - **Document how you do things so Claude can replicate them** — The infrastructure that makes the agent feel truly personal over time. An SOP is a named, step-by-step workflow you've defined: your morning routine, how you process email, your weekly review process, how you meal plan, how you close out a workday. Once documented, you can trigger any SOP by name and Claude walks through it with you — or executes the automatable steps automatically.
 - **SOP builder** — Create an SOP with a name, trigger phrase, and ordered list of steps. Each step can be: a question Claude asks you, an action Claude takes (tool call), a reminder, or a navigation prompt ("open the habit tracker"). Steps can be conditional ("if you haven't logged weight this week, do that first").
 - **SOP library** — Starter templates for common personal OS workflows: Morning Startup, Weekly Review, Monthly Finance Review, End of Day Shutdown, Quarterly OKR Review. User can edit, extend, or build from scratch.
@@ -426,6 +436,8 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
 - **Accessible via chat** — "Run my morning routine", "let's do my weekly review", "start end-of-day shutdown". Active SOP shown as a badge in the nav with step progress.
 
 ### Day-End Micro-Review
+> 🎙️ **Voice wiring required:** `open_day_review` → `CLIENT_TOOL_NAMES` (opens the review UI or focuses the input so the user can answer the three questions via voice). Dashboard widget → `useWidgetRefresh("day_review", fn)`. The three-question flow itself is a natural voice interaction — voice is actually the primary input surface here.
+
 - **2-minute daily close** — Lighter than the full journal; heavier than nothing. Three fixed questions at the end of each day: (1) What got done today? (2) What didn't, and why? (3) One thing to carry into tomorrow. Voice or text. Takes under 2 minutes.
 - **Feeds the weekly AI review** — Currently the weekly review infers how the week went from activity data (tasks completed, habits logged, etc.). Day-end micro-reviews give it your *subjective* read on each day, making the weekly synthesis dramatically richer.
 - **Wind-down scene integration** — Day-end review is a natural step in the Wind Down scene; can be triggered automatically as part of that flow.
