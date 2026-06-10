@@ -11,7 +11,7 @@ import {
   decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
   subscriptionRenewalHandler, spendingTrendHandler, seasonCheckinHandler,
   relationshipFollowupHandler, dayRecapHandler, transactionReviewHandler, timeEntriesPendingHandler,
-  bedtimeReminderHandler,
+  bedtimeReminderHandler, dayMicroReviewHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
@@ -230,6 +230,11 @@ export async function GET(req: NextRequest) {
     if (settings.bedtime_reminder.enabled && settings.bedtime_reminder.time && isHour(timeInfo, settings.bedtime_reminder.time)) {
       const n = await bedtimeReminderHandler(uid, timeInfo.tz);
       if (n) await send(n.title, n.body, n.tag ?? "bedtime-reminder");
+    }
+
+    if (settings.day_micro_review.enabled && settings.day_micro_review.time && isHour(timeInfo, settings.day_micro_review.time)) {
+      const n = await dayMicroReviewHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "day-micro-review");
     }
 
     results[uid] = fired;

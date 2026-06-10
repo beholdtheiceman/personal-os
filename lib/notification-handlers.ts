@@ -244,6 +244,26 @@ export async function timeEntriesPendingHandler(uid: string, tz: string): Promis
   };
 }
 
+// ── Day Micro-Review nudge ────────────────────────────────────────────────────
+// Evening prompt to complete the 3-question day review, if not done yet today.
+export async function dayMicroReviewHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const todayStr = todayLocal(tz);
+
+  const reviewDoc = await db.doc(`users/${uid}/day_reviews/${todayStr}`).get();
+  if (reviewDoc.exists) return null; // already reviewed today
+
+  const sentDoc = await db.doc(`users/${uid}/notification_sent/day_micro_review_${todayStr}`).get();
+  if (sentDoc.exists) return null;
+  await db.doc(`users/${uid}/notification_sent/day_micro_review_${todayStr}`).set({ sent: true });
+
+  return {
+    title: "🌙 Quick day review",
+    body: "3 questions, under 2 minutes. What got done, what didn't, one thing for tomorrow.",
+    tag: "day-micro-review",
+  };
+}
+
 // ── Savings Milestone ─────────────────────────────────────────────────────────
 export async function savingsMilestoneHandler(uid: string): Promise<NotifPayload | null> {
   const db = getAdminDb();

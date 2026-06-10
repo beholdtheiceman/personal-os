@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { QuickCaptureProvider } from "@/contexts/QuickCaptureContext";
 import QuickCaptureModal from "@/components/capture/QuickCaptureModal";
+import DayReviewModal from "@/components/capture/DayReviewModal";
 import { Toaster } from "react-hot-toast";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import "./globals.css";
@@ -30,6 +31,7 @@ export default function RootLayout({
         <AuthProvider>
           <QuickCaptureProvider>
             <QuickCaptureModal />
+            <DayReviewModal />
             <ServiceWorkerRegistration />
             {children}
           {/* Global toast notification system */}

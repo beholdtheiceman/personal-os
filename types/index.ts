@@ -132,6 +132,7 @@ export interface NotificationSettings {
   time_entries_pending: NotificationCategory;  // nudge to import calendar events into time log (PA-3b)
   meeting_prep: NotificationCategory;          // briefing card 15-30 min before calendar events + post-meeting capture prompt
   bedtime_reminder: NotificationCategory;      // calculated bedtime based on tomorrow's earliest event + target sleep hours
+  day_micro_review: NotificationCategory;      // end-of-day 3-question micro-review nudge
   snooze_until?: string;     // local datetime "YYYY-MM-DDTHH:MM"; all notifications skip while now < this
 }
 
@@ -161,6 +162,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   time_entries_pending: { enabled: false, time: "18:00" },
   meeting_prep:         { enabled: true },
   bedtime_reminder:     { enabled: false, time: "21:00" },
+  day_micro_review:     { enabled: false, time: "21:30" },
 };
 
 // Deep-merges a stored settings doc onto the defaults. A shallow spread
@@ -209,7 +211,8 @@ export type XPEventType =
   | "hydration_goal"
   | "workout_complete"
   | "mood_logged"
-  | "energy_logged";
+  | "energy_logged"
+  | "day_review_complete";
 
 export interface XPEvent {
   id: string;
@@ -234,6 +237,15 @@ export interface Habit {
   reminder_times?: string[];  // ["08:00", "12:00", "18:00"] in user's local timezone
   reminder_timezone?: string; // e.g. "America/New_York"
   /** @deprecated use reminder_times */ reminder_time?: string;
+}
+
+// ─── Day Review ───────────────────────────────────────────────────────────────
+export interface DayReview {
+  date: string;         // YYYY-MM-DD (also the Firestore doc ID)
+  q1: string;          // What got done today?
+  q2: string;          // What didn't, and why?
+  q3: string;          // One thing to carry into tomorrow
+  created_at: string;  // ISO timestamp
 }
 
 // ─── Journal ──────────────────────────────────────────────────────────────────

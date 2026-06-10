@@ -185,6 +185,21 @@ async function collectWeekData(uid: string, weekStart: string, weekEnd: string) 
     }
   } catch { /* no transactions */ }
 
+  // Day-end micro-reviews this week
+  let dayReviewSummaries: string[] = [];
+  try {
+    const drSnap = await db
+      .collection(`users/${uid}/day_reviews`)
+      .where("date", ">=", weekStart)
+      .where("date", "<=", weekEnd)
+      .orderBy("date", "asc")
+      .get();
+    dayReviewSummaries = drSnap.docs.map((d) => {
+      const r = d.data();
+      return `${r.date}: Done — ${r.q1 ?? ""}${r.q2 ? ` | Missed — ${r.q2}` : ""}${r.q3 ? ` | Tomorrow — ${r.q3}` : ""}`;
+    });
+  } catch { /* day reviews not yet used */ }
+
   return {
     weekDates,
     completedTasks: completedTasks.slice(0, 20).map((t) => t.title as string),
@@ -206,6 +221,7 @@ async function collectWeekData(uid: string, weekStart: string, weekEnd: string) 
     timeSummary,
     spendSummary,
     totalWeekSpend,
+    dayReviewSummaries,
   };
 }
 
@@ -238,6 +254,7 @@ ${data.habitSummaries.length ? data.habitSummaries.join("\n") : "No habits track
 
 JOURNAL (${data.journalSummaries.length} entries${data.avgMood ? `, avg mood ${data.avgMood}/10` : ""}):
 ${data.journalSummaries.length ? data.journalSummaries.join("\n") : "No entries this week"}
+${data.dayReviewSummaries.length ? `\nDAY REVIEWS (${data.dayReviewSummaries.length}/7 days):\n${data.dayReviewSummaries.join("\n")}` : ""}
 
 HEALTH:
 ${data.avgSleep ? `- Avg sleep: ${data.avgSleep}h` : "- Sleep: not logged"}

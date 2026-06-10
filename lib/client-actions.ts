@@ -69,6 +69,11 @@ export async function runClientTool(
       return `Scene activated: ${sceneId}. Now execute the scene's opening actions.`;
     }
 
+    case "open_day_review": {
+      window.dispatchEvent(new CustomEvent("os:open-day-review"));
+      return "Opened day review.";
+    }
+
     case "deactivate_scene": {
       window.dispatchEvent(new CustomEvent("os:deactivate-scene"));
       return "Scene deactivated.";

@@ -21,6 +21,7 @@ export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "hydration_mood",       label: "Hydration & Mood" },
   { id: "calendar_nutrition",   label: "Calendar & Nutrition" },
   { id: "health_journal",       label: "Health & Journal" },
+  { id: "day_review",           label: "Day Review" },
   { id: "okr_summary",          label: "OKR Progress" },
   { id: "goals_projects",       label: "Goals & Projects" },
   { id: "finance",              label: "Finance Summary" },

@@ -256,7 +256,7 @@
 - **Relationship health score** — numeric score derived from interaction frequency vs. contact frequency target; surfaced per-contact and as a dashboard summary; replaces binary "needs attention" flag
 - **AI gift suggestions** — Claude generates gift ideas from the notes, interests, and interaction history you've logged for a person; accessible from the person detail view and via chat
 
-### Day-End Micro-Review
+### Day-End Micro-Review ✅ Complete
 > 🎙️ **Voice wiring required:** `open_day_review` → `CLIENT_TOOL_NAMES` (opens the review UI or focuses the input so the user can answer the three questions via voice). Dashboard widget → `useWidgetRefresh("day_review", fn)`. The three-question flow itself is a natural voice interaction — voice is actually the primary input surface here.
 
 - **2-minute daily close** — Lighter than the full journal; heavier than nothing. Three fixed questions at the end of each day: (1) What got done today? (2) What didn't, and why? (3) One thing to carry into tomorrow. Voice or text. Takes under 2 minutes.

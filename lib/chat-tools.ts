@@ -765,6 +765,11 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "open_day_review",
+    description: "Open the day-end micro-review panel so the user can answer the three daily reflection questions (what got done, what didn't, one thing for tomorrow). Use when the user asks to do their day review, wrap up the day, or reflect on today.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
     name: "set_budget",
     description: "Set or update a monthly spending limit for a category. Use this when the user says things like 'set my grocery budget to $400' or 'limit dining to $200 this month'.",
     input_schema: {

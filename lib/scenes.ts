@@ -33,7 +33,7 @@ export const BUILTIN_SCENES: Scene[] = [
     description: "Evening mode — soft music, surface tomorrow's priorities, prompt a quick journal entry.",
     colorClass: "rgba(96,165,250,0.4)",
     openingHint:
-      "Queue calm wind-down music via set_media with mood 'calm wind down'. Then briefly surface the user's top task for tomorrow and first calendar event. Gently invite a one-line journal entry if they haven't logged today.",
+      "Queue calm wind-down music via set_media with mood 'calm wind down'. Then briefly surface the user's top task for tomorrow and first calendar event. Gently invite a one-line journal entry if they haven't logged today. If they haven't done their day review yet, offer to open it via open_day_review.",
   },
   {
     id: "sleep",
