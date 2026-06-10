@@ -498,6 +498,18 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "log_energy",
+    description: "Log the user's energy level right now on a 1–5 scale with an optional note. Awards 5 XP. Subsequent calls today update the score.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        score: { type: "number", description: "Energy score from 1 (completely drained) to 5 (peak energy)." },
+        note: { type: "string", description: "Optional note (e.g. 'crashed after lunch', 'great after workout')." },
+      },
+      required: ["score"],
+    },
+  },
+  {
     name: "log_mood",
     description: "Log the user's mood for today on a 1–10 scale with an optional note. Awards 5 XP. Can only be called once per day (subsequent calls update the score).",
     input_schema: {

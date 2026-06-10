@@ -1151,6 +1151,30 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `Hydration today: ${glasses}/${goal} glasses. ${status}\nTimes: ${timestamps.join(", ") || "none"}`;
     }
 
+    case "log_energy": {
+      const rawScore = Math.min(5, Math.max(1, Math.round(Number(input.score))));
+      const score = rawScore * 2; // store as 1–10 internally, matching mood scale
+      const note = (input.note as string | undefined) ?? "";
+      const todayStr = today();
+      const existingSnap = await db.doc(`users/${uid}/energy/${todayStr}`).get();
+      const isFirst = !existingSnap.exists;
+      await db.doc(`users/${uid}/energy/${todayStr}`).set({
+        date: todayStr,
+        score,
+        note,
+        logged_at: new Date().toISOString(),
+      });
+      if (isFirst) {
+        const xpRef = db.doc(`users/${uid}/xp/summary`);
+        const xpSnap = await xpRef.get();
+        const currentXP: number = xpSnap.exists ? (xpSnap.data()?.total ?? 0) : 0;
+        await xpRef.set({ total: currentXP + 5 }, { merge: true });
+        await db.collection(`users/${uid}/xp_events`).add({ type: "energy_logged", xp: 5, description: "Energy logged", timestamp: new Date().toISOString() });
+      }
+      const label = rawScore === 1 ? "drained" : rawScore === 2 ? "low" : rawScore === 3 ? "okay" : rawScore === 4 ? "high" : "peak";
+      return `Energy logged: ${rawScore}/5 (${label})${note ? ` — "${note}"` : ""}${isFirst ? " +5 XP" : " (updated)"}`;
+    }
+
     case "log_mood": {
       const score = Math.min(10, Math.max(1, Math.round(Number(input.score))));
       const note = (input.note as string | undefined) ?? "";

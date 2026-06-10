@@ -43,6 +43,7 @@ import WeatherWidget from "@/components/dashboard/WeatherWidget";
 import WhatMattersWidget from "@/components/dashboard/WhatMattersWidget";
 import SystemAuditWidget from "@/components/dashboard/SystemAuditWidget";
 import MeetingPrepWidget from "@/components/dashboard/MeetingPrepWidget";
+import EnergyDashboardWidget from "@/components/dashboard/EnergyDashboardWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import DayRecapButton from "@/components/capture/DayRecapButton";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
@@ -375,6 +376,9 @@ export default function DashboardPage() {
             </div>
           </div>
         );
+
+      case "energy":
+        return <EnergyDashboardWidget key="energy" />;
 
       case "hydration_mood":
         return (

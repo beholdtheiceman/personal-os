@@ -206,7 +206,8 @@ export type XPEventType =
   | "streak_bonus"
   | "hydration_goal"
   | "workout_complete"
-  | "mood_logged";
+  | "mood_logged"
+  | "energy_logged";
 
 export interface XPEvent {
   id: string;
@@ -660,6 +661,15 @@ export interface Book {
   order?: number;
   created_at: string;
   updated_at: string;
+}
+
+// ─── Energy Tracker ───────────────────────────────────────────────────────────
+export interface EnergyEntry {
+  id: string;
+  date: string;       // YYYY-MM-DD (also doc ID)
+  score: number;      // 1–10
+  note?: string;
+  logged_at: string;
 }
 
 // ─── Mood Tracker ─────────────────────────────────────────────────────────────

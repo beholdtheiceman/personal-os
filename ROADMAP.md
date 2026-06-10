@@ -217,7 +217,7 @@
 - **Post-meeting capture** — After the calendar event end time, Claude prompts: "How did your meeting with [person] go? Any action items or notes to capture?" Voice or text input; Claude extracts tasks (→ Task system), decisions (→ Decision Journal), and interaction notes (→ People CRM) automatically.
 - **Meeting cost awareness** — Optional: log attendee count and estimated average salary; Claude calculates the cost of the meeting in real time and includes it in the briefing as a "this meeting costs ~$X/hour" framing.
 
-### Energy Level Tracker
+### Energy Level Tracker ✅ Complete
 - **Separate from mood** — Mood is emotional tone; energy is physical and cognitive readiness to perform. A quick 1–5 check-in available at any time (dashboard widget, chat tool, voice), with an optional note ("crashed after lunch", "great after the workout"). Stored as `users/{uid}/energy/{timestamp}` with time-of-day metadata so intra-day patterns are visible.
 - **Correlation engine** — After 30+ days of data, Claude Haiku surfaces personal energy patterns: what time of day you peak, how sleep quality the night before affects your morning energy, whether workouts boost or drain your afternoon, caffeine timing effects, nutrition correlations. The goal is actionable insight: "Your energy on days you work out before noon averages 0.8 points higher in the afternoon than days you don't." Feeds into the weekly AI review and Proactive AI Insights.
 - **Scene integration** — Active energy level informs scene suggestions. Low energy at 2pm? Claude might suggest a short walk before starting a focus session rather than jumping straight into Deep Work mode.

@@ -17,6 +17,7 @@ export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "birthday",             label: "Upcoming Birthdays" },
   { id: "verse",                label: "Verse of the Day" },
   { id: "tasks_habits",         label: "Tasks & Habits" },
+  { id: "energy",               label: "Energy Level" },
   { id: "hydration_mood",       label: "Hydration & Mood" },
   { id: "calendar_nutrition",   label: "Calendar & Nutrition" },
   { id: "health_journal",       label: "Health & Journal" },
