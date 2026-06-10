@@ -230,7 +230,7 @@
   - **Smart bedtime reminder** — Calculates target bedtime based on tomorrow's earliest calendar event and your target sleep duration; fires a push notification; adjusts dynamically week to week
   - **Sleep quality trend chart** — 30/90-day view of sleep duration, efficiency, and quality on the Health page alongside existing metrics
 
-### Personal OKRs
+### Personal OKRs ✅ Complete
 - **Quarterly cadence, separate from Goals** — OKRs operate at a higher altitude: Objectives are directional and qualitative ("Become the healthiest version of myself"), Key Results are measurable and binary at quarter-end ("Complete 48 workouts", "Average 7.5 hours of sleep", "Lose 8 lbs"). Structurally different from the current Goals system which is more project-like.
 - **Planning ritual** — At the start of each quarter, Claude runs a guided OKR-setting session: reviews last quarter's performance, asks what matters most this quarter, helps draft 2–3 Objectives with 2–4 Key Results each. Pulls relevant data from across the app to ground the conversation in reality ("Last quarter you averaged 3.2 workouts/week — is 4/week achievable?").
 - **Progress tracking** — Key Results auto-update where possible by linking to existing data sources (workout count from Workout Planner, sleep average from Google Health, etc.). Manual check-in for KRs that can't be automated.

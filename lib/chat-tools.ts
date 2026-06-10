@@ -498,6 +498,30 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "update_okr_progress",
+    description: "Update the current progress on a Key Result within an OKR Objective. Use when the user reports progress on a quarterly goal (e.g. 'I completed 3 more workouts'). Requires the objective ID and key result ID from get_okrs.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        objective_id: { type: "string", description: "The Firestore doc ID of the Objective." },
+        key_result_id: { type: "string", description: "The id field of the KeyResult to update." },
+        current: { type: "number", description: "The new current value (not a delta — the absolute progress so far)." },
+      },
+      required: ["objective_id", "key_result_id", "current"],
+    },
+  },
+  {
+    name: "get_okrs",
+    description: "Get the user's OKRs for the current (or specified) quarter, including objectives, key results, and progress scores.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        quarter: { type: "string", description: "Quarter in YYYY-QN format (e.g. '2026-Q2'). Defaults to current quarter." },
+      },
+      required: [],
+    },
+  },
+  {
     name: "log_energy",
     description: "Log the user's energy level right now on a 1–5 scale with an optional note. Awards 5 XP. Subsequent calls today update the score.",
     input_schema: {

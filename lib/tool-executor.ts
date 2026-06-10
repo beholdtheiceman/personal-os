@@ -1151,6 +1151,43 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `Hydration today: ${glasses}/${goal} glasses. ${status}\nTimes: ${timestamps.join(", ") || "none"}`;
     }
 
+    case "get_okrs": {
+      const now = new Date();
+      const defaultQ = `${now.getFullYear()}-Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+      const quarter = (input.quarter as string | undefined) ?? defaultQ;
+      const snap = await db.collection(`users/${uid}/okrs`)
+        .where("quarter", "==", quarter).orderBy("created_at", "desc").get();
+      if (snap.empty) return `No OKRs found for ${quarter}.`;
+      const lines = snap.docs.map((d) => {
+        const o = d.data();
+        const krs = (o.keyResults as Array<Record<string, unknown>> ?? []).map((kr) => {
+          const pct = (kr.target as number) > 0 ? Math.round(((kr.current as number) / (kr.target as number)) * 100) : kr.completed ? 100 : 0;
+          return `  KR [${kr.id}]: ${kr.title} — ${kr.current}/${kr.target} ${kr.unit} (${pct}%)`;
+        });
+        return `Objective [${d.id}]: ${o.title}\n${krs.join("\n") || "  No key results"}`;
+      });
+      return `${quarter} OKRs:\n\n${lines.join("\n\n")}`;
+    }
+
+    case "update_okr_progress": {
+      const objectiveId = input.objective_id as string;
+      const krId = input.key_result_id as string;
+      const current = Number(input.current);
+      const snap = await db.doc(`users/${uid}/okrs/${objectiveId}`).get();
+      if (!snap.exists) return "Objective not found.";
+      const obj = snap.data()!;
+      const krs = (obj.keyResults as Array<Record<string, unknown>> ?? []).map((kr) =>
+        kr.id === krId
+          ? { ...kr, current, completed: current >= (kr.target as number) }
+          : kr
+      );
+      await db.doc(`users/${uid}/okrs/${objectiveId}`).update({ keyResults: krs });
+      const updated = krs.find((kr) => kr.id === krId);
+      if (!updated) return "Key result not found.";
+      const pct = (updated.target as number) > 0 ? Math.round((current / (updated.target as number)) * 100) : 100;
+      return `Updated "${updated.title}": ${current}/${updated.target} ${updated.unit} (${pct}%)${updated.completed ? " — completed!" : ""}`;
+    }
+
     case "log_energy": {
       const rawScore = Math.min(5, Math.max(1, Math.round(Number(input.score))));
       const score = rawScore * 2; // store as 1–10 internally, matching mood scale

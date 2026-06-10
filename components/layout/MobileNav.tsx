@@ -28,6 +28,7 @@ const MORE_SECTIONS = [
       { href: "/journal",   label: "Journal",   icon: RiBookLine },
       { href: "/bible",     label: "Bible",     icon: RiBookReadLine },
       { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
+      { href: "/okrs",      label: "OKRs",      icon: RiLineChartLine },
       { href: "/decisions",    label: "Decisions",    icon: RiLightbulbLine },
       { href: "/people",       label: "People",       icon: RiContactsBook2Line },
       { href: "/constitution", label: "Constitution", icon: RiShieldLine },

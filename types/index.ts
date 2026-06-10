@@ -290,6 +290,31 @@ export interface HealthSettings {
   target_sleep_hours: number; // default 8
 }
 
+// ─── OKRs ─────────────────────────────────────────────────────────────────────
+export interface KeyResult {
+  id: string;
+  title: string;
+  target: number;
+  current: number;
+  unit: string;         // e.g. "workouts", "hours", "lbs", "%"
+  completed: boolean;
+}
+
+export interface Objective {
+  id: string;
+  title: string;
+  description?: string;
+  quarter: string;      // "YYYY-QN", e.g. "2026-Q2"
+  keyResults: KeyResult[];
+  status: "active" | "completed" | "abandoned";
+  created_at: string;
+  review?: {
+    score: number;      // 0.0–1.0 (Google OKR style)
+    summary: string;
+    generated_at: string;
+  };
+}
+
 // ─── Goals ────────────────────────────────────────────────────────────────────
 export type GoalCategory = "personal" | "business" | "health" | "financial";
 export type GoalStatus = "active" | "achieved" | "paused";
