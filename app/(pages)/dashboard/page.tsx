@@ -42,6 +42,7 @@ import NewsBriefWidget from "@/components/dashboard/NewsBriefWidget";
 import WeatherWidget from "@/components/dashboard/WeatherWidget";
 import WhatMattersWidget from "@/components/dashboard/WhatMattersWidget";
 import SystemAuditWidget from "@/components/dashboard/SystemAuditWidget";
+import MeetingPrepWidget from "@/components/dashboard/MeetingPrepWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import DayRecapButton from "@/components/capture/DayRecapButton";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
@@ -278,6 +279,9 @@ export default function DashboardPage() {
 
       case "daily_briefing":
         return <DailyBriefingWidget key="daily_briefing" />;
+
+      case "meeting_prep":
+        return <MeetingPrepWidget key="meeting_prep" />;
 
       case "insights":
         return <InsightsWidget key="insights" />;

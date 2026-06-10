@@ -57,6 +57,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/meeting-prep",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/email/unsubscribe-review",
       "schedule": "0 23 * * 6"
     }

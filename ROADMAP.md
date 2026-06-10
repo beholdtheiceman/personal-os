@@ -206,7 +206,7 @@
 - **Scene learning** — Claude passively notes which music + scene combinations correlate with your most productive/complete sessions (based on tasks finished, focus timer completion rate) and starts pre-suggesting them. Long-term: "You tend to focus best with lo-fi + morning blocks — want to set that as your Deep Work default?"
 - **Trigger phrases** — Scenes activate via natural language in chat or voice: "I'm going into focus mode", "time to wind down", "heading to the gym", "I'm done for the day". Multiple phrases per scene. Active scene shown as a badge in the nav; `/end` or "I'm done" exits the scene and optionally fires a debrief (how many tasks completed, time logged, etc.).
 
-### Meeting Prep Assistant
+### Meeting Prep Assistant ✅ Complete
 - **Proactive context surface** — 15–30 minutes before any Google Calendar event, Claude automatically assembles a briefing card:
   - Attendees pulled from People CRM with relevant context (last interaction, what you're working on together, any notes, upcoming birthday)
   - Open tasks tagged to this person or project

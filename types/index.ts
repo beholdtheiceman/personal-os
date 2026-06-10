@@ -130,6 +130,7 @@ export interface NotificationSettings {
   day_recap: NotificationCategory;             // evening nudge to run the end-of-day recap (PA-2)
   transaction_review: NotificationCategory;    // Plaid transactions flagged low-confidence (PA-3a)
   time_entries_pending: NotificationCategory;  // nudge to import calendar events into time log (PA-3b)
+  meeting_prep: NotificationCategory;          // briefing card 15-30 min before calendar events + post-meeting capture prompt
   snooze_until?: string;     // local datetime "YYYY-MM-DDTHH:MM"; all notifications skip while now < this
 }
 
@@ -157,6 +158,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   day_recap:            { enabled: false, time: "21:00" },
   transaction_review:   { enabled: false, time: "18:00" },
   time_entries_pending: { enabled: false, time: "18:00" },
+  meeting_prep:         { enabled: true },
 };
 
 // Deep-merges a stored settings doc onto the defaults. A shallow spread
