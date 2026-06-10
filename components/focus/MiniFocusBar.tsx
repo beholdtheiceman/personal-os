@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { RiPauseLine, RiPlayLine, RiStopLine } from "react-icons/ri";
 import { useTimer } from "@/contexts/TimerContext";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { useScene } from "@/contexts/SceneContext";
 import Link from "next/link";
 
 function fmtTime(sec: number) {
@@ -14,6 +15,7 @@ function fmtTime(sec: number) {
 export default function MiniFocusBar() {
   const { status, taskName, secondsRemaining, durationMin, start, pause, resume, stop } = useTimer();
   const { currentTrack } = usePlayer();
+  const { activeScene } = useScene();
 
   // Voice/chat client-tool bus: start a focus session on os:start-focus-timer.
   useEffect(() => {
@@ -29,10 +31,16 @@ export default function MiniFocusBar() {
   if (status === "idle") return null;
 
   const hasPlayer = !!currentTrack;
-  // MiniPlayer sits at bottom-[57px] md:bottom-0 and is ~56px tall
-  const bottomClass = hasPlayer
-    ? "bottom-[113px] md:bottom-[56px]"
-    : "bottom-[57px] md:bottom-0";
+  const hasScene = !!activeScene;
+  // Stack from bottom: MobileNav(57px) → SceneBar(40px) → FocusBar(44px) → Player(56px)
+  const bottomClass =
+    hasPlayer && hasScene
+      ? "bottom-[153px] md:bottom-[96px]"
+      : hasPlayer
+        ? "bottom-[113px] md:bottom-[56px]"
+        : hasScene
+          ? "bottom-[97px] md:bottom-[40px]"
+          : "bottom-[57px] md:bottom-0";
 
   const isBreak = status === "break";
   const progress = durationMin > 0 ? Math.max(0, Math.min(1, secondsRemaining / (durationMin * 60))) : 0;

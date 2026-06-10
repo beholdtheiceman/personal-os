@@ -1,4 +1,5 @@
 import { getAdminDb } from "@/lib/firebase-admin";
+import { BUILTIN_SCENES } from "@/lib/scenes";
 import { FieldValue } from "firebase-admin/firestore";
 import { GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, TAVILY_API_KEY } from "@/lib/env";
 import { searchSecondBrainFromDB, captureToInboxDB } from "@/lib/second-brain";
@@ -3632,6 +3633,14 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
         if (msg === "No connected accounts") return "No Plaid accounts connected. Please link a bank account first.";
         return `Plaid sync failed: ${msg}`;
       }
+    }
+
+    // ── Scenes ──────────────────────────────────────────────────────────────
+    case "list_scenes": {
+      const lines = BUILTIN_SCENES.map(
+        (s) => `• ${s.icon} **${s.name}** (${s.id}): ${s.description}\n  Opening actions: ${s.openingHint}`,
+      );
+      return `Available scenes:\n\n${lines.join("\n\n")}`;
     }
 
     default:

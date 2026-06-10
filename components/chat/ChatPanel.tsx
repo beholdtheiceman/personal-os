@@ -1,7 +1,9 @@
 "use client";
 // Persistent slide-in chat panel — 400px desktop, full-screen mobile
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { runClientTool } from "@/lib/client-actions";
 import {
   collection, addDoc, query, orderBy, limit,
   onSnapshot, doc, updateDoc,
@@ -73,6 +75,7 @@ export default function ChatPanel() {
   const { isOpen, close } = useChatPanel();
   const { user } = useAuth();
   const isTouch = useIsTouch();
+  const router = useRouter();
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeChatName, setActiveChatName] = useState("Chat");
@@ -340,8 +343,41 @@ export default function ChatPanel() {
         }),
       });
 
-      const data = await res.json();
+      let data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Request failed");
+
+      // Run any client tools (navigation, scene activation, etc.) and resume.
+      const clientCtx = {
+        navigate: (p: string) => router.push(p),
+        getQuickLinks: () => [] as { title: string; url: string }[],
+      };
+      let combinedActions: string[] = data.actions ?? [];
+      let guard = 0;
+      while (data.pendingClientTools?.length && guard++ < 16) {
+        const clientResults = [];
+        for (const c of data.pendingClientTools as { id: string; name: string; input?: Record<string, unknown> }[]) {
+          const out = await runClientTool(c.name, c.input ?? {}, clientCtx);
+          clientResults.push({ type: "tool_result", tool_use_id: c.id, content: out });
+        }
+        const contToken = await user.getIdToken();
+        const contRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${contToken}` },
+          body: JSON.stringify({
+            uid: user.uid,
+            chatId,
+            systemPrompt: skills.effectiveSystemPrompt,
+            localDate: format(new Date(), "yyyy-MM-dd"),
+            localTime: new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" }),
+            isFirstMessage,
+            resume: data.resume,
+            clientResults,
+          }),
+        });
+        data = await contRes.json();
+        if (!contRes.ok) throw new Error(data.error ?? "Request failed");
+        if (data.actions?.length) combinedActions = [...combinedActions, ...data.actions];
+      }
 
       if (data.renamedChat) {
         setActiveChatName(data.renamedChat);
@@ -351,7 +387,7 @@ export default function ChatPanel() {
         id: placeholderId,
         role: "assistant",
         content: data.text ?? "",
-        actions: data.actions?.length ? data.actions : undefined,
+        actions: combinedActions.length ? combinedActions : undefined,
         timestamp: new Date().toISOString(),
       };
 

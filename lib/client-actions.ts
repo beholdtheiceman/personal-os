@@ -62,6 +62,36 @@ export async function runClientTool(
       return "Started a focus session.";
     }
 
+    case "activate_scene": {
+      const sceneId = String(args.scene_id ?? "");
+      if (!sceneId) return "No scene_id provided.";
+      window.dispatchEvent(new CustomEvent("os:activate-scene", { detail: { sceneId } }));
+      return `Scene activated: ${sceneId}. Now execute the scene's opening actions.`;
+    }
+
+    case "deactivate_scene": {
+      window.dispatchEvent(new CustomEvent("os:deactivate-scene"));
+      return "Scene deactivated.";
+    }
+
+    case "set_media": {
+      const mood = String(args.mood ?? "");
+      const query = String(args.search_query ?? mood);
+      if (!query) return "No search query or mood provided.";
+      const searchQuery = query.includes("music") ? query : `${query} music`;
+      const res = await fetch(`/api/media/youtube/search?q=${encodeURIComponent(searchQuery)}`);
+      if (!res.ok) return "YouTube search failed — media not started.";
+      const items = (await res.json()) as { videoId: string; title: string; thumbnail: string }[];
+      if (!items.length) return `No results found for "${query}".`;
+      const track = items[0];
+      window.dispatchEvent(
+        new CustomEvent("os:play-youtube", {
+          detail: { videoId: track.videoId, title: track.title, thumbnail: track.thumbnail },
+        }),
+      );
+      return `Playing "${track.title}".`;
+    }
+
     default:
       return `Unknown client tool: ${name}`;
   }

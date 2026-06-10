@@ -180,36 +180,107 @@
 
 ## 📋 Roadmap
 
+
 > **Voice parity is a first-class requirement for all new features.** The infrastructure is already in place — every new feature just needs to follow these four rules:
 > 1. **Server-side tools** (Firestore reads/writes) — automatically available in voice sessions via `/api/realtime/tools`; no extra work needed beyond registering the tool definition.
 > 2. **New dashboard widgets** — wire `useWidgetRefresh("widget_key", callback)` inside the component so the voice agent can call `refresh_widget` to update it live.
 > 3. **Client-side actions** (UI navigation, modal opens, media control, scene transitions) — add to `CLIENT_TOOL_NAMES` in `lib/chat-tools.ts` and implement the handler in `lib/client-actions.ts`; both text chat and voice pick them up automatically.
 > 4. **Destructive tools** — add to `DESTRUCTIVE_TOOL_NAMES` in `lib/chat-tools.ts`; text chat gets the inline confirm card; voice gets instruction-level confirmation already baked into the session prompt.
 
-### Gamification (Beyond XP)
-- **Streak XP multipliers** — habit streaks that reach 7 days apply a 1.5× XP multiplier on that habit; 30-day streaks apply 2×; multipliers stack with the existing streak bonus toasts and tie directly into the `Week One` / `The Long Game` / `Unbreakable` achievement milestones (hitting the achievement threshold also flips on the multiplier)
-- **Daily & weekly challenges** — 3 rotating daily challenges generated each morning (e.g. "Complete 2 tasks", "Hit your water goal", "Log a meal before noon"); weekly challenges are larger ("4 workouts this week", "Finish a book"); challenges are surfaced on the dashboard and in the morning briefing; completing them awards bonus XP and can drive progress toward existing achievements (e.g. daily challenges nudge toward `Perfect Day`)
-- **Boss Days** — monthly "Boss Day" challenge that appears on the 1st; harder composite goal (full morning routine + 3 tasks + all habits + journal all in one day); completing it gives a large XP burst + a unique achievement; fills the motivation gap between the 30-day and 100-day habit streak achievements
-- **Life Balance Score** — composite score (0–100) across 5 domains: Health, Productivity, Relationships, Finance, Creativity; calculated from recent activity in each area (e.g. workouts logged, tasks completed, interactions logged, budget status, content/reading entries); shown on the dashboard as a ring or bar; low scores in a domain surface a gentle nudge; rewards you for whole-life awareness not just grinding one area
-- **Personal best leaderboard** — "Your best week: 2,340 XP — this week: 1,890"; shown in the weekly AI review and on the XP/level card; competes only against your own history; no external comparison
-- **Cosmetic rewards** — unlock new dashboard accent colors or UI themes at Gamerscore milestones (250G, 500G, 750G, 1,100G); purely visual, no functional impact; gives the Gamerscore total a destination and makes the `/achievements` page feel more rewarding to check
-- **Titles / Prestige labels** — domain-earned titles shown on the dashboard profile header (e.g. "Athlete" at 50 workouts, "Scholar" at 10 books finished, "Chronicler" at 30 journal entries); titles change dynamically as activity patterns shift; personality-driven alternative to purely numeric level display
-- **D&D Character Sheet** *(needs scoping before implementation)* — full RPG-style character sheet at `/character`; 6 core stats (STR, DEX, CON, INT, WIS, CHA) each fed by specific app activity; derived skills under each stat that level semi-independently; class auto-assigned from top two stats (Warrior, Wizard, Ranger, Monk, Bard, Cleric, Rogue, Paladin); HP as a CON-driven resilience score (sleep + hydration + mood); feats unlocked at stat milestones that grant temporary bonuses; background chosen at setup for flavor bonuses; existing achievements slot in as the feats section of the sheet; radar/hexagon chart as the ability score overview; dark glass layout styled like a real D&D sheet. Architecture: runs alongside (not replacing) the existing global XP/level system — every action awards global XP as today and also increments the relevant stat(s); a stat weight map in a single config file (e.g. `lib/character.ts`) routes each activity type to one or more stats with weighted increments (e.g. workout → STR +3, CON +1; journal → WIS +2; Bible/church → WIS +2, CHA +1); multi-stat activities are intentional and encouraged. Progression: logarithmic curve — early gains come quickly, later gains require sustained long-term effort; no hard cap; designed to still feel meaningful at year 10 and year 25, not just the first few months. Onboarding: short character creation screen (6–8 questions) at first launch establishes honest base stats so starting values reflect who you actually are today rather than resetting everyone to 1. Scoping questions still to answer: (1) do stats decay during extended inactivity — lean toward no but the Life OS framing (decades-long, not a campaign) makes permanent gains feel more appropriate; a visual "inactive domain" warning may be sufficient instead of actual decay; (2) feat design — what bonuses make sense for a life OS without feeling arbitrary; (3) how the /character page integrates into nav given ongoing consolidation efforts
+---
 
-### Finance
-### Extension
-- **Right-click context menu** — capture selected text directly to Second Brain, journal, or task without opening the popup; uses Chrome `contextMenus` API (requires background service worker + `contextMenus` permission)
-- **Keyboard shortcut** — trigger capture without clicking the toolbar icon (e.g. `Alt+Shift+C`); declared in `manifest.json` `commands`
-- **Badge count** — show tasks due today or a live unread count on the toolbar icon; keeps the extension useful even when you're not capturing
+## 🔴 Tier 1 — Build Next
+> These directly extend the Personal Assistant Mode foundation. Proactive, low-friction, assistant-first. Build in this order.
+
+### Life Scenes / Orchestrated Modes ✅ Complete
+> `activate_scene`, `deactivate_scene`, `set_media` → `CLIENT_TOOL_NAMES`. `SceneProvider` + `MiniSceneBar` in AppShell. `list_scenes` server tool in tool-executor. `ChatPanel` now has `pendingClientTools` resume loop (parity with ChatInterface). `os:play-youtube` event wired into AppShell → `PlayerContext.play()`. Built-in scenes: Deep Work 🎯, Workout 💪, Wind Down 🌙, Sleep 😴, Travel ✈️. Trigger via voice or text chat ("I'm going into focus mode", "time to wind down", etc.). Active scene shown as a persistent bottom bar with one-tap exit.
+
+- **Scene system** — A named bundle of tool calls Claude executes in sequence when you say the right thing. Not a new UI paradigm — just the chat's existing tool infrastructure given orchestration capability, a media player control hook, and a thin "active scene" state in Firestore the UI can react to. Built-in scenes to start:
+  - **Deep Work** — Start a Pomodoro timer linked to your top-priority task, queue focus music from The Crate (mood-matched or scene-default), suppress non-urgent push notifications for the session duration, simplify the dashboard to a minimal "one thing" view
+  - **Workout** — Pull up today's planned workout from the Workout Planner, queue an energizing playlist, start the workout timer
+  - **Wind Down** — Soft music, surface tomorrow's top 3 tasks and first calendar event so you can mentally close the day, prompt a one-line journal entry, trigger the bedtime reminder calculation based on tomorrow's schedule
+  - **Sleep** — Full DND on all notification categories, queue sleep/ambient audio, log intended sleep time for Google Health correlation
+  - **Travel** — Switch dashboard to travel-relevant widget layout (itinerary, weather at destination, packing list progress), surface the active trip from the Events planner
+  - **Custom scenes** — User-defined scenes with a name, trigger phrases, and a configurable list of actions; saved to `users/{uid}/scenes`
+- **Media player control API** — The key missing hook: a `set_media` tool that accepts a mood label, playlist name, or search query and programmatically queues audio in the player. The Crate tracks are tagged with mood labels (deep focus / energizing / wind-down / ambient / upbeat); Claude selects based on scene + any natural language modifier ("same as usual but more energetic"). Falls back to YouTube search for moods not yet covered in The Crate.
+- **Scene learning** — Claude passively notes which music + scene combinations correlate with your most productive/complete sessions (based on tasks finished, focus timer completion rate) and starts pre-suggesting them. Long-term: "You tend to focus best with lo-fi + morning blocks — want to set that as your Deep Work default?"
+- **Trigger phrases** — Scenes activate via natural language in chat or voice: "I'm going into focus mode", "time to wind down", "heading to the gym", "I'm done for the day". Multiple phrases per scene. Active scene shown as a badge in the nav; `/end` or "I'm done" exits the scene and optionally fires a debrief (how many tasks completed, time logged, etc.).
+
+### Meeting Prep Assistant
+- **Proactive context surface** — 15–30 minutes before any Google Calendar event, Claude automatically assembles a briefing card:
+  - Attendees pulled from People CRM with relevant context (last interaction, what you're working on together, any notes, upcoming birthday)
+  - Open tasks tagged to this person or project
+  - Previous meeting notes if the event title suggests it's recurring
+  - Relevant files from Google Drive (matched by event title + attendee names)
+  - Any decisions from the Decision Journal related to this topic
+- **Delivered as a push notification** with a tap-to-expand briefing, or surfaced as a dashboard card that appears before the meeting and disappears after.
+- **Post-meeting capture** — After the calendar event end time, Claude prompts: "How did your meeting with [person] go? Any action items or notes to capture?" Voice or text input; Claude extracts tasks (→ Task system), decisions (→ Decision Journal), and interaction notes (→ People CRM) automatically.
+- **Meeting cost awareness** — Optional: log attendee count and estimated average salary; Claude calculates the cost of the meeting in real time and includes it in the briefing as a "this meeting costs ~$X/hour" framing.
+
+### Energy Level Tracker
+- **Separate from mood** — Mood is emotional tone; energy is physical and cognitive readiness to perform. A quick 1–5 check-in available at any time (dashboard widget, chat tool, voice), with an optional note ("crashed after lunch", "great after the workout"). Stored as `users/{uid}/energy/{timestamp}` with time-of-day metadata so intra-day patterns are visible.
+- **Correlation engine** — After 30+ days of data, Claude Haiku surfaces personal energy patterns: what time of day you peak, how sleep quality the night before affects your morning energy, whether workouts boost or drain your afternoon, caffeine timing effects, nutrition correlations. The goal is actionable insight: "Your energy on days you work out before noon averages 0.8 points higher in the afternoon than days you don't." Feeds into the weekly AI review and Proactive AI Insights.
+- **Scene integration** — Active energy level informs scene suggestions. Low energy at 2pm? Claude might suggest a short walk before starting a focus session rather than jumping straight into Deep Work mode.
+- **Dashboard widget** — Simple current energy log + 7-day sparkline. Chat tool: `log_energy`.
+
+### Sleep Optimization
+- **Sleep debt & optimization layer** — You already have sleep data flowing in from Google Health; this turns passive logging into active coaching:
+  - **Sleep debt tracker** — Running cumulative deficit vs. your target hours; resets as debt is paid down; shown on the Health dashboard
+  - **Correlation analysis** — Cross-reference sleep quality scores against same-day and prior-day variables already in Firestore: exercise, alcohol (if tracked in nutrition), caffeine (supplement log), mood, hydration, late screen time (journal mentions); Claude Haiku surfaces the strongest personal correlations monthly
+  - **Smart bedtime reminder** — Calculates target bedtime based on tomorrow's earliest calendar event and your target sleep duration; fires a push notification; adjusts dynamically week to week
+  - **Sleep quality trend chart** — 30/90-day view of sleep duration, efficiency, and quality on the Health page alongside existing metrics
+
+### Personal OKRs
+- **Quarterly cadence, separate from Goals** — OKRs operate at a higher altitude: Objectives are directional and qualitative ("Become the healthiest version of myself"), Key Results are measurable and binary at quarter-end ("Complete 48 workouts", "Average 7.5 hours of sleep", "Lose 8 lbs"). Structurally different from the current Goals system which is more project-like.
+- **Planning ritual** — At the start of each quarter, Claude runs a guided OKR-setting session: reviews last quarter's performance, asks what matters most this quarter, helps draft 2–3 Objectives with 2–4 Key Results each. Pulls relevant data from across the app to ground the conversation in reality ("Last quarter you averaged 3.2 workouts/week — is 4/week achievable?").
+- **Progress tracking** — Key Results auto-update where possible by linking to existing data sources (workout count from Workout Planner, sleep average from Google Health, etc.). Manual check-in for KRs that can't be automated.
+- **Quarterly review** — End-of-quarter Claude review scores each KR (0–1.0, Google-style), identifies what drove hits and misses, and feeds learnings into the next quarter's planning session. Integrates with the weekly AI review in the final week of each quarter.
+- **Alignment with Goals and habits** — OKRs sit above Goals in the hierarchy; Claude can suggest which existing goals and habits ladder up to each Objective, giving your day-to-day activity a clearer line of sight to what actually matters this quarter.
+
+### Home & Vehicle Maintenance
+- **Maintenance OS** — The most universally neglected life admin category; simple data model with high return on investment:
+  - **Home items** — HVAC filter, water heater flush, smoke detector batteries, pest control, roof inspection, gutters, appliance warranties; each item has a last-service date, interval, and next-due date
+  - **Vehicle items** — Oil changes, tire rotation, registration renewal, insurance renewal, inspection; supports multiple vehicles
+  - **Warranty vault** — Store purchase date, warranty length, and retailer for appliances and electronics; push notification before warranty expires
+  - **Contractor / vendor log** — Who did what work, when, what it cost; ties into People CRM for recurring vendors
+  - Push notifications fire like habit reminders when maintenance is due. Dashboard widget shows items due in the next 30 days. Dedicated `/home` page. Chat tools: `log_maintenance`, `get_upcoming_maintenance`.
+
+### Ideas Vault
+- **Friction-free idea capture** — A dedicated collection point for raw, unprocessed ideas before they're ready to become tasks, projects, or Second Brain notes. Product ideas, business concepts, creative sparks, things to investigate, observations. The key is zero friction: one tap from dashboard, voice input, browser extension quick-capture, share target.
+- **Weekly triage** — Every Monday, Claude surfaces 5–10 ideas from the vault and helps you decide: develop now (→ task or project), park (back to vault with a tag), or discard. Ideas have a "last reviewed" date; ones that survive multiple triage sessions without being acted on get a gentle nudge to either commit or delete.
+- **Tagging & search** — Tag ideas by domain (business, creative, health, tech, personal) with full-text search. Claude can cluster related ideas and surface connections you didn't notice.
+- **Idea-to-project pipeline** — One tap to promote an idea to a Project in the Kanban board, pre-populating the project description from the idea note.
+- **Chat tool** — `capture_idea` so you can say "add an idea: what if I..." in the middle of anything and it lands in the vault without breaking your flow.
 
 ### People / Relationships CRM
 - **Relationship health score** — numeric score derived from interaction frequency vs. contact frequency target; surfaced per-contact and as a dashboard summary; replaces binary "needs attention" flag
 - **AI gift suggestions** — Claude generates gift ideas from the notes, interests, and interaction history you've logged for a person; accessible from the person detail view and via chat
 
-### Tasks / Productivity
-- **Eisenhower matrix view** — 2×2 urgent/important grid as an alternate view on the Tasks page; mapped from existing priority score + due date
-- **Task dependencies** — mark one task as blocked by another; blocked tasks visually suppressed until prerequisite is complete
-- **Context tags** — home / work / errands / etc. tags with a one-tap filtered view; complements existing tag system
+### Day-End Micro-Review
+> 🎙️ **Voice wiring required:** `open_day_review` → `CLIENT_TOOL_NAMES` (opens the review UI or focuses the input so the user can answer the three questions via voice). Dashboard widget → `useWidgetRefresh("day_review", fn)`. The three-question flow itself is a natural voice interaction — voice is actually the primary input surface here.
+
+- **2-minute daily close** — Lighter than the full journal; heavier than nothing. Three fixed questions at the end of each day: (1) What got done today? (2) What didn't, and why? (3) One thing to carry into tomorrow. Voice or text. Takes under 2 minutes.
+- **Feeds the weekly AI review** — Currently the weekly review infers how the week went from activity data (tasks completed, habits logged, etc.). Day-end micro-reviews give it your *subjective* read on each day, making the weekly synthesis dramatically richer.
+- **Wind-down scene integration** — Day-end review is a natural step in the Wind Down scene; can be triggered automatically as part of that flow.
+- **Prompted by push notification** — A configurable "end of day" notification (default 9pm) that fires if you haven't completed that day's review. Silenced automatically once you do.
+- **Streak & gamification** — Daily review streak tracked separately from the full journal streak; lighter commitment, easier to maintain, still awards XP.
+
+
+---
+
+### SOPs & Personal Runbooks
+> 🎙️ **Voice wiring required:** Triggering and stepping through an SOP is a natural voice interaction. `run_sop` is a server tool (reads the SOP definition and returns the first step). Navigation steps within an SOP dispatch to existing `navigate_to_page` (already a client tool). Any SOP step that opens a modal (`open_quick_capture`, etc.) reuses existing client tools. The SOP runner itself stays server-side; it delegates to existing client tools for UI steps rather than adding new ones.
+
+- **Document how you do things so Claude can replicate them** — The infrastructure that makes the agent feel truly personal over time. An SOP is a named, step-by-step workflow you've defined: your morning routine, how you process email, your weekly review process, how you meal plan, how you close out a workday. Once documented, you can trigger any SOP by name and Claude walks through it with you — or executes the automatable steps automatically.
+- **SOP builder** — Create an SOP with a name, trigger phrase, and ordered list of steps. Each step can be: a question Claude asks you, an action Claude takes (tool call), a reminder, or a navigation prompt ("open the habit tracker"). Steps can be conditional ("if you haven't logged weight this week, do that first").
+- **SOP library** — Starter templates for common personal OS workflows: Morning Startup, Weekly Review, Monthly Finance Review, End of Day Shutdown, Quarterly OKR Review. User can edit, extend, or build from scratch.
+- **Compounds over time** — Every time you find yourself doing the same sequence of things, that's an SOP candidate. The library grows as your workflows mature, and the agent becomes increasingly capable of running your life's operating system rather than just answering questions about it.
+- **Accessible via chat** — "Run my morning routine", "let's do my weekly review", "start end-of-day shutdown". Active SOP shown as a badge in the nav with step progress.
+
+---
+
+## 🟡 Tier 2 — High Value, Secondary
+> Solid features that extend existing systems. Build after Tier 1 is solid.
 
 ### Voice & Speech
 See [`docs/VOICE_AGENT_PARITY_SPEC.md`](./docs/VOICE_AGENT_PARITY_SPEC.md) and [`docs/VOICE_AGENT_PARITY_PHASE2-4.md`](./docs/VOICE_AGENT_PARITY_PHASE2-4.md) for full implementation details.
@@ -240,11 +311,6 @@ See [`docs/TRANSCRIPT_INGESTION.md`](./docs/TRANSCRIPT_INGESTION.md) and [`docs/
 
 - **Severe weather push alerts** *(~1 day)* — Push notifications for freeze warnings, storm alerts, and extreme UV days via OpenWeatherMap alerts API. Requires `OPENWEATHERMAP_API_KEY`. Current Open-Meteo integration has no alert endpoint.
 
-### Password Vault
-See [`docs/PASSWORD_VAULT.md`](./docs/PASSWORD_VAULT.md) for full implementation details.
-
-- **Bitwarden integration** *(1–2 days)* — Secure interface into your Bitwarden vault: search credentials, copy username/password to clipboard (auto-clears after 60 seconds), and generate strong passwords — without storing any secrets in Firestore. Two implementation paths: (A) `bw serve` CLI wrapper running as a persistent sidecar (recommended for self-hosted/Railway deployment), or (B) Bitwarden cloud API for serverless. The LLM (Claude) never sees actual passwords — chat tools return metadata only (username + URL). Vault health check surfaces reused, weak, and old passwords as counts. Audit log writes every vault access (item name only) to Firestore. Requires a persistent server process — not Vercel-native; deploy the vault bridge on Render or Railway.
-
 ### Financial Rate & Promotion Tracker
 See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation details.
 
@@ -269,20 +335,58 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
   - **Tithing tracker** — Giving log tied into Finance; track giving as a % of income; separate from budget categories so it gets its own visibility
   - **Spiritual disciplines tracker** — Treat Bible reading, prayer, fasting, etc. as a distinct habit category with its own streak logic and dashboard widget
 
-### Home & Vehicle Maintenance
-- **Maintenance OS** — The most universally neglected life admin category; simple data model with high return on investment:
-  - **Home items** — HVAC filter, water heater flush, smoke detector batteries, pest control, roof inspection, gutters, appliance warranties; each item has a last-service date, interval, and next-due date
-  - **Vehicle items** — Oil changes, tire rotation, registration renewal, insurance renewal, inspection; supports multiple vehicles
-  - **Warranty vault** — Store purchase date, warranty length, and retailer for appliances and electronics; push notification before warranty expires
-  - **Contractor / vendor log** — Who did what work, when, what it cost; ties into People CRM for recurring vendors
-  - Push notifications fire like habit reminders when maintenance is due. Dashboard widget shows items due in the next 30 days. Dedicated `/home` page. Chat tools: `log_maintenance`, `get_upcoming_maintenance`.
+### Family Health History & Mitigation Planning
+- **The most meaningful health feature yet** — Family history is one of the strongest predictors of health outcomes, and almost no consumer app treats it seriously. The goal: log your family health tree, let Claude identify elevated risk categories, and generate mitigation plans that actively wire into the rest of the app rather than sitting as static notes.
+- **Family health tree** — Structured data entry for first and second-degree relatives (parents, grandparents, siblings, aunts/uncles, children). Each entry captures: relationship, conditions diagnosed, age of onset, cause of death if applicable. A visual tree layout at `/health/family`. Claude uses this data — not as a one-time analysis but as living context that updates every mitigation plan whenever new history is added.
+- **Personal medical history** — Complements the family tree with your own record: diagnoses, surgeries, hospitalizations, known allergies, chronic conditions, current prescriptions. Separate from the supplement log (which tracks what you're taking proactively) — this is your clinical history. Stored in `users/{uid}/medical_history`.
+- **Risk assessment** — Claude analyzes the family tree and personal history to surface elevated risk categories with plain-language explanations of why. Example output: "Based on your father and paternal grandfather both having heart disease before 60, you have a significantly elevated cardiovascular risk. Your family history of colon cancer on your mother's side elevates your colorectal risk above average. Here's what the evidence suggests for each." Risk categories map to established medical frameworks (AHA, ACS, USPSTF guidelines) — always framed as informational, not medical advice.
+- **Mitigation plans** — Per-risk action plans that don't just sit as text but actively connect to the rest of the app:
+  - *Cardiovascular risk* → cardio exercise targets wired into Workout Planner, Mediterranean-style dietary goals in Nutrition Tracker, blood pressure and lipid panel tracking in Lab Results, stress management in Habits, regular check-in prompts
+  - *Colon cancer risk* → high-fiber dietary targets, earlier colonoscopy recommendation in Screening Calendar, red/processed meat limits in Nutrition, hydration goals in Hydration Tracker
+  - *Diverticulosis risk* → high-fiber and hydration targets (merged intelligently with colon cancer plan to avoid duplicate recommendations), specific foods to limit, exercise targets
+  - Plans auto-merge when risk factors share interventions — you get one unified dietary recommendation, not three competing lists
+  - Each plan action links to the relevant app section so you can act immediately
+- **Screening calendar** — The highest-value output: a personalized schedule of recommended health screenings based on your age, sex, and risk factors, integrated with Google Calendar. Fires push notifications at the right life moments: "You're turning 40 this year — given your family history of colon cancer, your doctor may recommend a colonoscopy earlier than the standard 45. Here are questions to ask at your next appointment." Screening types: colonoscopy, lipid panel, blood pressure, blood glucose, skin check, eye exam, dental, prostate (PSA), cardiac stress test, and others driven by specific risk factors. Follows USPSTF and major medical society guidelines by default.
+- **Lab results tracker** — Store and trend actual clinical data over time: lipid panel (total cholesterol, LDL, HDL, triglycerides), blood glucose / A1C, vitamin D, B12, ferritin, thyroid (TSH), blood pressure, resting heart rate (also from Google Health). Manual entry with date; Claude flags meaningful changes between readings ("Your LDL increased 22 points since your last panel — worth discussing with your doctor") and correlates trends with lifestyle data already in the app (sleep, exercise, diet). Results feed back into risk assessments and mitigation plans dynamically.
+- **Doctor visit prep** — Before any appointment flagged as medical in Google Calendar, Claude surfaces: relevant family history for that specialty, current medications and supplements, recent lab results and trends, open questions from the mitigation plan, and a suggested list of things to discuss. You walk in prepared instead of forgetting half of what you wanted to ask.
+- **Always-on framing** — Every feature in this section is explicitly "informational, based on published guidelines — not a substitute for medical advice." Claude consistently encourages regular consultations with healthcare providers and frames all mitigation plans as conversation starters, not prescriptions.
 
-### Sleep Optimization
-- **Sleep debt & optimization layer** — You already have sleep data flowing in from Google Health; this turns passive logging into active coaching:
-  - **Sleep debt tracker** — Running cumulative deficit vs. your target hours; resets as debt is paid down; shown on the Health dashboard
-  - **Correlation analysis** — Cross-reference sleep quality scores against same-day and prior-day variables already in Firestore: exercise, alcohol (if tracked in nutrition), caffeine (supplement log), mood, hydration, late screen time (journal mentions); Claude Haiku surfaces the strongest personal correlations monthly
-  - **Smart bedtime reminder** — Calculates target bedtime based on tomorrow's earliest calendar event and your target sleep duration; fires a push notification; adjusts dynamically week to week
-  - **Sleep quality trend chart** — 30/90-day view of sleep duration, efficiency, and quality on the Health page alongside existing metrics
+### Personal Annual Report ("Life Wrapped")
+- **Year-in-review generated from real data** — All the inputs already exist; this is a presentation and narrative layer. Runs on January 1st via cron (and manually triggerable any time). Claude Sonnet synthesizes a full year of activity across every domain into a structured report:
+  - Tasks completed, projects shipped, habits maintained and streaks hit
+  - Books read, highlights captured, content published
+  - Workouts logged, PRs set, miles tracked, health trends
+  - Goals achieved and missed with honest reflection
+  - Financial progress: net worth change, savings rate, budget performance
+  - Relationships: interactions logged, new people met, birthdays remembered
+  - Journal entries written, moods trended, decisions made and reviewed
+  - XP earned, level reached, achievements unlocked, Gamerscore total
+  - Words: most-used themes from journal entries and Second Brain captures (Claude identifies them)
+  - One-sentence "year in a sentence" generated by Claude from all of the above
+- **Rendered as a shareable page** — Beautiful, data-rich layout at `/annual-report/{year}`; can be exported as PDF. Styled differently from the rest of the app — this is a keepsake. Previous years archived and browsable.
+- **Reflection prompts** — Alongside the stats, Claude asks 5 questions you answer in the app: what surprised you most, what do you want more of, what do you want less of, who mattered most, one word for the year. Answers stored and included in the report.
+
+### Travel
+- **Travel page (`/travel`)** — A dedicated space for trip planning and active travel, pulling together data from existing systems that currently have no unified view:
+  - **Trip dashboard** — Active trip shown prominently with destination, dates, countdown, and weather at destination (via the Weather integration); past trips archived and browsable
+  - **Itinerary builder** — Day-by-day schedule with time blocks, locations, confirmation numbers, and notes; importable from copied text (Claude parses an email confirmation or booking into structured itinerary entries)
+  - **Packing list** — Reusable templates by trip type (weekend, international, camping, business); checklist UI with check-off on departure; custom items per trip
+  - **Trip budget** — Dedicated budget envelope per trip (ties into Finance); log expenses by category (flights, hotels, food, activities) with running total vs. budget; Plaid transactions auto-tagged to active trip by date + location when possible
+  - **People on the trip** — Tag contacts from People CRM as traveling together; surfaces their info (dietary restrictions, preferences from CRM notes) in the travel context
+  - **Documents & confirmations** — Store flight confirmation codes, hotel bookings, rental car info, travel insurance policy numbers; accessible offline via PWA
+  - **Post-trip debrief** — Claude generates a trip summary from itinerary + expenses + any journal entries logged during the trip; prompts for highlights and what to remember; saves to Second Brain
+
+- **Travel Agent skill (`/travel` slash command)** — A focused Claude mode that activates when planning or during a trip:
+  - On activation: auto-pulls the active or most recent upcoming trip, weather forecast at destination, trip budget status, and any open packing list items
+  - **Planning mode** — Help research destinations, build itineraries, estimate budgets, suggest activities based on your preferences (logged in memory) and travel companions from People CRM; can search the web via Tavily for current recommendations, hours, prices
+  - **Active trip mode** — "What should I do near me?", "find somewhere to eat that fits my diet", "what's the weather tomorrow?", "I spent $47 on dinner" (logs to trip budget); context-aware because the agent knows your location, itinerary, budget remaining, and dietary preferences
+  - **Packing assistant** — "Am I ready to pack?" runs through the checklist and surfaces missing items; "what should I pack for 5 days in Tokyo in October?" generates a context-aware list
+  - **Post-trip** — Triggers the debrief flow, suggests People CRM updates for anyone met on the trip, flags any expenses that haven't been logged yet
+
+---
+
+## 🟢 Tier 3 — Lower Priority / Future
+> Valuable someday, but not a priority until the app is deeply useful as a daily assistant.
 
 ### Career & Professional Development
 - **Professional layer** — Currently the app is deeply personal-life focused; this adds the career dimension:
@@ -303,44 +407,19 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
   - Post-event: Claude generates a summary and prompts for a journal entry
   - Dashboard widget shows upcoming events in the next 90 days. Dedicated `/events` page. Chat tools: `create_event_plan`, `get_event_tasks`, `log_event_expense`.
 
-### Deeper Social Graph
-- **Relationship map & network intelligence** — Extends the People CRM from a flat contact list into a true social graph:
-  - **Visual relationship map** — Force-directed graph showing contacts grouped by context (family, work, church, college, etc.) with edge weight based on interaction frequency; built with D3.js; gives you a feel for where your relational energy is actually going
-  - **Introducer tracking** — Record who introduced you to whom; useful for gratitude, reciprocity, and understanding how your network is connected
-  - **Relationship strength score** — More nuanced than the current "needs attention" flag: a composite of recency, frequency, and depth of interactions; shown as a score and trend on each contact card
-  - **Network gap analysis** — Claude identifies domains where your network is thin (e.g., "you have few contacts in finance / healthcare / your target industry") and surfaces warm-path introductions
-  - **AI gift suggestions** — Already on the roadmap; fits here as part of the deeper CRM layer
+### Investment Portfolio Tracker
+- **Beyond net worth snapshots** — Track individual holdings: brokerage accounts, retirement accounts (401k, IRA, Roth), individual stocks, ETFs, real estate equity, crypto. Manual entry with ticker symbol, shares, cost basis, and account. Plaid's investment products can automate this for supported brokerages long-term.
+- **Allocation view** — Pie chart of asset allocation (stocks/bonds/cash/real estate/other) and geographic/sector breakdown for equity holdings. Target allocation you define; deviation from target triggers a rebalancing nudge.
+- **Performance tracking** — Portfolio value over time charted alongside net worth. Cost basis vs. current value per holding. Unrealized gain/loss. Simple IRR calculation for overall portfolio.
+- **Rebalancing assistant** — When allocation drifts more than a defined threshold from your target, Claude flags it and calculates the buys/sells needed to rebalance. Never executes trades — always "here's what you'd need to do; take it to your brokerage."
+- **Dividend & income log** — Track dividend payments and interest income; feeds into the tax layer.
 
-### Life Scenes / Orchestrated Modes
-> 🎙️ **Voice wiring required:** `activate_scene` and `deactivate_scene` are client-side tools (they update nav badge state and trigger UI transitions) → add to `CLIENT_TOOL_NAMES`. `set_media` controls the MiniPlayer client-side → also `CLIENT_TOOL_NAMES`. Notification suppression during a scene calls `update_notification_setting` (server tool, already voice-accessible). New scene widget → `useWidgetRefresh("scene", fn)`.
-
-- **Scene system** — A named bundle of tool calls Claude executes in sequence when you say the right thing. Not a new UI paradigm — just the chat's existing tool infrastructure given orchestration capability, a media player control hook, and a thin "active scene" state in Firestore the UI can react to. Built-in scenes to start:
-  - **Deep Work** — Start a Pomodoro timer linked to your top-priority task, queue focus music from The Crate (mood-matched or scene-default), suppress non-urgent push notifications for the session duration, simplify the dashboard to a minimal "one thing" view
-  - **Workout** — Pull up today's planned workout from the Workout Planner, queue an energizing playlist, start the workout timer
-  - **Wind Down** — Soft music, surface tomorrow's top 3 tasks and first calendar event so you can mentally close the day, prompt a one-line journal entry, trigger the bedtime reminder calculation based on tomorrow's schedule
-  - **Sleep** — Full DND on all notification categories, queue sleep/ambient audio, log intended sleep time for Google Health correlation
-  - **Travel** — Switch dashboard to travel-relevant widget layout (itinerary, weather at destination, packing list progress), surface the active trip from the Events planner
-  - **Custom scenes** — User-defined scenes with a name, trigger phrases, and a configurable list of actions; saved to `users/{uid}/scenes`
-- **Media player control API** — The key missing hook: a `set_media` tool that accepts a mood label, playlist name, or search query and programmatically queues audio in the player. The Crate tracks are tagged with mood labels (deep focus / energizing / wind-down / ambient / upbeat); Claude selects based on scene + any natural language modifier ("same as usual but more energetic"). Falls back to YouTube search for moods not yet covered in The Crate.
-- **Scene learning** — Claude passively notes which music + scene combinations correlate with your most productive/complete sessions (based on tasks finished, focus timer completion rate) and starts pre-suggesting them. Long-term: "You tend to focus best with lo-fi + morning blocks — want to set that as your Deep Work default?"
-- **Trigger phrases** — Scenes activate via natural language in chat or voice: "I'm going into focus mode", "time to wind down", "heading to the gym", "I'm done for the day". Multiple phrases per scene. Active scene shown as a badge in the nav; `/end` or "I'm done" exits the scene and optionally fires a debrief (how many tasks completed, time logged, etc.).
-
-### Travel
-- **Travel page (`/travel`)** — A dedicated space for trip planning and active travel, pulling together data from existing systems that currently have no unified view:
-  - **Trip dashboard** — Active trip shown prominently with destination, dates, countdown, and weather at destination (via the Weather integration); past trips archived and browsable
-  - **Itinerary builder** — Day-by-day schedule with time blocks, locations, confirmation numbers, and notes; importable from copied text (Claude parses an email confirmation or booking into structured itinerary entries)
-  - **Packing list** — Reusable templates by trip type (weekend, international, camping, business); checklist UI with check-off on departure; custom items per trip
-  - **Trip budget** — Dedicated budget envelope per trip (ties into Finance); log expenses by category (flights, hotels, food, activities) with running total vs. budget; Plaid transactions auto-tagged to active trip by date + location when possible
-  - **People on the trip** — Tag contacts from People CRM as traveling together; surfaces their info (dietary restrictions, preferences from CRM notes) in the travel context
-  - **Documents & confirmations** — Store flight confirmation codes, hotel bookings, rental car info, travel insurance policy numbers; accessible offline via PWA
-  - **Post-trip debrief** — Claude generates a trip summary from itinerary + expenses + any journal entries logged during the trip; prompts for highlights and what to remember; saves to Second Brain
-
-- **Travel Agent skill (`/travel` slash command)** — A focused Claude mode that activates when planning or during a trip:
-  - On activation: auto-pulls the active or most recent upcoming trip, weather forecast at destination, trip budget status, and any open packing list items
-  - **Planning mode** — Help research destinations, build itineraries, estimate budgets, suggest activities based on your preferences (logged in memory) and travel companions from People CRM; can search the web via Tavily for current recommendations, hours, prices
-  - **Active trip mode** — "What should I do near me?", "find somewhere to eat that fits my diet", "what's the weather tomorrow?", "I spent $47 on dinner" (logs to trip budget); context-aware because the agent knows your location, itinerary, budget remaining, and dietary preferences
-  - **Packing assistant** — "Am I ready to pack?" runs through the checklist and surfaces missing items; "what should I pack for 5 days in Tokyo in October?" generates a context-aware list
-  - **Post-trip** — Triggers the debrief flow, suggests People CRM updates for anyone met on the trip, flags any expenses that haven't been logged yet
+### Tax Preparation Assistant
+- **Year-round deduction tracking** — With Plaid transactions flowing, the raw data is already there. A tax layer that lets you flag expense categories as potentially deductible: home office, business meals, professional development, charitable giving, medical expenses, vehicle mileage (manual log), investment losses. Each flagged category stores the relevant IRS rule reference so you understand why it might be deductible.
+- **Deduction dashboard** — Running YTD total of potentially deductible expenses by category on a `/tax` page. Updates automatically as Plaid syncs new transactions. Manual override to include/exclude specific transactions.
+- **Year-end summary** — Generates a clean export (PDF or CSV) of all flagged deductions organized by IRS schedule (Schedule A, Schedule C, etc.) for your accountant or TurboTax import. Includes totals, transaction-level detail, and any notes you've added.
+- **Giving summary** — Integrates with the tithing/giving tracker from the Faith layer and People CRM gift log; produces a complete charitable giving statement.
+- **Estimated taxes nudge** — If you have freelance or side income logged, Claude estimates quarterly tax liability and fires a reminder before estimated tax due dates (April 15, June 15, September 15, January 15).
 
 ### Accountability & Commitment Contracts
 - **Commitment system** — A different motivational layer than XP and streaks; based on declared intent and outcome logging:
@@ -350,100 +429,41 @@ See [`docs/RATE_TRACKER.md`](./docs/RATE_TRACKER.md) for full implementation det
   - **Accountability partner mode** — Optional: designate a contact from People CRM as an accountability partner for specific commitments; system can draft a check-in message to send them (you send it manually)
   - **Ties into existing systems** — Commitments can reference goals, tasks, habits, or financial targets; completion of the linked item auto-resolves the commitment
 
-### Family Health History & Mitigation Planning
-- **The most meaningful health feature yet** — Family history is one of the strongest predictors of health outcomes, and almost no consumer app treats it seriously. The goal: log your family health tree, let Claude identify elevated risk categories, and generate mitigation plans that actively wire into the rest of the app rather than sitting as static notes.
-- **Family health tree** — Structured data entry for first and second-degree relatives (parents, grandparents, siblings, aunts/uncles, children). Each entry captures: relationship, conditions diagnosed, age of onset, cause of death if applicable. A visual tree layout at `/health/family`. Claude uses this data — not as a one-time analysis but as living context that updates every mitigation plan whenever new history is added.
-- **Personal medical history** — Complements the family tree with your own record: diagnoses, surgeries, hospitalizations, known allergies, chronic conditions, current prescriptions. Separate from the supplement log (which tracks what you're taking proactively) — this is your clinical history. Stored in `users/{uid}/medical_history`.
-- **Risk assessment** — Claude analyzes the family tree and personal history to surface elevated risk categories with plain-language explanations of why. Example output: "Based on your father and paternal grandfather both having heart disease before 60, you have a significantly elevated cardiovascular risk. Your family history of colon cancer on your mother's side elevates your colorectal risk above average. Here's what the evidence suggests for each." Risk categories map to established medical frameworks (AHA, ACS, USPSTF guidelines) — always framed as informational, not medical advice.
-- **Mitigation plans** — Per-risk action plans that don't just sit as text but actively connect to the rest of the app:
-  - *Cardiovascular risk* → cardio exercise targets wired into Workout Planner, Mediterranean-style dietary goals in Nutrition Tracker, blood pressure and lipid panel tracking in Lab Results, stress management in Habits, regular check-in prompts
-  - *Colon cancer risk* → high-fiber dietary targets, earlier colonoscopy recommendation in Screening Calendar, red/processed meat limits in Nutrition, hydration goals in Hydration Tracker
-  - *Diverticulosis risk* → high-fiber and hydration targets (merged intelligently with colon cancer plan to avoid duplicate recommendations), specific foods to limit, exercise targets
-  - Plans auto-merge when risk factors share interventions — you get one unified dietary recommendation, not three competing lists
-  - Each plan action links to the relevant app section so you can act immediately
-- **Screening calendar** — The highest-value output: a personalized schedule of recommended health screenings based on your age, sex, and risk factors, integrated with Google Calendar. Fires push notifications at the right life moments: "You're turning 40 this year — given your family history of colon cancer, your doctor may recommend a colonoscopy earlier than the standard 45. Here are questions to ask at your next appointment." Screening types: colonoscopy, lipid panel, blood pressure, blood glucose, skin check, eye exam, dental, prostate (PSA), cardiac stress test, and others driven by specific risk factors. Follows USPSTF and major medical society guidelines by default.
-- **Lab results tracker** — Store and trend actual clinical data over time: lipid panel (total cholesterol, LDL, HDL, triglycerides), blood glucose / A1C, vitamin D, B12, ferritin, thyroid (TSH), blood pressure, resting heart rate (also from Google Health). Manual entry with date; Claude flags meaningful changes between readings ("Your LDL increased 22 points since your last panel — worth discussing with your doctor") and correlates trends with lifestyle data already in the app (sleep, exercise, diet). Results feed back into risk assessments and mitigation plans dynamically.
-- **Doctor visit prep** — Before any appointment flagged as medical in Google Calendar, Claude surfaces: relevant family history for that specialty, current medications and supplements, recent lab results and trends, open questions from the mitigation plan, and a suggested list of things to discuss. You walk in prepared instead of forgetting half of what you wanted to ask.
-- **Always-on framing** — Every feature in this section is explicitly "informational, based on published guidelines — not a substitute for medical advice." Claude consistently encourages regular consultations with healthcare providers and frames all mitigation plans as conversation starters, not prescriptions.
+### Gamification (Beyond XP)
+- **Streak XP multipliers** — habit streaks that reach 7 days apply a 1.5× XP multiplier on that habit; 30-day streaks apply 2×; multipliers stack with the existing streak bonus toasts and tie directly into the `Week One` / `The Long Game` / `Unbreakable` achievement milestones (hitting the achievement threshold also flips on the multiplier)
+- **Daily & weekly challenges** — 3 rotating daily challenges generated each morning (e.g. "Complete 2 tasks", "Hit your water goal", "Log a meal before noon"); weekly challenges are larger ("4 workouts this week", "Finish a book"); challenges are surfaced on the dashboard and in the morning briefing; completing them awards bonus XP and can drive progress toward existing achievements (e.g. daily challenges nudge toward `Perfect Day`)
+- **Boss Days** — monthly "Boss Day" challenge that appears on the 1st; harder composite goal (full morning routine + 3 tasks + all habits + journal all in one day); completing it gives a large XP burst + a unique achievement; fills the motivation gap between the 30-day and 100-day habit streak achievements
+- **Life Balance Score** — composite score (0–100) across 5 domains: Health, Productivity, Relationships, Finance, Creativity; calculated from recent activity in each area (e.g. workouts logged, tasks completed, interactions logged, budget status, content/reading entries); shown on the dashboard as a ring or bar; low scores in a domain surface a gentle nudge; rewards you for whole-life awareness not just grinding one area
+- **Personal best leaderboard** — "Your best week: 2,340 XP — this week: 1,890"; shown in the weekly AI review and on the XP/level card; competes only against your own history; no external comparison
+- **Cosmetic rewards** — unlock new dashboard accent colors or UI themes at Gamerscore milestones (250G, 500G, 750G, 1,100G); purely visual, no functional impact; gives the Gamerscore total a destination and makes the `/achievements` page feel more rewarding to check
+- **Titles / Prestige labels** — domain-earned titles shown on the dashboard profile header (e.g. "Athlete" at 50 workouts, "Scholar" at 10 books finished, "Chronicler" at 30 journal entries); titles change dynamically as activity patterns shift; personality-driven alternative to purely numeric level display
+- **D&D Character Sheet** *(needs scoping before implementation)* — full RPG-style character sheet at `/character`; 6 core stats (STR, DEX, CON, INT, WIS, CHA) each fed by specific app activity; derived skills under each stat that level semi-independently; class auto-assigned from top two stats (Warrior, Wizard, Ranger, Monk, Bard, Cleric, Rogue, Paladin); HP as a CON-driven resilience score (sleep + hydration + mood); feats unlocked at stat milestones that grant temporary bonuses; background chosen at setup for flavor bonuses; existing achievements slot in as the feats section of the sheet; radar/hexagon chart as the ability score overview; dark glass layout styled like a real D&D sheet. Architecture: runs alongside (not replacing) the existing global XP/level system — every action awards global XP as today and also increments the relevant stat(s); a stat weight map in a single config file (e.g. `lib/character.ts`) routes each activity type to one or more stats with weighted increments (e.g. workout → STR +3, CON +1; journal → WIS +2; Bible/church → WIS +2, CHA +1); multi-stat activities are intentional and encouraged. Progression: logarithmic curve — early gains come quickly, later gains require sustained long-term effort; no hard cap; designed to still feel meaningful at year 10 and year 25, not just the first few months. Onboarding: short character creation screen (6–8 questions) at first launch establishes honest base stats so starting values reflect who you actually are today rather than resetting everyone to 1. Scoping questions still to answer: (1) do stats decay during extended inactivity — lean toward no but the Life OS framing (decades-long, not a campaign) makes permanent gains feel more appropriate; a visual "inactive domain" warning may be sufficient instead of actual decay; (2) feat design — what bonuses make sense for a life OS without feeling arbitrary; (3) how the /character page integrates into nav given ongoing consolidation efforts
 
-### Energy Level Tracker
-- **Separate from mood** — Mood is emotional tone; energy is physical and cognitive readiness to perform. A quick 1–5 check-in available at any time (dashboard widget, chat tool, voice), with an optional note ("crashed after lunch", "great after the workout"). Stored as `users/{uid}/energy/{timestamp}` with time-of-day metadata so intra-day patterns are visible.
-- **Correlation engine** — After 30+ days of data, Claude Haiku surfaces personal energy patterns: what time of day you peak, how sleep quality the night before affects your morning energy, whether workouts boost or drain your afternoon, caffeine timing effects, nutrition correlations. The goal is actionable insight: "Your energy on days you work out before noon averages 0.8 points higher in the afternoon than days you don't." Feeds into the weekly AI review and Proactive AI Insights.
-- **Scene integration** — Active energy level informs scene suggestions. Low energy at 2pm? Claude might suggest a short walk before starting a focus session rather than jumping straight into Deep Work mode.
-- **Dashboard widget** — Simple current energy log + 7-day sparkline. Chat tool: `log_energy`.
+### Tasks / Productivity
+- **Eisenhower matrix view** — 2×2 urgent/important grid as an alternate view on the Tasks page; mapped from existing priority score + due date
+- **Task dependencies** — mark one task as blocked by another; blocked tasks visually suppressed until prerequisite is complete
+- **Context tags** — home / work / errands / etc. tags with a one-tap filtered view; complements existing tag system
 
-### Personal Annual Report ("Life Wrapped")
-- **Year-in-review generated from real data** — All the inputs already exist; this is a presentation and narrative layer. Runs on January 1st via cron (and manually triggerable any time). Claude Sonnet synthesizes a full year of activity across every domain into a structured report:
-  - Tasks completed, projects shipped, habits maintained and streaks hit
-  - Books read, highlights captured, content published
-  - Workouts logged, PRs set, miles tracked, health trends
-  - Goals achieved and missed with honest reflection
-  - Financial progress: net worth change, savings rate, budget performance
-  - Relationships: interactions logged, new people met, birthdays remembered
-  - Journal entries written, moods trended, decisions made and reviewed
-  - XP earned, level reached, achievements unlocked, Gamerscore total
-  - Words: most-used themes from journal entries and Second Brain captures (Claude identifies them)
-  - One-sentence "year in a sentence" generated by Claude from all of the above
-- **Rendered as a shareable page** — Beautiful, data-rich layout at `/annual-report/{year}`; can be exported as PDF. Styled differently from the rest of the app — this is a keepsake. Previous years archived and browsable.
-- **Reflection prompts** — Alongside the stats, Claude asks 5 questions you answer in the app: what surprised you most, what do you want more of, what do you want less of, who mattered most, one word for the year. Answers stored and included in the report.
+### Deeper Social Graph
+- **Relationship map & network intelligence** — Extends the People CRM from a flat contact list into a true social graph:
+  - **Visual relationship map** — Force-directed graph showing contacts grouped by context (family, work, church, college, etc.) with edge weight based on interaction frequency; built with D3.js; gives you a feel for where your relational energy is actually going
+  - **Introducer tracking** — Record who introduced you to whom; useful for gratitude, reciprocity, and understanding how your network is connected
+  - **Relationship strength score** — More nuanced than the current "needs attention" flag: a composite of recency, frequency, and depth of interactions; shown as a score and trend on each contact card
+  - **Network gap analysis** — Claude identifies domains where your network is thin (e.g., "you have few contacts in finance / healthcare / your target industry") and surfaces warm-path introductions
+  - **AI gift suggestions** — Already on the roadmap; fits here as part of the deeper CRM layer
 
-### Tax Preparation Assistant
-- **Year-round deduction tracking** — With Plaid transactions flowing, the raw data is already there. A tax layer that lets you flag expense categories as potentially deductible: home office, business meals, professional development, charitable giving, medical expenses, vehicle mileage (manual log), investment losses. Each flagged category stores the relevant IRS rule reference so you understand why it might be deductible.
-- **Deduction dashboard** — Running YTD total of potentially deductible expenses by category on a `/tax` page. Updates automatically as Plaid syncs new transactions. Manual override to include/exclude specific transactions.
-- **Year-end summary** — Generates a clean export (PDF or CSV) of all flagged deductions organized by IRS schedule (Schedule A, Schedule C, etc.) for your accountant or TurboTax import. Includes totals, transaction-level detail, and any notes you've added.
-- **Giving summary** — Integrates with the tithing/giving tracker from the Faith layer and People CRM gift log; produces a complete charitable giving statement.
-- **Estimated taxes nudge** — If you have freelance or side income logged, Claude estimates quarterly tax liability and fires a reminder before estimated tax due dates (April 15, June 15, September 15, January 15).
+### Extension
+- **Right-click context menu** — capture selected text directly to Second Brain, journal, or task without opening the popup; uses Chrome `contextMenus` API (requires background service worker + `contextMenus` permission)
+- **Keyboard shortcut** — trigger capture without clicking the toolbar icon (e.g. `Alt+Shift+C`); declared in `manifest.json` `commands`
+- **Badge count** — show tasks due today or a live unread count on the toolbar icon; keeps the extension useful even when you're not capturing
 
-### Investment Portfolio Tracker
-- **Beyond net worth snapshots** — Track individual holdings: brokerage accounts, retirement accounts (401k, IRA, Roth), individual stocks, ETFs, real estate equity, crypto. Manual entry with ticker symbol, shares, cost basis, and account. Plaid's investment products can automate this for supported brokerages long-term.
-- **Allocation view** — Pie chart of asset allocation (stocks/bonds/cash/real estate/other) and geographic/sector breakdown for equity holdings. Target allocation you define; deviation from target triggers a rebalancing nudge.
-- **Performance tracking** — Portfolio value over time charted alongside net worth. Cost basis vs. current value per holding. Unrealized gain/loss. Simple IRR calculation for overall portfolio.
-- **Rebalancing assistant** — When allocation drifts more than a defined threshold from your target, Claude flags it and calculates the buys/sells needed to rebalance. Never executes trades — always "here's what you'd need to do; take it to your brokerage."
-- **Dividend & income log** — Track dividend payments and interest income; feeds into the tax layer.
+### Password Vault
+See [`docs/PASSWORD_VAULT.md`](./docs/PASSWORD_VAULT.md) for full implementation details.
 
-### Ideas Vault
-- **Friction-free idea capture** — A dedicated collection point for raw, unprocessed ideas before they're ready to become tasks, projects, or Second Brain notes. Product ideas, business concepts, creative sparks, things to investigate, observations. The key is zero friction: one tap from dashboard, voice input, browser extension quick-capture, share target.
-- **Weekly triage** — Every Monday, Claude surfaces 5–10 ideas from the vault and helps you decide: develop now (→ task or project), park (back to vault with a tag), or discard. Ideas have a "last reviewed" date; ones that survive multiple triage sessions without being acted on get a gentle nudge to either commit or delete.
-- **Tagging & search** — Tag ideas by domain (business, creative, health, tech, personal) with full-text search. Claude can cluster related ideas and surface connections you didn't notice.
-- **Idea-to-project pipeline** — One tap to promote an idea to a Project in the Kanban board, pre-populating the project description from the idea note.
-- **Chat tool** — `capture_idea` so you can say "add an idea: what if I..." in the middle of anything and it lands in the vault without breaking your flow.
+- **Bitwarden integration** *(1–2 days)* — Secure interface into your Bitwarden vault: search credentials, copy username/password to clipboard (auto-clears after 60 seconds), and generate strong passwords — without storing any secrets in Firestore. Two implementation paths: (A) `bw serve` CLI wrapper running as a persistent sidecar (recommended for self-hosted/Railway deployment), or (B) Bitwarden cloud API for serverless. The LLM (Claude) never sees actual passwords — chat tools return metadata only (username + URL). Vault health check surfaces reused, weak, and old passwords as counts. Audit log writes every vault access (item name only) to Firestore. Requires a persistent server process — not Vercel-native; deploy the vault bridge on Render or Railway.
 
-### Meeting Prep Assistant
-- **Proactive context surface** — 15–30 minutes before any Google Calendar event, Claude automatically assembles a briefing card:
-  - Attendees pulled from People CRM with relevant context (last interaction, what you're working on together, any notes, upcoming birthday)
-  - Open tasks tagged to this person or project
-  - Previous meeting notes if the event title suggests it's recurring
-  - Relevant files from Google Drive (matched by event title + attendee names)
-  - Any decisions from the Decision Journal related to this topic
-- **Delivered as a push notification** with a tap-to-expand briefing, or surfaced as a dashboard card that appears before the meeting and disappears after.
-- **Post-meeting capture** — After the calendar event end time, Claude prompts: "How did your meeting with [person] go? Any action items or notes to capture?" Voice or text input; Claude extracts tasks (→ Task system), decisions (→ Decision Journal), and interaction notes (→ People CRM) automatically.
-- **Meeting cost awareness** — Optional: log attendee count and estimated average salary; Claude calculates the cost of the meeting in real time and includes it in the briefing as a "this meeting costs ~$X/hour" framing.
-
-### Personal OKRs
-- **Quarterly cadence, separate from Goals** — OKRs operate at a higher altitude: Objectives are directional and qualitative ("Become the healthiest version of myself"), Key Results are measurable and binary at quarter-end ("Complete 48 workouts", "Average 7.5 hours of sleep", "Lose 8 lbs"). Structurally different from the current Goals system which is more project-like.
-- **Planning ritual** — At the start of each quarter, Claude runs a guided OKR-setting session: reviews last quarter's performance, asks what matters most this quarter, helps draft 2–3 Objectives with 2–4 Key Results each. Pulls relevant data from across the app to ground the conversation in reality ("Last quarter you averaged 3.2 workouts/week — is 4/week achievable?").
-- **Progress tracking** — Key Results auto-update where possible by linking to existing data sources (workout count from Workout Planner, sleep average from Google Health, etc.). Manual check-in for KRs that can't be automated.
-- **Quarterly review** — End-of-quarter Claude review scores each KR (0–1.0, Google-style), identifies what drove hits and misses, and feeds learnings into the next quarter's planning session. Integrates with the weekly AI review in the final week of each quarter.
-- **Alignment with Goals and habits** — OKRs sit above Goals in the hierarchy; Claude can suggest which existing goals and habits ladder up to each Objective, giving your day-to-day activity a clearer line of sight to what actually matters this quarter.
-
-### SOPs & Personal Runbooks
-> 🎙️ **Voice wiring required:** Triggering and stepping through an SOP is a natural voice interaction. `run_sop` is a server tool (reads the SOP definition and returns the first step). Navigation steps within an SOP dispatch to existing `navigate_to_page` (already a client tool). Any SOP step that opens a modal (`open_quick_capture`, etc.) reuses existing client tools. The SOP runner itself stays server-side; it delegates to existing client tools for UI steps rather than adding new ones.
-
-- **Document how you do things so Claude can replicate them** — The infrastructure that makes the agent feel truly personal over time. An SOP is a named, step-by-step workflow you've defined: your morning routine, how you process email, your weekly review process, how you meal plan, how you close out a workday. Once documented, you can trigger any SOP by name and Claude walks through it with you — or executes the automatable steps automatically.
-- **SOP builder** — Create an SOP with a name, trigger phrase, and ordered list of steps. Each step can be: a question Claude asks you, an action Claude takes (tool call), a reminder, or a navigation prompt ("open the habit tracker"). Steps can be conditional ("if you haven't logged weight this week, do that first").
-- **SOP library** — Starter templates for common personal OS workflows: Morning Startup, Weekly Review, Monthly Finance Review, End of Day Shutdown, Quarterly OKR Review. User can edit, extend, or build from scratch.
-- **Compounds over time** — Every time you find yourself doing the same sequence of things, that's an SOP candidate. The library grows as your workflows mature, and the agent becomes increasingly capable of running your life's operating system rather than just answering questions about it.
-- **Accessible via chat** — "Run my morning routine", "let's do my weekly review", "start end-of-day shutdown". Active SOP shown as a badge in the nav with step progress.
-
-### Day-End Micro-Review
-> 🎙️ **Voice wiring required:** `open_day_review` → `CLIENT_TOOL_NAMES` (opens the review UI or focuses the input so the user can answer the three questions via voice). Dashboard widget → `useWidgetRefresh("day_review", fn)`. The three-question flow itself is a natural voice interaction — voice is actually the primary input surface here.
-
-- **2-minute daily close** — Lighter than the full journal; heavier than nothing. Three fixed questions at the end of each day: (1) What got done today? (2) What didn't, and why? (3) One thing to carry into tomorrow. Voice or text. Takes under 2 minutes.
-- **Feeds the weekly AI review** — Currently the weekly review infers how the week went from activity data (tasks completed, habits logged, etc.). Day-end micro-reviews give it your *subjective* read on each day, making the weekly synthesis dramatically richer.
-- **Wind-down scene integration** — Day-end review is a natural step in the Wind Down scene; can be triggered automatically as part of that flow.
-- **Prompted by push notification** — A configurable "end of day" notification (default 9pm) that fires if you haven't completed that day's review. Silenced automatically once you do.
-- **Streak & gamification** — Daily review streak tracked separately from the full journal streak; lighter commitment, easier to maintain, still awards XP.
-
+### Finance
+*(placeholder — no items scoped yet)*
 
 ---
 

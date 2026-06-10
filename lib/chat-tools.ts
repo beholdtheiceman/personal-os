@@ -2273,6 +2273,53 @@ export const TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+
+  // ── Scenes ────────────────────────────────────────────────────────────────
+  {
+    name: "activate_scene",
+    description:
+      "Activate a life scene. A scene is a named operating mode (Deep Work, Workout, Wind Down, Sleep, Travel) that sets a persistent indicator in the UI. After activating, immediately execute the scene's opening actions described in the tool result (start timer, play music, navigate, etc.).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        scene_id: {
+          type: "string",
+          enum: ["deep_work", "workout", "wind_down", "sleep", "travel"],
+          description: "The scene to activate.",
+        },
+      },
+      required: ["scene_id"],
+    },
+  },
+  {
+    name: "deactivate_scene",
+    description: "Deactivate the currently active life scene, clearing the scene indicator.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "list_scenes",
+    description: "List all available life scenes (built-in) with their descriptions and opening actions.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "set_media",
+    description:
+      "Search YouTube for music matching a mood or query and start playing it in the media player. Use during scenes (focus, workout, wind-down, sleep) or whenever the user asks to play music.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        mood: {
+          type: "string",
+          description: "Mood label: 'focus', 'energizing workout', 'calm wind down', 'sleep ambient', 'upbeat', 'lo-fi'.",
+        },
+        search_query: {
+          type: "string",
+          description: "Specific YouTube search query. If mood is set, this is optional.",
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
 // Names of tools that execute in the BROWSER, not on the server.
@@ -2284,6 +2331,9 @@ export const CLIENT_TOOL_NAMES = new Set<string>([
   "regenerate_daily_summary",
   "open_quick_capture",
   "start_focus_timer",
+  "activate_scene",
+  "deactivate_scene",
+  "set_media",
 ]);
 
 export const isClientTool = (name: string) => CLIENT_TOOL_NAMES.has(name);
