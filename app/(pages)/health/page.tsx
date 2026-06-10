@@ -4,6 +4,7 @@ import HydrationWidget from "@/components/health/HydrationWidget";
 import MoodWidget from "@/components/health/MoodWidget";
 import BodyMetricsWidget from "@/components/health/BodyMetricsWidget";
 import SupplementWidget from "@/components/health/SupplementWidget";
+import SleepTrendWidget from "@/components/health/SleepTrendWidget";
 
 export default function HealthPage() {
   return (
@@ -21,6 +22,7 @@ export default function HealthPage() {
         <SupplementWidget />
         <BodyMetricsWidget />
       </div>
+      <SleepTrendWidget />
     </div>
   );
 }

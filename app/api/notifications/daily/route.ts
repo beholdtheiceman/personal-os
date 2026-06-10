@@ -11,6 +11,7 @@ import {
   decisionReviewHandler, netWorthReminderHandler, timeSummaryHandler,
   subscriptionRenewalHandler, spendingTrendHandler, seasonCheckinHandler,
   relationshipFollowupHandler, dayRecapHandler, transactionReviewHandler, timeEntriesPendingHandler,
+  bedtimeReminderHandler,
 } from "@/lib/notification-handlers";
 import { getLocalTimeInfo, isHour } from "@/lib/timezone";
 import { sendPushToUser } from "@/lib/send-push";
@@ -224,6 +225,11 @@ export async function GET(req: NextRequest) {
       }
     } catch (e) {
       console.error(`Reminder firing failed for ${uid}:`, e);
+    }
+
+    if (settings.bedtime_reminder.enabled && settings.bedtime_reminder.time && isHour(timeInfo, settings.bedtime_reminder.time)) {
+      const n = await bedtimeReminderHandler(uid, timeInfo.tz);
+      if (n) await send(n.title, n.body, n.tag ?? "bedtime-reminder");
     }
 
     results[uid] = fired;

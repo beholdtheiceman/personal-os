@@ -1,7 +1,7 @@
 // Notification handler functions — one per category.
 // Each returns { title, body } or null if nothing to send.
 import { getAdminDb } from "./firebase-admin";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { format, parseISO, differenceInDays, addDays } from "date-fns";
 import type { Subscription, BillingCycle } from "@/types";
 
 interface NotifPayload { title: string; body: string; tag?: string; }
@@ -809,5 +809,80 @@ export async function timeSummaryHandler(uid: string, tz: string): Promise<Notif
     title: `⏱ ${totalHrs}h tracked today`,
     body: top || `${snap.size} session${snap.size > 1 ? "s" : ""} logged`,
     tag: "time-summary",
+  };
+}
+
+// ── Bedtime Reminder ──────────────────────────────────────────────────────────
+export async function bedtimeReminderHandler(uid: string, tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const today = todayLocal(tz);
+  const dedupRef = db.doc(`users/${uid}/notification_sent/bedtime_reminder_${today}`);
+  if ((await dedupRef.get()).exists) return null;
+
+  // Read target sleep hours (default 8)
+  const healthSettingsSnap = await db.doc(`users/${uid}/settings/health`).get();
+  const targetHours: number = healthSettingsSnap.exists
+    ? ((healthSettingsSnap.data() as Record<string, unknown>).target_sleep_hours as number ?? 8)
+    : 8;
+
+  // Try to find tomorrow's earliest calendar event for a personalised wake time
+  let wakeLabel = "your usual wake time";
+  try {
+    const tokenDoc = await db.doc(`users/${uid}/integrations/google_calendar`).get();
+    if (tokenDoc.exists) {
+      const td = tokenDoc.data()!;
+      let accessToken: string = td.access_token as string;
+      if (Date.now() > (td.expires_at as number) - 60000) {
+        const res = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID ?? "",
+            client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET ?? "",
+            refresh_token: td.refresh_token as string,
+            grant_type: "refresh_token",
+          }),
+        });
+        const data = await res.json() as Record<string, unknown>;
+        if (!data.error) {
+          accessToken = data.access_token as string;
+          await tokenDoc.ref.update({ access_token: accessToken, expires_at: Date.now() + 3600 * 1000 });
+        }
+      }
+      const tomorrow = addDays(new Date(), 1);
+      const tomorrowStr = tomorrow.toLocaleDateString("en-CA", { timeZone: tz });
+      const dayAfter = addDays(tomorrow, 1);
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events` +
+        `?timeMin=${new Date(tomorrowStr + "T00:00:00").toISOString()}` +
+        `&timeMax=${new Date(dayAfter.toLocaleDateString("en-CA", { timeZone: tz }) + "T00:00:00").toISOString()}` +
+        `&singleEvents=true&orderBy=startTime&maxResults=5`;
+      const calRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (calRes.ok) {
+        const calData = await calRes.json() as Record<string, unknown>;
+        const items = (calData.items as Record<string, unknown>[] ?? [])
+          .filter((e) => (e.start as Record<string, string>)?.dateTime);
+        if (items.length > 0) {
+          const firstStart = (items[0].start as Record<string, string>).dateTime;
+          const wakeTime = new Date(firstStart);
+          wakeLabel = format(wakeTime, "h:mm a");
+          // Compute recommended bedtime
+          const bedtime = new Date(wakeTime.getTime() - targetHours * 60 * 60 * 1000);
+          const bedLabel = format(bedtime, "h:mm a");
+          await dedupRef.set({ sent_at: new Date().toISOString() });
+          return {
+            title: `🌙 Bedtime reminder`,
+            body: `First event tomorrow at ${wakeLabel}. Sleep ${targetHours}h → aim for ${bedLabel}.`,
+            tag: "bedtime-reminder",
+          };
+        }
+      }
+    }
+  } catch { /* calendar fetch failure is non-fatal — fall through to generic reminder */ }
+
+  await dedupRef.set({ sent_at: new Date().toISOString() });
+  return {
+    title: `🌙 Time to wind down`,
+    body: `Aiming for ${targetHours}h of sleep tonight? Start winding down now.`,
+    tag: "bedtime-reminder",
   };
 }

@@ -223,7 +223,7 @@
 - **Scene integration** — Active energy level informs scene suggestions. Low energy at 2pm? Claude might suggest a short walk before starting a focus session rather than jumping straight into Deep Work mode.
 - **Dashboard widget** — Simple current energy log + 7-day sparkline. Chat tool: `log_energy`.
 
-### Sleep Optimization
+### Sleep Optimization ✅ Complete
 - **Sleep debt & optimization layer** — You already have sleep data flowing in from Google Health; this turns passive logging into active coaching:
   - **Sleep debt tracker** — Running cumulative deficit vs. your target hours; resets as debt is paid down; shown on the Health dashboard
   - **Correlation analysis** — Cross-reference sleep quality scores against same-day and prior-day variables already in Firestore: exercise, alcohol (if tracked in nutrition), caffeine (supplement log), mood, hydration, late screen time (journal mentions); Claude Haiku surfaces the strongest personal correlations monthly
