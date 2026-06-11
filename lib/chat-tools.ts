@@ -2318,6 +2318,55 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  // ── Home & Vehicle Maintenance ──
+  {
+    name: "add_maintenance_item",
+    description: "Add a maintenance item to track — home (HVAC filter, gutters, etc.), vehicle (oil change, registration), or a warranty. Set interval_days for recurring items so next_due auto-calculates after each service log.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name:             { type: "string", description: "Item name, e.g. 'Oil Change', 'HVAC Filter'." },
+        category:         { type: "string", enum: ["home","vehicle","warranty"], description: "Item category." },
+        vehicle_name:     { type: "string", description: "Vehicle identifier, e.g. '2020 Honda Civic'. Only for category:vehicle." },
+        last_service:     { type: "string", description: "YYYY-MM-DD date of last service." },
+        interval_days:    { type: "number", description: "How often this recurs in days, e.g. 90 for quarterly." },
+        next_due:         { type: "string", description: "YYYY-MM-DD override for next due date. Computed from last_service+interval_days if omitted." },
+        purchase_date:    { type: "string", description: "YYYY-MM-DD purchase date. Warranty items only." },
+        warranty_months:  { type: "number", description: "Warranty length in months. Warranty items only." },
+        retailer:         { type: "string", description: "Store where purchased. Warranty items only." },
+        notes:            { type: "string", description: "Optional notes." },
+      },
+      required: ["name", "category"],
+    },
+  },
+  {
+    name: "log_maintenance",
+    description: "Log that a maintenance item was serviced today (or on a given date). Updates last_service and calculates the new next_due date. Find the item by partial name match.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name_search:  { type: "string", description: "Partial item name to find it." },
+        date:         { type: "string", description: "YYYY-MM-DD service date. Defaults to today." },
+        cost:         { type: "number", description: "Cost in dollars (optional)." },
+        contractor:   { type: "string", description: "Who performed the service (optional)." },
+        notes:        { type: "string", description: "Optional notes." },
+      },
+      required: ["name_search"],
+    },
+  },
+  {
+    name: "get_upcoming_maintenance",
+    description: "List maintenance items due within a given number of days (default 30). Also returns overdue items. Use to answer 'what maintenance is coming up?' or 'what am I behind on?'",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        within_days: { type: "number", description: "How far ahead to look. Default 30." },
+        category:    { type: "string", enum: ["home","vehicle","warranty","all"], description: "Filter by category. Default: all." },
+      },
+      required: [],
+    },
+  },
+
   // ── Ideas Vault ──
   {
     name: "capture_idea",
@@ -2383,7 +2432,7 @@ export const TOOLS: Anthropic.Tool[] = [
           enum: [
             "achievements","bible","calendar","chat","constitution","content","dashboard",
             "decisions","discord","drive","finance","focus","gmail","goals","habits","health",
-            "ideas","journal","life-context","meal-planner","media","memory","news","nutrition","people",
+            "home","ideas","journal","life-context","meal-planner","media","memory","news","nutrition","people",
             "projects","reading","season","settings","share","sops","tasks","time","weather","workout",
           ],
           description: "Which page to open.",

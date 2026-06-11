@@ -47,6 +47,7 @@ import EnergyDashboardWidget from "@/components/dashboard/EnergyDashboardWidget"
 import OKRSummaryWidget from "@/components/dashboard/OKRSummaryWidget";
 import DayReviewWidget from "@/components/dashboard/DayReviewWidget";
 import IdeasWidget from "@/components/dashboard/IdeasWidget";
+import MaintenanceWidget from "@/components/dashboard/MaintenanceWidget";
 import DashboardCustomizer from "@/components/dashboard/DashboardCustomizer";
 import DayRecapButton from "@/components/capture/DayRecapButton";
 import type { Task, Habit, HealthLog, JournalEntry, NutritionLog, Goal, Project, Transaction } from "@/types";
@@ -526,6 +527,9 @@ export default function DashboardPage() {
 
       case "day_review":
         return <DayReviewWidget key="day_review" />;
+
+      case "maintenance":
+        return <MaintenanceWidget key="maintenance" />;
 
       case "ideas":
         return <IdeasWidget key="ideas" />;

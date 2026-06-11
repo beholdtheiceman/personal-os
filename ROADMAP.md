@@ -237,7 +237,7 @@
 - **Quarterly review** — End-of-quarter Claude review scores each KR (0–1.0, Google-style), identifies what drove hits and misses, and feeds learnings into the next quarter's planning session. Integrates with the weekly AI review in the final week of each quarter.
 - **Alignment with Goals and habits** — OKRs sit above Goals in the hierarchy; Claude can suggest which existing goals and habits ladder up to each Objective, giving your day-to-day activity a clearer line of sight to what actually matters this quarter.
 
-### Home & Vehicle Maintenance
+### ✅ Home & Vehicle Maintenance
 - **Maintenance OS** — The most universally neglected life admin category; simple data model with high return on investment:
   - **Home items** — HVAC filter, water heater flush, smoke detector batteries, pest control, roof inspection, gutters, appliance warranties; each item has a last-service date, interval, and next-due date
   - **Vehicle items** — Oil changes, tire rotation, registration renewal, insurance renewal, inspection; supports multiple vehicles

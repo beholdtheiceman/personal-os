@@ -1029,6 +1029,39 @@ export interface UnsubscribeReview {
   skippedCount?: number;               // senders beyond the 20-cap
 }
 
+// ─── Home & Vehicle Maintenance ───────────────────────────────────────────────
+export type MaintenanceCategory = "home" | "vehicle" | "warranty";
+
+export interface MaintenanceItem {
+  id: string;
+  name: string;
+  category: MaintenanceCategory;
+  vehicle_name?: string;   // which vehicle (when category === "vehicle")
+  last_service?: string;   // YYYY-MM-DD
+  interval_days?: number;  // recurrence interval
+  next_due?: string;       // YYYY-MM-DD
+  // Warranty extras
+  purchase_date?: string;  // YYYY-MM-DD
+  warranty_months?: number;
+  warranty_expires?: string; // YYYY-MM-DD
+  retailer?: string;
+  notes?: string;
+  status: "active" | "archived";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MaintenanceLog {
+  id: string;
+  item_id: string;
+  item_name: string;
+  date: string;     // YYYY-MM-DD
+  notes?: string;
+  cost?: number;
+  contractor?: string;
+  created_at: string;
+}
+
 // ─── Ideas Vault ──────────────────────────────────────────────────────────────
 export type IdeaDomain = "business" | "creative" | "health" | "tech" | "personal" | "other";
 export type IdeaStatus = "raw" | "parked" | "developing" | "promoted" | "discarded";

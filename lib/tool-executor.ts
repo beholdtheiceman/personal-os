@@ -3756,6 +3756,97 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `SOP "${title}" deleted.`;
     }
 
+    // ── Home & Vehicle Maintenance ──
+    case "add_maintenance_item": {
+      const now = new Date().toISOString();
+      const lastService = input.last_service as string | undefined;
+      const intervalDays = input.interval_days as number | undefined;
+      let next_due = input.next_due as string | undefined;
+      if (!next_due && lastService && intervalDays) {
+        const d = new Date(lastService + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + intervalDays);
+        next_due = d.toISOString().slice(0, 10);
+      }
+      let warranty_expires: string | undefined;
+      const purchaseDate = input.purchase_date as string | undefined;
+      const warrantyMonths = input.warranty_months as number | undefined;
+      if (input.category === "warranty" && purchaseDate && warrantyMonths) {
+        const d = new Date(purchaseDate + "T00:00:00Z");
+        d.setUTCMonth(d.getUTCMonth() + warrantyMonths);
+        warranty_expires = d.toISOString().slice(0, 10);
+      }
+      const ref = await db.collection(`users/${uid}/maintenance`).add({
+        name: (input.name as string).trim(),
+        category: input.category,
+        vehicle_name: (input.vehicle_name as string) || null,
+        last_service: lastService || null,
+        interval_days: intervalDays || null,
+        next_due: next_due || null,
+        purchase_date: purchaseDate || null,
+        warranty_months: warrantyMonths || null,
+        warranty_expires: warranty_expires || null,
+        retailer: (input.retailer as string) || null,
+        notes: (input.notes as string) || null,
+        status: "active",
+        created_at: now,
+        updated_at: now,
+      });
+      return `Maintenance item "${input.name}" added (id: ${ref.id})${next_due ? `, next due: ${next_due}` : ""}.`;
+    }
+
+    case "log_maintenance": {
+      const snap = await db.collection(`users/${uid}/maintenance`).get();
+      const lower = (input.name_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(lower));
+      if (!match) return `No maintenance item found matching "${input.name_search}".`;
+      const item = match.data();
+      const today = new Date().toISOString().slice(0, 10);
+      const date = (input.date as string) || today;
+      await db.collection(`users/${uid}/maintenance_logs`).add({
+        item_id: match.id,
+        item_name: item.name,
+        date,
+        notes: (input.notes as string) || "",
+        cost: (input.cost as number) || null,
+        contractor: (input.contractor as string) || "",
+        created_at: new Date().toISOString(),
+      });
+      const patch: Record<string, unknown> = { last_service: date, updated_at: new Date().toISOString() };
+      if (item.interval_days) {
+        const d = new Date(date + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + (item.interval_days as number));
+        patch.next_due = d.toISOString().slice(0, 10);
+      }
+      await match.ref.update(patch);
+      return `Service logged for "${item.name}" on ${date}${patch.next_due ? `. Next due: ${patch.next_due}` : ""}.`;
+    }
+
+    case "get_upcoming_maintenance": {
+      const withinDays = (input.within_days as number) ?? 30;
+      const catFilter = (input.category as string) ?? "all";
+      const snap = await db.collection(`users/${uid}/maintenance`).where("status", "==", "active").get();
+      const today = new Date().toISOString().slice(0, 10);
+      const cutoffDate = new Date(today + "T00:00:00Z");
+      cutoffDate.setUTCDate(cutoffDate.getUTCDate() + withinDays);
+      const cutoff = cutoffDate.toISOString().slice(0, 10);
+      const docs = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>;
+      const filtered = docs.filter((d) => {
+        if (catFilter !== "all" && d.category !== catFilter) return false;
+        const due = (d.next_due as string) || (d.warranty_expires as string);
+        return due && due <= cutoff;
+      });
+      if (!filtered.length) return `No maintenance items due within ${withinDays} days.`;
+      const overdue = filtered.filter((d) => ((d.next_due || d.warranty_expires) as string) < today);
+      const upcoming = filtered.filter((d) => ((d.next_due || d.warranty_expires) as string) >= today);
+      const fmt = (d: Record<string, unknown>) =>
+        `- **${d.name}** [${d.category}]${d.vehicle_name ? ` (${d.vehicle_name})` : ""} — due: ${d.next_due || d.warranty_expires}`;
+      const lines: string[] = [];
+      if (overdue.length) lines.push(`**Overdue (${overdue.length}):**\n${overdue.map(fmt).join("\n")}`);
+      if (upcoming.length) lines.push(`**Due within ${withinDays} days (${upcoming.length}):**\n${upcoming.map(fmt).join("\n")}`);
+      return lines.join("\n\n");
+    }
+
     // ── Ideas Vault ──
     case "capture_idea": {
       const now = new Date().toISOString();

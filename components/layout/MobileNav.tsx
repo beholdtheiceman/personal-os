@@ -8,7 +8,7 @@ import {
   RiBookLine, RiBookReadLine, RiBowlLine, RiHeartPulseLine, RiLineChartLine,
   RiMoneyDollarCircleLine, RiFolderLine, RiCloseLine, RiApps2Line, RiRestaurantLine,
   RiGoogleLine, RiContactsBook2Line, RiChatSmile2Line, RiRunLine,
-  RiTimeLine, RiFocusLine, RiLightbulbLine,
+  RiTimeLine, RiFocusLine, RiLightbulbLine, RiHomeLine,
   RiMicLine, RiBook2Line, RiSettings3Line, RiTrophyLine, RiNewspaperLine,
   RiSunLine, RiShieldLine, RiLeafLine, RiBrainLine, RiFileListLine,
 } from "react-icons/ri";
@@ -35,6 +35,7 @@ const MORE_SECTIONS = [
       { href: "/season",        label: "Season",        icon: RiLeafLine },
       { href: "/life-context",  label: "Life Memory",   icon: RiBrainLine },
       { href: "/sops",          label: "SOPs",          icon: RiFileListLine },
+      { href: "/home",         label: "Home & Cars",  icon: RiHomeLine },
       { href: "/ideas",        label: "Ideas",        icon: RiLightbulbLine },
       { href: "/calendar",     label: "Calendar",     icon: RiCalendarLine },
       { href: "/projects",  label: "Projects",  icon: RiFolderLine },
