@@ -3987,6 +3987,46 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `Review result logged (${result}). ${nextMsg}.`;
     }
 
+    case "get_rate_offers": {
+      const { getRankedOffersForUser } = await import("@/lib/rate-tracker");
+      const filter = (input.filter as string | undefined) ?? "eligible";
+      const limit = (input.limit as number | undefined) ?? 10;
+      const offers = await getRankedOffersForUser(uid);
+      const filtered = offers.filter(o => {
+        if (filter === "eligible") return !o.taken && o.eligibility.eligible;
+        if (filter === "savings") return !o.taken && (o.type === "savings_apy" || o.type === "cd_apy");
+        if (filter === "bonus") return !o.taken && (o.type === "checking_bonus" || o.type === "credit_card_bonus" || o.type === "brokerage_bonus");
+        return true;
+      }).slice(0, limit);
+      if (filtered.length === 0) return "No matching offers found. Try syncing first via the Finance → Rates & Bonuses tab.";
+      return filtered.map((o, i) => {
+        const val = o.apy != null ? `${o.apy}% APY` : o.bonus_amount != null ? `$${o.bonus_amount} bonus` : "";
+        const warnings = o.eligibility.warnings.length > 0 ? ` ⚠ ${o.eligibility.warnings.join("; ")}` : "";
+        return `${i + 1}. [${o.id}] ${o.institution} — ${val} (${o.type}) ${o.taken ? "[applied]" : ""}${warnings}`;
+      }).join("\n");
+    }
+
+    case "get_benchmark_rates": {
+      const { getBenchmarkRates } = await import("@/lib/rate-tracker");
+      const rates = await getBenchmarkRates();
+      if (!rates) return "Benchmark rates not available (FRED_API_KEY not configured or sync not run yet).";
+      return `Fed Funds: ${rates.fed_funds}%\n1yr Treasury: ${rates.treasury_1y}%\n5yr Treasury: ${rates.treasury_5y}%\n10yr Treasury: ${rates.treasury_10y}%\nUpdated: ${rates.updated_at.slice(0, 10)}`;
+    }
+
+    case "mark_offer_taken": {
+      const offerId = input.offer_id as string;
+      if (!offerId) return "Error: offer_id is required.";
+      const db = getAdminDb();
+      const ref = db.doc(`users/${uid}/rate_taken/${offerId}`);
+      const snap = await ref.get();
+      if (snap.exists) {
+        await ref.delete();
+        return `Offer ${offerId} marked as not-applied.`;
+      }
+      await ref.set({ taken_at: new Date().toISOString() });
+      return `Offer ${offerId} marked as applied.`;
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }

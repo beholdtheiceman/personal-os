@@ -8,8 +8,9 @@ import NetWorthTracker from "@/components/finance/NetWorthTracker";
 import SavingsGoals from "@/components/finance/SavingsGoals";
 import DebtPayoffPlanner from "@/components/finance/DebtPayoffPlanner";
 import FireTracker from "@/components/finance/FireTracker";
+import RateTracker from "@/components/finance/RateTracker";
 
-type Tab = "transactions" | "budget" | "net-worth" | "savings" | "subscriptions" | "accounts" | "debt" | "fire";
+type Tab = "transactions" | "budget" | "net-worth" | "savings" | "subscriptions" | "accounts" | "debt" | "fire" | "rates";
 
 export default function FinancePage() {
   const [tab, setTab] = useState<Tab>("transactions");
@@ -32,6 +33,7 @@ export default function FinancePage() {
           { key: "accounts",      label: "Accounts" },
           { key: "debt",          label: "Debt Payoff" },
           { key: "fire",          label: "FIRE" },
+          { key: "rates",         label: "Rates & Bonuses" },
         ] as { key: Tab; label: string }[]).map(({ key, label }) => (
           <button
             key={key}
@@ -82,6 +84,7 @@ export default function FinancePage() {
           <FireTracker />
         </div>
       )}
+      {tab === "rates" && <RateTracker />}
     </div>
   );
 }

@@ -133,6 +133,7 @@ export interface NotificationSettings {
   meeting_prep: NotificationCategory;          // briefing card 15-30 min before calendar events + post-meeting capture prompt
   bedtime_reminder: NotificationCategory;      // calculated bedtime based on tomorrow's earliest event + target sleep hours
   day_micro_review: NotificationCategory;      // end-of-day 3-question micro-review nudge
+  rate_alert: NotificationCategory;            // fires when a new high-value eligible offer is found
   snooze_until?: string;     // local datetime "YYYY-MM-DDTHH:MM"; all notifications skip while now < this
 }
 
@@ -163,6 +164,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   meeting_prep:         { enabled: true },
   bedtime_reminder:     { enabled: false, time: "21:00" },
   day_micro_review:     { enabled: false, time: "21:30" },
+  rate_alert:           { enabled: false, time: "09:00" },
 };
 
 // Deep-merges a stored settings doc onto the defaults. A shallow spread

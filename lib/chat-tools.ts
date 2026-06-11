@@ -2621,6 +2621,40 @@ export const TOOLS: Anthropic.Tool[] = [
       required: ["card_id", "result"],
     },
   },
+
+  // ── Rate Tracker ──
+  {
+    name: "get_rate_offers",
+    description: "Get ranked financial rate and bonus offers — savings APY, CD rates, checking bonuses, credit card bonuses — filtered by the user's eligibility profile.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        filter: { type: "string", enum: ["all", "eligible", "savings", "bonus"], description: "Filter offers. Default: eligible." },
+        limit: { type: "number", description: "Max offers to return. Default 10." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_benchmark_rates",
+    description: "Get current Federal Reserve benchmark interest rates (fed funds, 1yr/5yr/10yr treasury) for context when evaluating savings offers.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "mark_offer_taken",
+    description: "Mark a financial offer as applied/taken (or toggle it back to not-taken). Use after confirming the user wants to track that they applied.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        offer_id: { type: "string", description: "The offer ID from get_rate_offers." },
+      },
+      required: ["offer_id"],
+    },
+  },
 ];
 
 // Names of tools that execute in the BROWSER, not on the server.

@@ -906,3 +906,48 @@ export async function bedtimeReminderHandler(uid: string, tz: string): Promise<N
     tag: "bedtime-reminder",
   };
 }
+
+// ── Rate Alert ────────────────────────────────────────────────────────────────
+export async function rateAlertHandler(uid: string, _tz: string): Promise<NotifPayload | null> {
+  const db = getAdminDb();
+  const since = new Date();
+  since.setHours(since.getHours() - 24);
+  const sinceIso = since.toISOString();
+
+  const dedupRef = db.doc(`users/${uid}/notif_dedup/rate_alert`);
+  const dedupSnap = await dedupRef.get();
+  if (dedupSnap.exists && (dedupSnap.data()?.sent_at ?? "") > sinceIso) return null;
+
+  const [offersSnap, profileSnap, takenSnap] = await Promise.all([
+    db.collection("rate_offers").where("scraped_at", ">", sinceIso).orderBy("scraped_at", "desc").limit(50).get(),
+    db.doc(`users/${uid}/settings/rate_profile`).get(),
+    db.collection(`users/${uid}/rate_taken`).get(),
+  ]);
+
+  if (offersSnap.empty) return null;
+
+  const { computeEligibility } = await import("@/lib/rate-tracker");
+  type RP = import("@/lib/rate-tracker").RateProfile;
+  type RO = import("@/lib/rate-tracker").RateOffer;
+
+  const profile: RP = profileSnap.exists
+    ? (profileSnap.data() as RP)
+    : { existing_institutions: [], cards_opened_24mo: 0, current_cards: [], deployable_balance: 0, updated_at: "" };
+  const takenIds = new Set(takenSnap.docs.map(d => d.id));
+
+  const eligible = offersSnap.docs
+    .filter(d => !takenIds.has(d.id))
+    .map(d => ({ id: d.id, ...d.data() } as RO))
+    .filter(offer => computeEligibility(offer, profile, 3000).eligible);
+
+  if (eligible.length === 0) return null;
+
+  await dedupRef.set({ sent_at: new Date().toISOString() });
+  const top = eligible[0];
+  const val = top.apy != null ? `${top.apy}% APY` : top.bonus_amount != null ? `$${top.bonus_amount} bonus` : "new offer";
+  return {
+    title: "💰 New rate offer",
+    body: `${top.institution} — ${val}${eligible.length > 1 ? ` (+${eligible.length - 1} more)` : ""}`,
+    tag: "rate-alert",
+  };
+}
