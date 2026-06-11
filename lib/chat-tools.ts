@@ -2560,6 +2560,67 @@ export const TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "get_review_cards",
+    description: "Get captured insights (book highlights, journal insights) that are due for review today. Use this to surface a relevant insight during conversation, weaving it in naturally rather than listing all cards.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        limit: {
+          type: "number",
+          description: "Max cards to return (default 5).",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "capture_review_card",
+    description: "Save a piece of text as a review card so it surfaces again later via spaced repetition. Use when the user says something like 'remember this', 'add this to my review cards', or 'I want to be reminded of this insight'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: {
+          type: "string",
+          description: "The insight, quote, or highlight to save.",
+        },
+        source_title: {
+          type: "string",
+          description: "Where it came from — book title, 'Journal', 'Second Brain', etc.",
+        },
+        source_type: {
+          type: "string",
+          enum: ["book_highlight", "journal_insight", "second_brain", "manual"],
+          description: "Category of the source.",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional tags.",
+        },
+      },
+      required: ["text", "source_title", "source_type"],
+    },
+  },
+  {
+    name: "log_review_result",
+    description: "Record how well the user recalled a review card. Call this after surfacing a card and getting a response. Updates the card's interval so it resurfaces at the right time.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        card_id: {
+          type: "string",
+          description: "The card ID from get_review_cards.",
+        },
+        result: {
+          type: "string",
+          enum: ["remembered", "fuzzy", "forgotten"],
+          description: "remembered = clear recall; fuzzy = vague recall; forgotten = no recall.",
+        },
+      },
+      required: ["card_id", "result"],
+    },
+  },
 ];
 
 // Names of tools that execute in the BROWSER, not on the server.

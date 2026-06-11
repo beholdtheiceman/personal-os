@@ -3946,6 +3946,47 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return lines.join("\n");
     }
 
+    case "get_review_cards": {
+      const { getCardsForReview } = await import("@/lib/review-cards");
+      const limit = (input.limit as number | undefined) ?? 5;
+      const cards = await getCardsForReview(uid, today(), limit);
+      if (!cards.length) return "No review cards due today. Capture highlights while reading with `capture_review_card` and they'll surface here on a spaced schedule.";
+      const lines = cards.map((c) => `[${c.id}] (${c.source_type}) "${c.text}" — from: ${c.source_title} | interval: ${c.interval_days}d | reviewed: ${c.times_reviewed}x`);
+      return `${cards.length} review card${cards.length > 1 ? "s" : ""} due today:\n\n${lines.join("\n\n")}`;
+    }
+
+    case "capture_review_card": {
+      const { addReviewCard } = await import("@/lib/review-cards");
+      const text = input.text as string;
+      const sourceTitle = input.source_title as string;
+      const sourceType = (input.source_type as string) || "manual";
+      if (!text?.trim()) return "Error: text is required.";
+      const now = new Date().toISOString();
+      const id = await addReviewCard(uid, {
+        source_type: sourceType as "book_highlight" | "journal_insight" | "second_brain" | "manual",
+        source_id: "manual",
+        source_title: sourceTitle,
+        text: text.trim(),
+        created_at: now,
+        last_surfaced_at: null,
+        next_review_date: today(),
+        interval_days: 1,
+        times_reviewed: 0,
+        tags: (input.tags as string[] | undefined) ?? [],
+      });
+      return `Review card saved (ID: ${id}). It'll surface tomorrow and space out as you review it. Source: ${sourceTitle}.`;
+    }
+
+    case "log_review_result": {
+      const { advanceCard } = await import("@/lib/review-cards");
+      const cardId = input.card_id as string;
+      const result = input.result as "remembered" | "fuzzy" | "forgotten";
+      if (!cardId || !result) return "Error: card_id and result are required.";
+      await advanceCard(uid, cardId, result, today());
+      const nextMsg = result === "remembered" ? "interval doubled" : result === "fuzzy" ? "interval held, try again soon" : "reset to tomorrow";
+      return `Review result logged (${result}). ${nextMsg}.`;
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }

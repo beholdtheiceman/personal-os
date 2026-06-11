@@ -12,6 +12,7 @@ import { fetchWeatherData } from "@/lib/weather";
 import { getConstitutionContext } from "@/lib/constitution";
 import { getWhatMattersForContext } from "@/lib/what-matters";
 import { getPeopleSignals, getBudgetReds } from "@/lib/context-snapshot";
+import { getReviewCardContext } from "@/lib/review-cards";
 
 // Returns RFC 3339 start/end-of-day strings in the user's local timezone so the
 // Google Calendar query covers exactly the user's local day, not UTC midnight→midnight.
@@ -146,12 +147,13 @@ async function collectContext(uid: string, today: string, tz: string) {
   const whatMattersCtx = await getWhatMattersForContext(uid).catch(() => null);
 
   // People + finance signals (PA-4) — reuse the shared snapshot helpers
-  const [peopleSignals, budgetReds] = await Promise.all([
+  const [peopleSignals, budgetReds, reviewCardCtx] = await Promise.all([
     getPeopleSignals(uid, today).catch(() => ({ birthdays: [] as string[], overdue: [] as string[] })),
     getBudgetReds(uid, today.slice(0, 7)).catch(() => [] as string[]),
+    getReviewCardContext(uid, today).catch(() => null),
   ]);
 
-  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx, whatMattersCtx, peopleSignals, budgetReds };
+  return { tasks, habitsDue, habitsDoneToday, calendarEvents, latestHealth, goals, memoryLines, weatherLine, constitutionCtx, whatMattersCtx, peopleSignals, budgetReds, reviewCardCtx };
 }
 
 async function generateBriefing(uid: string, today: string, tz: string): Promise<{
@@ -236,7 +238,8 @@ FINANCE:
 ${ctx.budgetReds.length ? `Budget categories over/near limit: ${ctx.budgetReds.join(", ")}` : "All budget categories on track"}
 
 ACTIVE GOALS:
-${goalLines}`;
+${goalLines}
+${ctx.reviewCardCtx ? `\nREVIEW INSIGHT:\nOne of these captured insights is due for review today. Weave the most relevant one naturally into your briefing — don't list them all, just pick the one that fits best:\n${ctx.reviewCardCtx}` : ""}`;
 
   const msg = await client.messages.create({
     model: "claude-sonnet-4-6",

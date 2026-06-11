@@ -10,6 +10,7 @@
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getDay, format, differenceInCalendarDays } from "date-fns";
 import { fetchWeatherData } from "@/lib/weather";
+import { getReviewCardContext } from "@/lib/review-cards";
 
 // RFC 3339 start/end-of-day in the user's tz (mirrors daily-briefing/route.ts:localDayBounds)
 function localDayBounds(date: string, tz: string): { start: string; end: string } {
@@ -36,7 +37,7 @@ export async function buildContextSnapshot(
   const todayDow = getDay(new Date(today + "T12:00:00")); // 0=Sun
   const month = today.slice(0, 7);
 
-  const [season, calendar, tasks, habits, hydration, budget, people, activeSOP, weather] = await Promise.all([
+  const [season, calendar, tasks, habits, hydration, budget, people, activeSOP, weather, reviewCards] = await Promise.all([
     // Current season name
     db.doc(`users/${uid}/season/current`).get()
       .then((s) => {
@@ -91,6 +92,9 @@ export async function buildContextSnapshot(
       })
       .catch(() => null),
 
+    // Review cards due today
+    getReviewCardContext(uid, today).catch(() => null),
+
     // Weather
     db.doc(`users/${uid}/settings/weather`).get()
       .then(async (s) => {
@@ -123,6 +127,8 @@ export async function buildContextSnapshot(
   if (weather) lines.push(`Weather: ${weather}`);
 
   if (activeSOP) lines.push(`Active SOP: ${activeSOP.title} — step ${activeSOP.step}/${activeSOP.total}`);
+
+  if (reviewCards) lines.push(reviewCards);
 
   // Only a date line means nothing useful was found.
   if (lines.length <= 1) return null;
