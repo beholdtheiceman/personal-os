@@ -81,9 +81,9 @@ export async function fetchRawItems(): Promise<RawItem[]> {
     });
     if (res.ok) {
       const xml = await res.text();
-      const titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/gs)].slice(1);
-      const links  = [...xml.matchAll(/<link>(?!https?:\/\/www\.doctorofcredit\.com\/)(.+?)<\/link>/gs)];
-      const descs  = [...xml.matchAll(/<description><!\[CDATA\[(.+?)\]\]><\/description>/gs)].slice(1);
+      const titles = [...xml.matchAll(/<title><!\[CDATA\[([\s\S]+?)\]\]><\/title>/g)].slice(1);
+      const links  = [...xml.matchAll(/<link>(?!https?:\/\/www\.doctorofcredit\.com\/)([\s\S]+?)<\/link>/g)];
+      const descs  = [...xml.matchAll(/<description><!\[CDATA\[([\s\S]+?)\]\]><\/description>/g)].slice(1);
       for (let i = 0; i < Math.min(titles.length, 20); i++) {
         items.push({
           title: (titles[i]?.[1] ?? "").trim(),
