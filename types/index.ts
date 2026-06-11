@@ -239,6 +239,28 @@ export interface Habit {
   /** @deprecated use reminder_times */ reminder_time?: string;
 }
 
+// ─── SOPs ─────────────────────────────────────────────────────────────────────
+export type SOPStepType = "action" | "question" | "navigate" | "reminder";
+export type SOPCategory = "morning" | "evening" | "weekly" | "monthly" | "work" | "custom";
+
+export interface SOPStep {
+  id: string;
+  title: string;
+  details?: string;
+  type: SOPStepType;
+}
+
+export interface SOP {
+  id: string;
+  title: string;
+  description?: string;
+  category: SOPCategory;
+  triggerPhrases: string[];
+  steps: SOPStep[];
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── Day Review ───────────────────────────────────────────────────────────────
 export interface DayReview {
   date: string;         // YYYY-MM-DD (also the Firestore doc ID)
@@ -1005,4 +1027,22 @@ export interface UnsubscribeReview {
   recommendations: UnsubscribeRecommendation[];
   unsubscribedFrom: string[];          // senderEmails confirmed by user
   skippedCount?: number;               // senders beyond the 20-cap
+}
+
+// ─── Ideas Vault ──────────────────────────────────────────────────────────────
+export type IdeaDomain = "business" | "creative" | "health" | "tech" | "personal" | "other";
+export type IdeaStatus = "raw" | "parked" | "developing" | "promoted" | "discarded";
+
+export interface Idea {
+  id: string;
+  text: string;
+  domain: IdeaDomain;
+  tags: string[];
+  status: IdeaStatus;
+  promoted_to?: "task" | "project";
+  promoted_id?: string;
+  last_reviewed?: string;  // YYYY-MM-DD
+  triage_count: number;
+  created_at: string;
+  updated_at: string;
 }

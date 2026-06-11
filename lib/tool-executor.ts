@@ -3704,6 +3704,111 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `Available scenes:\n\n${lines.join("\n\n")}`;
     }
 
+    // ── SOPs & Runbooks ──────────────────────────────────────────────────────────
+    case "list_sops": {
+      const snap = await db.collection(`users/${uid}/sops`).get();
+      if (snap.empty) return "No SOPs yet. Go to the SOPs page to create one, or ask me to create one for you.";
+      return snap.docs.map((d) => {
+        const s = d.data();
+        const phrases = (s.triggerPhrases as string[] ?? []).slice(0, 2).join(", ");
+        return `**${s.title}** (id: ${d.id}) [${s.category}] — ${(s.steps as unknown[]).length} steps${phrases ? ` — trigger: "${phrases}"` : ""}`;
+      }).join("\n");
+    }
+
+    case "get_sop": {
+      const snap = await db.collection(`users/${uid}/sops`).get();
+      const lower = (input.title_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().title as string)?.toLowerCase().includes(lower));
+      if (!match) return `No SOP found matching "${input.title_search}".`;
+      const s = match.data();
+      const steps = (s.steps as Array<{title: string; type: string}> ?? [])
+        .map((step, i) => `  ${i + 1}. [${step.type}] ${step.title}`)
+        .join("\n");
+      return `**${s.title}** (id: ${match.id}) [${s.category}] — ${(s.steps as unknown[]).length} steps\n${s.description ? `${s.description}\n` : ""}Steps:\n${steps}`;
+    }
+
+    case "create_sop": {
+      const now = new Date().toISOString();
+      const steps = (input.steps as Array<{title: string; type: string}> ?? []).map((s, i) => ({
+        id: `s${i + 1}`,
+        title: s.title,
+        type: s.type ?? "action",
+      }));
+      const ref = await db.collection(`users/${uid}/sops`).add({
+        title: input.title,
+        description: (input.description as string) ?? "",
+        category: (input.category as string) ?? "custom",
+        triggerPhrases: (input.trigger_phrases as string[]) ?? [],
+        steps,
+        created_at: now,
+        updated_at: now,
+      });
+      return `SOP "${input.title}" created with ${steps.length} steps (id: ${ref.id}).`;
+    }
+
+    case "delete_sop": {
+      const snap = await db.collection(`users/${uid}/sops`).get();
+      const lower = (input.title_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().title as string)?.toLowerCase().includes(lower));
+      if (!match) return `No SOP found matching "${input.title_search}".`;
+      const title = match.data().title as string;
+      await match.ref.delete();
+      return `SOP "${title}" deleted.`;
+    }
+
+    // ── Ideas Vault ──
+    case "capture_idea": {
+      const now = new Date().toISOString();
+      const ref = await db.collection(`users/${uid}/ideas`).add({
+        text: (input.text as string).trim(),
+        domain: (input.domain as string) ?? "other",
+        tags: (input.tags as string[]) ?? [],
+        status: "raw",
+        triage_count: 0,
+        created_at: now,
+        updated_at: now,
+      });
+      return `Idea captured (id: ${ref.id}): "${input.text}"`;
+    }
+
+    case "list_ideas": {
+      const statusFilter = (input.status as string) ?? "raw";
+      const domainFilter = (input.domain as string) ?? "all";
+      const lim = Math.min((input.limit as number) ?? 20, 50);
+      const snap = await db.collection(`users/${uid}/ideas`).orderBy("created_at", "desc").limit(100).get();
+      let docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>;
+      if (statusFilter !== "all") docs = docs.filter((d) => d.status === statusFilter);
+      if (domainFilter !== "all") docs = docs.filter((d) => d.domain === domainFilter);
+      docs = docs.slice(0, lim);
+      if (!docs.length) return `No ideas found${statusFilter !== "all" ? ` with status "${statusFilter}"` : ""}.`;
+      return docs.map((d) =>
+        `- [${d.status}] **${d.text}** (id: ${d.id}, domain: ${d.domain}${(d.tags as string[]).length ? `, tags: ${(d.tags as string[]).join(", ")}` : ""})`
+      ).join("\n");
+    }
+
+    case "update_idea": {
+      const snap = await db.collection(`users/${uid}/ideas`).get();
+      const lower = (input.text_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().text as string)?.toLowerCase().includes(lower));
+      if (!match) return `No idea found matching "${input.text_search}".`;
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (input.status) patch.status = input.status;
+      if (input.domain) patch.domain = input.domain;
+      if (input.tags)   patch.tags   = input.tags;
+      await match.ref.update(patch);
+      return `Idea updated: "${match.data().text}"`;
+    }
+
+    case "delete_idea": {
+      const snap = await db.collection(`users/${uid}/ideas`).get();
+      const lower = (input.text_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().text as string)?.toLowerCase().includes(lower));
+      if (!match) return `No idea found matching "${input.text_search}".`;
+      const text = match.data().text as string;
+      await match.ref.delete();
+      return `Idea deleted: "${text}"`;
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }

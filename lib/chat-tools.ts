@@ -2245,6 +2245,132 @@ export const TOOLS: Anthropic.Tool[] = [
     description: "Manually trigger a Plaid sync right now to pull in the latest bank and credit card transactions, without waiting for the nightly cron.",
     input_schema: { type: "object" as const, properties: {}, required: [] },
   },
+  // ── SOPs & Runbooks ──
+  {
+    name: "list_sops",
+    description: "List the user's personal SOPs (Standard Operating Procedures / runbooks). Returns title, category, trigger phrases, and step count for each.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "get_sop",
+    description: "Get the full details of a specific SOP including all steps. Use before activating an SOP so you can walk the user through each step.",
+    input_schema: {
+      type: "object" as const,
+      properties: { title_search: { type: "string", description: "Partial SOP title to find it" } },
+      required: ["title_search"],
+    },
+  },
+  {
+    name: "activate_sop",
+    description: "Activate an SOP to start walking the user through it step by step. The MiniSOPBar will appear in the UI. After activating, read the SOP steps and guide the user through step 1.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        sop_id:      { type: "string", description: "The Firestore document ID of the SOP" },
+        sop_title:   { type: "string", description: "Display title of the SOP" },
+        total_steps: { type: "number", description: "Total number of steps in the SOP" },
+      },
+      required: ["sop_id", "sop_title", "total_steps"],
+    },
+  },
+  {
+    name: "advance_sop_step",
+    description: "Advance to the next step in the active SOP. Call this after the user completes a step.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "deactivate_sop",
+    description: "End / deactivate the currently active SOP. Call when the SOP is complete or the user wants to stop.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
+    name: "create_sop",
+    description: "Create a new personal SOP from a described workflow. Use when the user describes a recurring process they want to save.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title:           { type: "string" },
+        description:     { type: "string" },
+        category:        { type: "string", enum: ["morning","evening","weekly","monthly","work","custom"] },
+        trigger_phrases: { type: "array", items: { type: "string" }, description: "Phrases that should trigger this SOP" },
+        steps: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              type:  { type: "string", enum: ["action","question","navigate","reminder"] },
+            },
+            required: ["title", "type"],
+          },
+        },
+      },
+      required: ["title", "steps"],
+    },
+  },
+  {
+    name: "delete_sop",
+    description: "Delete a personal SOP by title search.",
+    input_schema: {
+      type: "object" as const,
+      properties: { title_search: { type: "string" } },
+      required: ["title_search"],
+    },
+  },
+
+  // ── Ideas Vault ──
+  {
+    name: "capture_idea",
+    description: "Save a raw idea to the Ideas Vault. Use when the user mentions an idea, concept, or thing they want to remember and explore later. Zero friction — just capture it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text:   { type: "string", description: "The idea, written naturally." },
+        domain: { type: "string", enum: ["business","creative","health","tech","personal","other"], description: "Domain that best fits the idea. Default: other." },
+        tags:   { type: "array", items: { type: "string" }, description: "Optional topic tags." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "list_ideas",
+    description: "List ideas from the Ideas Vault. Use for triage (reviewing raw ideas), brainstorming, or answering 'what ideas do I have about X?'",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["raw","parked","developing","promoted","discarded","all"], description: "Filter by status. Default: raw." },
+        domain: { type: "string", enum: ["business","creative","health","tech","personal","other","all"], description: "Filter by domain. Default: all." },
+        limit:  { type: "number", description: "Max ideas to return. Default 20." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "update_idea",
+    description: "Update an idea's status, domain, or tags. Use during triage to park, develop, or promote ideas. Find by partial text match.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text_search: { type: "string", description: "Partial idea text to find it." },
+        status:      { type: "string", enum: ["raw","parked","developing","promoted","discarded"] },
+        domain:      { type: "string", enum: ["business","creative","health","tech","personal","other"] },
+        tags:        { type: "array", items: { type: "string" } },
+      },
+      required: ["text_search"],
+    },
+  },
+  {
+    name: "delete_idea",
+    description: "Permanently delete an idea from the vault. Prefer update_idea with status:discarded unless the user explicitly wants to delete it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text_search: { type: "string", description: "Partial idea text to find it." },
+      },
+      required: ["text_search"],
+    },
+  },
+
   // ── Client / UI actions (executed in the browser) ──
   {
     name: "navigate_to_page",
@@ -2257,8 +2383,8 @@ export const TOOLS: Anthropic.Tool[] = [
           enum: [
             "achievements","bible","calendar","chat","constitution","content","dashboard",
             "decisions","discord","drive","finance","focus","gmail","goals","habits","health",
-            "journal","life-context","meal-planner","media","memory","news","nutrition","people",
-            "projects","reading","season","settings","share","tasks","time","weather","workout",
+            "ideas","journal","life-context","meal-planner","media","memory","news","nutrition","people",
+            "projects","reading","season","settings","share","sops","tasks","time","weather","workout",
           ],
           description: "Which page to open.",
         },
@@ -2375,6 +2501,9 @@ export const CLIENT_TOOL_NAMES = new Set<string>([
   "activate_scene",
   "deactivate_scene",
   "set_media",
+  "activate_sop",
+  "deactivate_sop",
+  "advance_sop_step",
 ]);
 
 export const isClientTool = (name: string) => CLIENT_TOOL_NAMES.has(name);

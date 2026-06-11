@@ -22,6 +22,7 @@ export const DASHBOARD_WIDGETS: { id: string; label: string }[] = [
   { id: "calendar_nutrition",   label: "Calendar & Nutrition" },
   { id: "health_journal",       label: "Health & Journal" },
   { id: "day_review",           label: "Day Review" },
+  { id: "ideas",                label: "Ideas Vault" },
   { id: "okr_summary",          label: "OKR Progress" },
   { id: "goals_projects",       label: "Goals & Projects" },
   { id: "finance",              label: "Finance Summary" },

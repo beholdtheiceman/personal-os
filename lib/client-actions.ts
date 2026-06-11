@@ -74,6 +74,23 @@ export async function runClientTool(
       return "Opened day review.";
     }
 
+    case "activate_sop": {
+      window.dispatchEvent(new CustomEvent("os:activate-sop", {
+        detail: { sopId: args.sop_id, sopTitle: args.sop_title, totalSteps: args.total_steps ?? 0 },
+      }));
+      return `SOP "${args.sop_title}" activated.`;
+    }
+
+    case "deactivate_sop": {
+      window.dispatchEvent(new CustomEvent("os:deactivate-sop"));
+      return "SOP deactivated.";
+    }
+
+    case "advance_sop_step": {
+      window.dispatchEvent(new CustomEvent("os:advance-sop-step"));
+      return "Advanced to next SOP step.";
+    }
+
     case "deactivate_scene": {
       window.dispatchEvent(new CustomEvent("os:deactivate-scene"));
       return "Scene deactivated.";

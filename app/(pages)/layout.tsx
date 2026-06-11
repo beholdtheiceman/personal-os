@@ -16,6 +16,8 @@ import { TimerProvider, useTimer } from "@/contexts/TimerContext";
 import MiniFocusBar from "@/components/focus/MiniFocusBar";
 import { SceneProvider, useScene } from "@/contexts/SceneContext";
 import MiniSceneBar from "@/components/scenes/MiniSceneBar";
+import { SOPProvider, useSOP } from "@/contexts/SOPContext";
+import MiniSOPBar from "@/components/sops/MiniSOPBar";
 
 const YouTubePlayer = dynamic(() => import("@/components/media/YouTubePlayer"), { ssr: false });
 
@@ -24,6 +26,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const { isOpen } = useChatPanel();
   const { status: timerStatus } = useTimer();
   const { activeScene } = useScene();
+  const { sopId } = useSOP();
   const pathname = usePathname();
   const hideVoice = isOpen || pathname === "/chat";
   useNotifications();
@@ -43,24 +46,19 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const hasPlayer = !!currentTrack;
   const hasTimer = timerStatus !== "idle";
   const hasScene = !!activeScene;
+  const hasSOP = !!sopId;
 
-  // Stack from bottom: MobileNav(57px) → SceneBar(40px) → FocusBar(44px) → Player(56px)
-  let pbMobile = "pb-20";
-  let pbDesktop = "md:pb-6";
-  if (hasScene && hasTimer && hasPlayer) { pbMobile = "pb-[200px]"; pbDesktop = "md:pb-[152px]"; }
-  else if (hasScene && hasTimer)         { pbMobile = "pb-[144px]"; pbDesktop = "md:pb-[96px]"; }
-  else if (hasScene && hasPlayer)        { pbMobile = "pb-[176px]"; pbDesktop = "md:pb-[136px]"; }
-  else if (hasTimer && hasPlayer)        { pbMobile = "pb-[160px]"; pbDesktop = "md:pb-[112px]"; }
-  else if (hasScene)                     { pbMobile = "pb-[100px]"; pbDesktop = "md:pb-[44px]"; }
-  else if (hasTimer)                     { pbMobile = "pb-[104px]"; pbDesktop = "md:pb-[56px]"; }
-  else if (hasPlayer)                    { pbMobile = "pb-36";      pbDesktop = "md:pb-24"; }
+  // Additive stacking: MobileNav(57) + SOPBar(40) + SceneBar(40) + FocusBar(44) + Player(56)
+  const mobileBase = 57 + (hasSOP ? 40 : 0) + (hasScene ? 40 : 0) + (hasTimer ? 44 : 0) + (hasPlayer ? 56 : 0);
+  const deskBase   =  0 + (hasSOP ? 40 : 0) + (hasScene ? 40 : 0) + (hasTimer ? 44 : 0) + (hasPlayer ? 56 : 0);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      <style>{`.app-main{padding-bottom:${mobileBase}px}@media(min-width:768px){.app-main{padding-bottom:${deskBase}px}}`}</style>
       <TopNav />
       <div className="flex flex-1 min-h-0">
         <main
-          className={`flex-1 overflow-y-auto p-4 md:p-6 transition-all duration-300 ${pbMobile} ${pbDesktop} ${isOpen ? "md:mr-[400px]" : ""}`}
+          className={`app-main flex-1 overflow-y-auto p-4 md:p-6 transition-all duration-300 ${isOpen ? "md:mr-[400px]" : ""}`}
         >
           {children}
         </main>
@@ -68,6 +66,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <MobileNav />
       {!hideVoice && <VoiceFloatButton />}
+      <MiniSOPBar />
       <MiniSceneBar />
       <MiniFocusBar />
       <MiniPlayer />
@@ -97,8 +96,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <ChatPanelProvider>
         <TimerProvider>
           <SceneProvider>
-            <ParallaxBackground />
-            <AppShell>{children}</AppShell>
+            <SOPProvider>
+              <ParallaxBackground />
+              <AppShell>{children}</AppShell>
+            </SOPProvider>
           </SceneProvider>
         </TimerProvider>
       </ChatPanelProvider>

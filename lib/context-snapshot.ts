@@ -36,7 +36,7 @@ export async function buildContextSnapshot(
   const todayDow = getDay(new Date(today + "T12:00:00")); // 0=Sun
   const month = today.slice(0, 7);
 
-  const [season, calendar, tasks, habits, hydration, budget, people, weather] = await Promise.all([
+  const [season, calendar, tasks, habits, hydration, budget, people, weather, activeSOP] = await Promise.all([
     // Current season name
     db.doc(`users/${uid}/season/current`).get()
       .then((s) => {
@@ -82,6 +82,15 @@ export async function buildContextSnapshot(
     // People: birthdays next 7 days + overdue contacts
     getPeopleSignals(uid, today).catch(() => ({ birthdays: [] as string[], overdue: [] as string[] })),
 
+    // Active SOP
+    db.doc(`users/${uid}/settings/active_sop`).get()
+      .then((s) => {
+        if (!s.exists || !s.data()?.sopId) return null;
+        const d = s.data()!;
+        return { title: d.sopTitle as string, step: (d.stepIndex as number) + 1, total: d.totalSteps as number };
+      })
+      .catch(() => null),
+
     // Weather
     db.doc(`users/${uid}/settings/weather`).get()
       .then(async (s) => {
@@ -112,6 +121,8 @@ export async function buildContextSnapshot(
   if (people.overdue.length) lines.push(`Overdue to contact: ${people.overdue.join("; ")}`);
 
   if (weather) lines.push(`Weather: ${weather}`);
+
+  if (activeSOP) lines.push(`Active SOP: ${activeSOP.title} — step ${activeSOP.step}/${activeSOP.total}`);
 
   // Only a date line means nothing useful was found.
   if (lines.length <= 1) return null;

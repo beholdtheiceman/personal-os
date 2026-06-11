@@ -245,7 +245,7 @@
   - **Contractor / vendor log** — Who did what work, when, what it cost; ties into People CRM for recurring vendors
   - Push notifications fire like habit reminders when maintenance is due. Dashboard widget shows items due in the next 30 days. Dedicated `/home` page. Chat tools: `log_maintenance`, `get_upcoming_maintenance`.
 
-### Ideas Vault
+### ✅ Ideas Vault
 - **Friction-free idea capture** — A dedicated collection point for raw, unprocessed ideas before they're ready to become tasks, projects, or Second Brain notes. Product ideas, business concepts, creative sparks, things to investigate, observations. The key is zero friction: one tap from dashboard, voice input, browser extension quick-capture, share target.
 - **Weekly triage** — Every Monday, Claude surfaces 5–10 ideas from the vault and helps you decide: develop now (→ task or project), park (back to vault with a tag), or discard. Ideas have a "last reviewed" date; ones that survive multiple triage sessions without being acted on get a gentle nudge to either commit or delete.
 - **Tagging & search** — Tag ideas by domain (business, creative, health, tech, personal) with full-text search. Claude can cluster related ideas and surface connections you didn't notice.
@@ -268,7 +268,7 @@
 
 ---
 
-### SOPs & Personal Runbooks
+### ✅ SOPs & Personal Runbooks
 > 🎙️ **Voice wiring required:** Triggering and stepping through an SOP is a natural voice interaction. `run_sop` is a server tool (reads the SOP definition and returns the first step). Navigation steps within an SOP dispatch to existing `navigate_to_page` (already a client tool). Any SOP step that opens a modal (`open_quick_capture`, etc.) reuses existing client tools. The SOP runner itself stays server-side; it delegates to existing client tools for UI steps rather than adding new ones.
 
 - **Document how you do things so Claude can replicate them** — The infrastructure that makes the agent feel truly personal over time. An SOP is a named, step-by-step workflow you've defined: your morning routine, how you process email, your weekly review process, how you meal plan, how you close out a workday. Once documented, you can trigger any SOP by name and Claude walks through it with you — or executes the automatable steps automatically.
