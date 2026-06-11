@@ -11,7 +11,7 @@ export function useRateTracker() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  const authHeader = useCallback(async () => {
+  const authHeader = useCallback(async (): Promise<Record<string, string>> => {
     if (!user) return {};
     const token = await user.getIdToken();
     return { Authorization: `Bearer ${token}` };
