@@ -42,6 +42,8 @@ export function useInteractions(personId: string | null) {
   return { interactions, loading };
 }
 
+export { computeHealthScore, scoreLabel, scoreColor, scoreBg } from "@/lib/relationship-health";
+
 // Days since a date string (YYYY-MM-DD), or null
 export function daysSince(dateStr?: string): number | null {
   if (!dateStr) return null;

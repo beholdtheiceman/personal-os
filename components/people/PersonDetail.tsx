@@ -3,7 +3,7 @@ import { useState } from "react";
 import { doc, deleteDoc, addDoc, collection, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { useInteractions, daysSince } from "@/hooks/usePeople";
+import { useInteractions, daysSince, computeHealthScore, scoreColor, scoreLabel, scoreBg } from "@/hooks/usePeople";
 import {
   RiCloseLine, RiPencilLine, RiDeleteBinLine, RiAddLine,
   RiPhoneLine, RiMailLine, RiMapPinLine, RiBuildingLine,
@@ -41,6 +41,7 @@ export default function PersonDetail({ person, onEdit, onClose, onDeleted }: Pro
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const days = daysSince(person.last_contacted);
+  const score = computeHealthScore(person);
 
   const logInteraction = async () => {
     if (!user) return;
@@ -96,6 +97,11 @@ export default function PersonDetail({ person, onEdit, onClose, onDeleted }: Pro
                 {days !== null && (
                   <span className={`text-[10px] ${days > 60 ? "text-danger" : days > 30 ? "text-amber-400" : "text-text-muted"}`}>
                     Last contact: {days === 0 ? "today" : `${days}d ago`}
+                  </span>
+                )}
+                {score !== null && (
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${scoreBg(score)} ${scoreColor(score)}`}>
+                    {score} · {scoreLabel(score)}
                   </span>
                 )}
               </div>
@@ -163,18 +169,26 @@ export default function PersonDetail({ person, onEdit, onClose, onDeleted }: Pro
           )}
 
           {/* Gift ideas */}
-          {person.gift_ideas && person.gift_ideas.length > 0 && (
-            <div className="space-y-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-text-muted uppercase tracking-wide flex items-center gap-1.5">
                 <RiGiftLine className="w-3.5 h-3.5" /> Gift Ideas
               </p>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent("os:open-chat", { detail: { message: `Suggest gift ideas for ${person.name}` } }))}
+                className="text-xs text-accent hover:text-accent/80 transition-colors"
+              >
+                AI suggestions →
+              </button>
+            </div>
+            {person.gift_ideas && person.gift_ideas.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {person.gift_ideas.map((g, i) => (
                   <span key={i} className="text-xs px-2.5 py-1 rounded-lg bg-white/10 text-text-secondary">{g}</span>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Log interaction */}
           <div className="space-y-2">

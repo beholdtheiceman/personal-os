@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { usePeople, isOverdue, daysSince } from "@/hooks/usePeople";
+import { usePeople, isOverdue, daysSince, computeHealthScore, scoreColor, scoreBg } from "@/hooks/usePeople";
 import PersonForm from "@/components/people/PersonForm";
 import PersonDetail from "@/components/people/PersonDetail";
 import {
@@ -195,6 +195,7 @@ export default function PeoplePage() {
           {filtered.map((person) => {
             const days = daysSince(person.last_contacted);
             const overduePerson = isOverdue(person);
+            const score = computeHealthScore(person);
             return (
               <button
                 key={person.id}
@@ -208,6 +209,11 @@ export default function PeoplePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-sm font-medium text-text-primary truncate">{person.name}</p>
+                      {score !== null && (
+                        <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${scoreBg(score)} ${scoreColor(score)}`}>
+                          {score}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md capitalize border ${REL_COLORS[person.relationship]}`}>

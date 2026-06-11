@@ -36,7 +36,7 @@ export async function buildContextSnapshot(
   const todayDow = getDay(new Date(today + "T12:00:00")); // 0=Sun
   const month = today.slice(0, 7);
 
-  const [season, calendar, tasks, habits, hydration, budget, people, weather, activeSOP] = await Promise.all([
+  const [season, calendar, tasks, habits, hydration, budget, people, activeSOP, weather] = await Promise.all([
     // Current season name
     db.doc(`users/${uid}/season/current`).get()
       .then((s) => {

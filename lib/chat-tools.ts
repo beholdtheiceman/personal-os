@@ -1313,6 +1313,30 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  {
+    name: "get_relationship_health",
+    description: "Get relationship health scores for all tracked contacts — 0–100 based on how recently they were contacted vs. their target frequency. Use to answer 'who am I neglecting?' or 'how is my relationship health overall?'. Sorted worst-score-first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        min_score: { type: "number", description: "Only return people at or below this score (e.g. 50 for at-risk contacts). Omit for all scored contacts." },
+        limit:     { type: "number", description: "Max contacts to return. Default 20." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "suggest_gifts",
+    description: "Get context about a person (notes, interests, existing gift ideas, recent interaction history) so you can suggest thoughtful gift ideas. Call this when the user asks for gift suggestions for someone. After suggesting, offer to save any ideas via update_person with add_gift_idea.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name_search: { type: "string", description: "Partial name of the person to look up." },
+      },
+      required: ["name_search"],
+    },
+  },
+
   // ── Google Drive ──
   {
     name: "search_drive",
