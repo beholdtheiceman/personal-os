@@ -3900,6 +3900,52 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `Idea deleted: "${text}"`;
     }
 
+    case "get_relationship_health": {
+      const snap = await db.collection(`users/${uid}/people`).get();
+      const FREQ: Record<string, number> = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+      const minScore = typeof input.min_score === "number" ? input.min_score : null;
+      const limit = typeof input.limit === "number" ? input.limit : 10;
+      const results: Array<{ name: string; relationship: string; score: number; label: string }> = [];
+      for (const d of snap.docs) {
+        const p = d.data();
+        if (!p.contact_frequency || !p.last_contacted) continue;
+        const threshold = FREQ[p.contact_frequency as string];
+        if (!threshold) continue;
+        const daysSince = Math.floor((Date.now() - new Date((p.last_contacted as string) + "T12:00:00Z").getTime()) / 86400000);
+        const score = Math.max(0, Math.round(100 * (1 - daysSince / (threshold * 2))));
+        if (minScore !== null && score < minScore) continue;
+        const label = score >= 80 ? "Healthy" : score >= 50 ? "OK" : score >= 25 ? "At risk" : "Neglected";
+        results.push({ name: p.name as string, relationship: p.relationship as string, score, label });
+      }
+      results.sort((a, b) => a.score - b.score);
+      const top = results.slice(0, limit);
+      if (!top.length) return "No contacts with relationship health data found.";
+      return top.map((r) => `${r.name} (${r.relationship}): ${r.score}/100 — ${r.label}`).join("\n");
+    }
+
+    case "suggest_gifts": {
+      const snap = await db.collection(`users/${uid}/people`).get();
+      const query = (input.name_search as string).toLowerCase();
+      const match = snap.docs.find((d) => (d.data().name as string)?.toLowerCase().includes(query));
+      if (!match) return `No contact found matching "${input.name_search}".`;
+      const p = match.data();
+      const interactions = await db.collection(`users/${uid}/people/${match.id}/interactions`)
+        .orderBy("date", "desc").limit(10).get();
+      const lines: string[] = [`Person: ${p.name} (${p.relationship})`];
+      if (p.notes) lines.push(`Notes: ${p.notes}`);
+      if (p.interests && (p.interests as string[]).length) lines.push(`Interests: ${(p.interests as string[]).join(", ")}`);
+      if (p.gift_ideas && (p.gift_ideas as string[]).length) lines.push(`Existing gift ideas: ${(p.gift_ideas as string[]).join(", ")}`);
+      if (!interactions.empty) {
+        const iLines = interactions.docs.map((d) => {
+          const i = d.data();
+          return `  - ${i.date} (${i.type})${i.notes ? ": " + i.notes : ""}`;
+        });
+        lines.push(`Recent interactions:\n${iLines.join("\n")}`);
+      }
+      lines.push("\nBased on the above, suggest 5 thoughtful gift ideas for this person.");
+      return lines.join("\n");
+    }
+
     default:
       return `Unknown tool: ${toolName}`;
   }

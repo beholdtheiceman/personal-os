@@ -252,7 +252,7 @@
 - **Idea-to-project pipeline** — One tap to promote an idea to a Project in the Kanban board, pre-populating the project description from the idea note.
 - **Chat tool** — `capture_idea` so you can say "add an idea: what if I..." in the middle of anything and it lands in the vault without breaking your flow.
 
-### People / Relationships CRM
+### ✅ People / Relationships CRM
 - **Relationship health score** — numeric score derived from interaction frequency vs. contact frequency target; surfaced per-contact and as a dashboard summary; replaces binary "needs attention" flag
 - **AI gift suggestions** — Claude generates gift ideas from the notes, interests, and interaction history you've logged for a person; accessible from the person detail view and via chat
 
