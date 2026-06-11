@@ -498,6 +498,17 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "set_hydration_goal",
+    description: "Update the user's daily water intake goal. Use when the user says things like 'change my water goal to 6 glasses' or 'set hydration goal to 10'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        goal: { type: "number", description: "The new daily water goal in glasses (e.g. 6, 8, 10)." },
+      },
+      required: ["goal"],
+    },
+  },
+  {
     name: "update_okr_progress",
     description: "Update the current progress on a Key Result within an OKR Objective. Use when the user reports progress on a quarterly goal (e.g. 'I completed 3 more workouts'). Requires the objective ID and key result ID from get_okrs.",
     input_schema: {

@@ -1151,6 +1151,23 @@ export async function executeTool(uid: string, toolName: string, input: ToolInpu
       return `Hydration today: ${glasses}/${goal} glasses. ${status}\nTimes: ${timestamps.join(", ") || "none"}`;
     }
 
+    case "set_hydration_goal": {
+      const newGoal = input.goal as number;
+      if (!Number.isInteger(newGoal) || newGoal < 1 || newGoal > 50) {
+        return `Invalid goal. Please provide a whole number between 1 and 50.`;
+      }
+      const todayStr = today();
+      const now = new Date().toISOString();
+      const ref = db.doc(`users/${uid}/hydration/${todayStr}`);
+      const snap = await ref.get();
+      if (snap.exists) {
+        await ref.update({ goal: newGoal, updated_at: now });
+      } else {
+        await ref.set({ date: todayStr, glasses: 0, goal: newGoal, logs: [], updated_at: now });
+      }
+      return `Daily water goal updated to ${newGoal} glasses.`;
+    }
+
     case "get_okrs": {
       const now = new Date();
       const defaultQ = `${now.getFullYear()}-Q${Math.ceil((now.getMonth() + 1) / 3)}`;
