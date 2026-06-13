@@ -102,7 +102,12 @@ async function refreshForUser(
       const classified = await classifyArticles(raw, feed.tags, readerInterests);
       const itemsRef = db.collection(`users/${uid}/news_items`);
 
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const cutoffIso = sevenDaysAgo.toISOString();
+
       for (const article of classified) {
+        if (article.published_at < cutoffIso) { skipped++; continue; }
         const id = makeItemId(feed.id, article.url);
         const existing = await itemsRef.doc(id).get();
         if (existing.exists && !force) { skipped++; continue; }

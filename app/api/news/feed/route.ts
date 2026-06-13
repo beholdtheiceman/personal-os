@@ -32,9 +32,14 @@ export async function GET(req: NextRequest) {
       ? col.where("status", "==", status).where("tags", "array-contains", tag)
       : col.where("status", "==", status);
 
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffIso = cutoff.toISOString();
+
     const snap = await q.limit(lim).get();
     const items = snap.docs
       .map((d) => d.data())
+      .filter((d) => (d.published_at ?? d.fetched_at ?? "") >= cutoffIso)
       .sort((a, b) =>
         (b.relevance_score - a.relevance_score) ||
         (b.fetched_at < a.fetched_at ? -1 : 1)
