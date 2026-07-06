@@ -19,6 +19,7 @@ import { useChatPanel } from "@/contexts/ChatPanelContext";
 import { useQuickCapture } from "@/contexts/QuickCaptureContext";
 
 const PRIMARY_NAV = [
+  { href: "/today",     label: "Today",     icon: RiSunLine },
   { href: "/dashboard", label: "Dashboard", icon: RiDashboardLine },
   { href: "/tasks",     label: "Tasks",     icon: RiTaskLine },
   { href: "/habits",    label: "Habits",    icon: RiLoopLeftLine },
@@ -116,7 +117,7 @@ export default function TopNav() {
       }}
     >
       {/* Logo */}
-      <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
+      <Link href="/today" className="flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-sm font-semibold shadow-sm">
           {user?.displayName?.[0]?.toUpperCase() ?? "P"}
         </div>

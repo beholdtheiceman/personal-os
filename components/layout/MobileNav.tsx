@@ -15,7 +15,7 @@ import {
 import { useChatPanel } from "@/contexts/ChatPanelContext";
 
 const PRIMARY = [
-  { href: "/dashboard", label: "Home",     icon: RiDashboardLine },
+  { href: "/today",     label: "Home",     icon: RiDashboardLine },
   { href: "/tasks",     label: "Tasks",    icon: RiTaskLine },
   { href: "/gmail",     label: "Gmail",    icon: RiMailLine },
   { href: "/habits",    label: "Habits",   icon: RiLoopLeftLine },
@@ -25,6 +25,7 @@ const MORE_SECTIONS = [
   {
     label: "Life & Planning",
     items: [
+      { href: "/dashboard", label: "Dashboard", icon: RiDashboardLine },
       { href: "/journal",   label: "Journal",   icon: RiBookLine },
       { href: "/bible",     label: "Bible",     icon: RiBookReadLine },
       { href: "/goals",     label: "Goals",     icon: RiLineChartLine },
