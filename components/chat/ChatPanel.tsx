@@ -72,7 +72,7 @@ function ActionsLog({ actions }: { actions: string[] }) {
 }
 
 export default function ChatPanel() {
-  const { isOpen, close } = useChatPanel();
+  const { isOpen, close, pendingMessage, consumePending } = useChatPanel();
   const { user } = useAuth();
   const isTouch = useIsTouch();
   const router = useRouter();
@@ -105,9 +105,11 @@ export default function ChatPanel() {
     });
   }, [user]);
 
-  // Auto-select most recent chat when panel opens
+  // Auto-select most recent chat when panel opens. Skipped when a seed message is
+  // pending (opened from the Today screen) so the seed starts a fresh conversation
+  // via sendMessage instead of appending to the last one.
   useEffect(() => {
-    if (!isOpen || !user || activeChatId) return;
+    if (!isOpen || !user || activeChatId || pendingMessage) return;
     const q = query(
       collection(db, "users", user.uid, "chats"),
       orderBy("updatedAt", "desc"),
@@ -122,7 +124,7 @@ export default function ChatPanel() {
       }
     });
     return unsub;
-  }, [isOpen, user, activeChatId]);
+  }, [isOpen, user, activeChatId, pendingMessage]);
 
   // Load messages for active chat
   useEffect(() => {
@@ -480,6 +482,18 @@ export default function ChatPanel() {
       setTimeout(() => textareaRef.current?.focus(), 50);
     }
   };
+
+  // Seed send: when opened with a pending message (e.g. from the Today screen),
+  // send it once as the opening turn. sendMessage creates a fresh chat since
+  // auto-select is suppressed while a seed is pending.
+  useEffect(() => {
+    if (isOpen && pendingMessage && user) {
+      const seed = pendingMessage;
+      consumePending();
+      sendMessage(seed);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, pendingMessage, user]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const skillResult = skills.onPickerKeyDown(e);
