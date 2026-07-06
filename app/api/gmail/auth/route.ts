@@ -1,5 +1,6 @@
 // GET /api/gmail/auth?uid=... — redirects to Google OAuth for Gmail access
 import { NextRequest, NextResponse } from "next/server";
+import { signState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
   const uid = req.nextUrl.searchParams.get("uid");
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
     scope: "https://www.googleapis.com/auth/gmail.modify",
     access_type: "offline",
     prompt: "consent",
-    state: uid,
+    state: signState(uid),
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);

@@ -1,5 +1,6 @@
 // GET /api/calendar/auth?uid=... — redirects to Google OAuth for Calendar access
 import { NextRequest, NextResponse } from "next/server";
+import { signState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
   const uid = req.nextUrl.searchParams.get("uid");
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     scope,
     access_type: "offline",  // get refresh_token
     prompt: "consent",        // always show consent to get refresh_token
-    state: uid,               // pass uid through so callback knows who to store tokens for
+    state: signState(uid),    // signed uid — callback verifies before storing tokens
   });
 
   return NextResponse.redirect(

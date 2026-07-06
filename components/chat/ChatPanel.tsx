@@ -159,7 +159,7 @@ export default function ChatPanel() {
     return ref.id;
   };
 
-  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id" | "image">): Promise<DocumentReference | null> => {
+  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id">): Promise<DocumentReference | null> => {
     if (!user) return null;
     const ref = await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
     await updateDoc(doc(db, "users", user.uid, "chats", chatId), {
@@ -296,16 +296,38 @@ export default function ChatPanel() {
 
     let savedUserRef: DocumentReference | null = null;
     if (!offRecord) {
-      savedUserRef = await saveMessage(chatId, { role: "user", content: displayText, timestamp: userMsg.timestamp });
+      savedUserRef = await saveMessage(chatId, {
+        role: "user",
+        content: displayText,
+        timestamp: userMsg.timestamp,
+        // Persist the attached image so it survives reloads and stays in-context on
+        // later turns — otherwise the model loses the picture and falsely claims it
+        // "can't read images" on a follow-up question.
+        ...(imageToSend ? { image: imageToSend } : {}),
+      });
     }
 
     await checkAndAward(user.uid, "hello_world");
     if (messages.length + 1 >= 500) await checkAndAward(user.uid, "power_user");
 
 
+    // Any user message that carried an image is sent as a multimodal [image, text]
+    // content array so the picture stays in the conversation on every later turn —
+    // not just the turn it was uploaded.
+    const toApiContent = (m: AssistantMessage): string | unknown[] => {
+      if (m.role === "user" && m.image) {
+        const mediaType = m.image.match(/^data:(image\/\w+);base64,/)?.[1] ?? "image/jpeg";
+        const data = m.image.replace(/^data:image\/\w+;base64,/, "");
+        return [
+          { type: "image", source: { type: "base64", media_type: mediaType, data } },
+          ...(m.content ? [{ type: "text", text: m.content }] : []),
+        ];
+      }
+      return m.content;
+    };
     const history = [...messages.slice(-19), userMsg].map((m) => ({
       role: m.role,
-      content: m.content,
+      content: toApiContent(m),
     }));
 
     const placeholderId = (Date.now() + 1).toString();

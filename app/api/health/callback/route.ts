@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { verifyState } from "@/lib/oauth-state";
 
 function getAdminDb() {
   if (!getApps().length) {
@@ -18,7 +19,7 @@ function getAdminDb() {
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
-  const uid = req.nextUrl.searchParams.get("state");
+  const uid = verifyState(req.nextUrl.searchParams.get("state"));
   const error = req.nextUrl.searchParams.get("error");
 
   if (error || !code || !uid) {

@@ -29,9 +29,12 @@ All crons + `health/data` are now **fail-closed on an empty `CRON_SECRET`**. Con
 - **P3-E — subscription-renewal timezone ✅.** `subscriptionRenewalHandler` now takes `tz`, computes "today" from the user's local date (UTC-anchored math), and the caller passes `timeInfo.tz`. Fixes the western-zone off-by-one "renews today".
 - **P2-B — ChatPanel partial ✅.** Ported the two contained fixes: error-path rollback (deletes the optimistic user message + its saved doc + restores input, so a transient send error no longer permanently breaks the panel chat) and destructive-tool hang-prevention (cancels cleanly server-side + tells the user to use the full /chat page). **STILL TODO:** image-persistence in the panel, and a real in-panel destructive-confirm UI — both best done via the shared `useChatSession` extraction (P5 E-1), not more one-off patches.
 
-## Still not done — needs judgment / a follow-up pass
-- **P1-D — OAuth `state` CSRF binding** (gmail/drive/health/calendar/contacts callbacks). NOT done — user opted to skip in this session (can't test the OAuth round-trip here; a mistake could block reconnecting integrations). Spec: sign `state` (HMAC of uid+timestamp) in the `/*/auth` routes, verify+extract uid in the `/*/callback` routes. Lower severity than the fixed IDOR (login-CSRF, needs victim to hit a forged callback).
-- **P5 E-1 — shared `useChatSession` hook** to dedupe ChatInterface/ChatPanel (subsumes the remaining ChatPanel gaps above).
+## Third pass — DONE
+- **P1-D — OAuth `state` CSRF binding ✅.** New `lib/oauth-state.ts` (`signState`/`verifyState`, HMAC-SHA256 of `uid.timestamp` keyed on `OAUTH_STATE_SECRET || CRON_SECRET`, 10-min expiry, constant-time compare). All 5 flows wired: `{gmail,drive,calendar,health}/auth` + `people/contacts-auth` sign the state; the matching callbacks verify it and derive uid (invalid/expired/forged → existing `!uid` guard redirects to the `?error=` page). ⚠ **Needs a manual reconnect test** of each integration after deploy — the round-trip couldn't be tested here. Uses CRON_SECRET as the key by default (already set in Vercel), so no new env var required.
+- **P2-B — ChatPanel image-persistence ✅.** `saveMessage` now persists the `image` field, and the history builder emits multimodal `[image, text]` content for prior image messages — so panel images survive reload and stay in-context across turns (matches ChatInterface).
+
+## Still not done
+- **P5 E-1 — shared `useChatSession` hook** to dedupe ChatInterface/ChatPanel. The remaining ChatPanel gap is a real in-panel destructive-confirm modal (currently cancels + points to the full chat page). Best solved by the shared-hook extraction, not more one-off patches.
 - **daily-report** secured but has **zero callers** — deletion candidate in the refocus (superseded by `daily-briefing`).
 - Known-minor (Opus-flagged, intentional): `weeklyReviewHandler`'s `weekAgo` uses the old idiom but only as a Date instant vs timestamps — immaterial.
 

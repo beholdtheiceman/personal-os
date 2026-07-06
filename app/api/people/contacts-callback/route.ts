@@ -1,6 +1,7 @@
 // GET /api/people/contacts-callback — fetches Google Contacts and imports into Firestore
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { verifyState } from "@/lib/oauth-state";
 
 interface GoogleName      { displayName?: string }
 interface GoogleEmail     { value?: string }
@@ -63,7 +64,7 @@ function mapPerson(g: GooglePerson, now: string): Record<string, unknown> | null
 
 export async function GET(req: NextRequest) {
   const code  = req.nextUrl.searchParams.get("code");
-  const uid   = req.nextUrl.searchParams.get("state");
+  const uid   = verifyState(req.nextUrl.searchParams.get("state"));
   const error = req.nextUrl.searchParams.get("error");
 
   if (error || !code || !uid) {

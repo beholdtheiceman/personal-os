@@ -1,5 +1,6 @@
 // GET /api/health/auth?uid=... — redirects to Google Health API OAuth
 import { NextRequest, NextResponse } from "next/server";
+import { signState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
   const uid = req.nextUrl.searchParams.get("uid");
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     ].join(" "),
     access_type: "offline",
     prompt: "consent",
-    state: uid,
+    state: signState(uid),
   });
 
   return NextResponse.redirect(

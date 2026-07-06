@@ -1,5 +1,6 @@
 // GET /api/people/contacts-auth?uid= — OAuth redirect for Google Contacts read access
 import { NextRequest, NextResponse } from "next/server";
+import { signState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
   const uid = req.nextUrl.searchParams.get("uid");
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
     scope: "https://www.googleapis.com/auth/contacts",
     access_type: "offline",
     prompt: "consent",
-    state: uid,
+    state: signState(uid),
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);

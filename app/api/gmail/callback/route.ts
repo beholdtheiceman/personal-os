@@ -1,10 +1,11 @@
 // GET /api/gmail/callback — stores Gmail OAuth tokens
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { verifyState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
-  const uid = req.nextUrl.searchParams.get("state");
+  const uid = verifyState(req.nextUrl.searchParams.get("state"));
   const error = req.nextUrl.searchParams.get("error");
 
   if (error || !code || !uid) {
