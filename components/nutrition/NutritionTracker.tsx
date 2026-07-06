@@ -99,7 +99,7 @@ export default function NutritionTracker() {
     try {
       const res = await fetch("/api/nutrition/estimate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
         body: JSON.stringify({ description, meal }),
       });
       const estimate = await res.json();

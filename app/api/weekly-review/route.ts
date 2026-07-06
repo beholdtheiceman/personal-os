@@ -17,7 +17,7 @@ import { DEFAULT_NOTIFICATION_SETTINGS } from "@/types";
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 function isCronAuthed(req: NextRequest): boolean {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 
 async function getUidFromIdToken(req: NextRequest): Promise<string | null> {

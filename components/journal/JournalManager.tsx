@@ -38,7 +38,7 @@ export default function JournalManager() {
     try {
       const res = await fetch("/api/journal/summarize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
         body: JSON.stringify({ text }),
       });
       const analysis = await res.json();

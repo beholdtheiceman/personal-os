@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { doc, collection, onSnapshot, setDoc, query, where } from "firebase/firestore";
+import { doc, collection, onSnapshot, setDoc, updateDoc, deleteField, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
@@ -108,9 +108,7 @@ export function useBudget(month?: string) {
     async (category: string) => {
       if (!user || !budget) return;
       const ref = doc(db, "users", user.uid, "budgets", currentMonth);
-      const updated = { ...budget.categories };
-      delete updated[category];
-      await setDoc(ref, { categories: updated }, { merge: true });
+      await updateDoc(ref, { [`categories.${category}`]: deleteField() });
     },
     [user, currentMonth, budget]
   );

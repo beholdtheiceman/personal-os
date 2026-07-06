@@ -149,13 +149,16 @@ export default function DashboardPage() {
   // Calendar events (one-time fetch — calendar API is server-side)
   useEffect(() => {
     if (!user) return;
-    fetch(`/api/calendar/events?uid=${user.uid}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setCalendarConnected(data.connected ?? false);
-        setCalendarEvents(data.events ?? []);
-      })
-      .catch(() => {});
+    (async () => {
+      const token = await user.getIdToken();
+      fetch(`/api/calendar/events`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((data) => {
+          setCalendarConnected(data.connected ?? false);
+          setCalendarEvents(data.events ?? []);
+        })
+        .catch(() => {});
+    })();
   }, [user]);
 
   // Verse of the day
@@ -169,15 +172,18 @@ export default function DashboardPage() {
   // Gmail unread preview
   useEffect(() => {
     if (!user) return;
-    fetch(`/api/gmail/messages?uid=${user.uid}&max=10`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.connected) {
-          setGmailConnected(true);
-          setGmailMessages(data.messages ?? []);
-        }
-      })
-      .catch(() => {});
+    (async () => {
+      const token = await user.getIdToken();
+      fetch(`/api/gmail/messages?max=10`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.connected) {
+            setGmailConnected(true);
+            setGmailMessages(data.messages ?? []);
+          }
+        })
+        .catch(() => {});
+    })();
   }, [user]);
 
   // Live goals

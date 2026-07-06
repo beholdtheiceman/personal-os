@@ -55,9 +55,12 @@ export async function streakAlertHandler(uid: string, tz: string): Promise<Notif
     const completions: string[] = habit.completions ?? [];
     if (completions.includes(today)) return false;
     // Has a streak (completed yesterday)
-    const yesterday = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yStr = yesterday.toLocaleDateString("en-CA", { timeZone: tz });
+    // today's date in the user's tz, as YYYY-MM-DD (single, correct shift)
+    const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: tz });
+    // subtract one calendar day via UTC anchor (avoids re-applying the tz offset)
+    const yDate = new Date(todayLocal + "T00:00:00Z");
+    yDate.setUTCDate(yDate.getUTCDate() - 1);
+    const yStr = yDate.toISOString().slice(0, 10);
     return completions.includes(yStr);
   });
 
@@ -358,10 +361,13 @@ export async function weeklyReviewHandler(uid: string, tz: string): Promise<Noti
   }).length;
 
   const totalHabits = habitsSnap.size;
+  // today's date in the user's tz, as YYYY-MM-DD (single, correct shift)
+  const todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: tz });
   const dates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-    d.setDate(d.getDate() - i);
-    return d.toLocaleDateString("en-CA", { timeZone: tz });
+    // subtract i calendar days via UTC anchor (avoids re-applying the tz offset)
+    const d = new Date(todayLocal + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - i);
+    return d.toISOString().slice(0, 10);
   });
   const avgCompletion = totalHabits > 0
     ? Math.round(habitsSnap.docs.reduce((sum, d) => {
@@ -609,19 +615,23 @@ function monthlyEquivalent(amount: number, cycle: BillingCycle): number {
 
 export async function subscriptionRenewalHandler(
   uid: string,
-  daysBefore: number
+  daysBefore: number,
+  tz: string
 ): Promise<NotifPayload | null> {
   const db = getAdminDb();
   const snap = await db.collection(`users/${uid}/subscriptions`)
     .where('status', '==', 'active')
     .get();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // "Today" must be the user's local date, not the Vercel server's UTC date —
+  // otherwise a western-timezone user's evening run reads tomorrow's date and the
+  // "renews today" reminder (and the days-until count) are off by one. Anchor all
+  // date math to UTC midnight of the local date string so there's no re-shift.
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+  const today = new Date(todayStr + 'T00:00:00Z');
   const cutoff = new Date(today);
-  cutoff.setDate(cutoff.getDate() + daysBefore);
-  const cutoffStr = format(cutoff, 'yyyy-MM-dd');
-  const todayStr = format(today, 'yyyy-MM-dd');
+  cutoff.setUTCDate(cutoff.getUTCDate() + daysBefore);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   const due = snap.docs
     .map(d => d.data() as Subscription)
@@ -631,7 +641,7 @@ export async function subscriptionRenewalHandler(
 
   if (due.length === 1) {
     const s = due[0];
-    const days = differenceInDays(parseISO(s.next_billing_date), today);
+    const days = differenceInDays(new Date(s.next_billing_date + 'T00:00:00Z'), today);
     return {
       title: `${s.name} renews ${days === 0 ? 'today' : `in ${days}d`}`,
       body: `$${s.amount}${cycleSuffix(s.billing_cycle)} — tap to review`,

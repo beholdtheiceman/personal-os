@@ -130,7 +130,7 @@ export default function MemoryManager() {
     try {
       const res = await fetch("/api/memory/suggest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user!.getIdToken()}` },
         body: JSON.stringify({
           existingMemory: buildMemoryContext(entries),
           recentContent: "No recent journal or chat history available yet.",

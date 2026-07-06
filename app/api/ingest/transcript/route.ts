@@ -1,4 +1,5 @@
 // POST /api/ingest/transcript — Ambient capture: extract structured data from text and write to Firestore
+import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY } from "@/lib/env";
@@ -68,6 +69,20 @@ export async function POST(req: NextRequest) {
 
   const db = getAdminDb();
   const userRef = db.collection("users").doc(uid);
+
+  // Idempotency: atomically claim this exact capture before writing anything, so a
+  // double-submit or retry can't duplicate line items (tasks, transactions…).
+  // create() throws if the marker already exists — treat that as "already done".
+  const runHash = createHash("sha256").update(`${today}:${contextType}:${text}`).digest("hex").slice(0, 32);
+  try {
+    await userRef.collection("ambient_runs").doc(runHash).create({
+      claimed_at: new Date().toISOString(),
+      preview: text.slice(0, 120),
+    });
+  } catch {
+    return NextResponse.json({ actions: [], summary: "This capture was already processed." });
+  }
+
   const now = FieldValue.serverTimestamp();
   const actions: string[] = [];
 

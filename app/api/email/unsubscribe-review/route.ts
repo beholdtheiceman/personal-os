@@ -10,7 +10,7 @@ import type { UnsubscribeReview, UnsubscribeRecommendation } from "@/types";
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 function isCronAuthed(req: NextRequest): boolean {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 
 async function getUidFromIdToken(req: NextRequest): Promise<string | null> {
@@ -251,6 +251,24 @@ async function processUser(uid: string): Promise<{ uid: string; status: string }
     uid,
     status: `done (${recommendations.length} evaluated, ${flaggedCount} flagged)`,
   };
+}
+
+// GET — Vercel cron (Saturdays). Vercel invokes cron paths with GET, so the
+// weekly review needs a GET entry point (a POST-only route 405s the cron).
+export async function GET(req: NextRequest) {
+  if (!isCronAuthed(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const db = getAdminDb();
+  const usersSnap = await db.collection("users").get();
+  const uids = usersSnap.docs.map((d) => d.id);
+  const results = await Promise.allSettled(uids.map((uid) => processUser(uid)));
+  const summary = results.map((r) =>
+    r.status === "fulfilled"
+      ? r.value
+      : { uid: "unknown", status: `error: ${String(r.reason)}` },
+  );
+  return NextResponse.json({ processed: summary.length, results: summary });
 }
 
 export async function POST(req: NextRequest) {

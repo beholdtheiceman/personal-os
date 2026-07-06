@@ -69,7 +69,7 @@ export default function QuickLogModal({ onClose }: QuickLogModalProps) {
       // Ask Claude to extract structured tasks from the free-form input
       const res = await fetch("/api/tasks/extract", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
         body: JSON.stringify({ input }),
       });
       const { tasks } = await res.json() as { tasks: Partial<Task>[] };

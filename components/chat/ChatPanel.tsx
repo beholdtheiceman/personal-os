@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { runClientTool } from "@/lib/client-actions";
 import {
-  collection, addDoc, query, orderBy, limit,
-  onSnapshot, doc, updateDoc,
+  collection, addDoc, query, orderBy, limit, limitToLast,
+  onSnapshot, doc, updateDoc, deleteDoc, type DocumentReference,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { fetchMemoryEntries, buildSystemPrompt, buildMemoryContext } from "@/lib/memory";
@@ -131,7 +131,7 @@ export default function ChatPanel() {
     const q = query(
       collection(db, "users", user.uid, "chats", activeChatId, "messages"),
       orderBy("timestamp", "asc"),
-      limit(100)
+      limitToLast(100)
     );
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AssistantMessage)));
@@ -159,13 +159,14 @@ export default function ChatPanel() {
     return ref.id;
   };
 
-  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id" | "image">) => {
-    if (!user) return;
-    await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
+  const saveMessage = async (chatId: string, msg: Omit<AssistantMessage, "id" | "image">): Promise<DocumentReference | null> => {
+    if (!user) return null;
+    const ref = await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), msg);
     await updateDoc(doc(db, "users", user.uid, "chats", chatId), {
       lastMessage: msg.content.slice(0, 80),
       updatedAt: new Date().toISOString(),
     });
+    return ref;
   };
 
   // ── TTS ───────────────────────────────────────────────────────────────────
@@ -293,8 +294,9 @@ export default function ChatPanel() {
     setLoading(true);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
+    let savedUserRef: DocumentReference | null = null;
     if (!offRecord) {
-      await saveMessage(chatId, { role: "user", content: displayText, timestamp: userMsg.timestamp });
+      savedUserRef = await saveMessage(chatId, { role: "user", content: displayText, timestamp: userMsg.timestamp });
     }
 
     await checkAndAward(user.uid, "hello_world");
@@ -379,6 +381,45 @@ export default function ChatPanel() {
         if (data.actions?.length) combinedActions = [...combinedActions, ...data.actions];
       }
 
+      // The slide-in panel has no destructive-action confirmation UI (that lives on
+      // the full /chat page). If the server paused for one, don't hang on an empty
+      // bubble: cancel it cleanly server-side (so no resume state dangles) and tell
+      // the user where to confirm.
+      if (data.pendingDestructiveTools?.length) {
+        const cancelToken = await user.getIdToken();
+        await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${cancelToken}` },
+          body: JSON.stringify({
+            uid: user.uid,
+            chatId,
+            systemPrompt: skills.effectiveSystemPrompt,
+            localDate: format(new Date(), "yyyy-MM-dd"),
+            localTime: new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" }),
+            isFirstMessage: false,
+            resume: data.resume,
+            clientResults: (data.pendingDestructiveTools as { id: string }[]).map((t) => ({
+              type: "tool_result",
+              tool_use_id: t.id,
+              content: "Cancelled — destructive actions must be confirmed from the full chat page.",
+            })),
+          }),
+        }).catch(() => { /* best-effort cancel */ });
+
+        const noteMsg: AssistantMessage = {
+          id: placeholderId,
+          role: "assistant",
+          content: "That action needs confirmation. Open the full chat page (not the side panel) to confirm destructive actions like deleting or sending an email.",
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => prev.map((m) => (m.id === placeholderId ? noteMsg : m)));
+        if (!offRecord) {
+          await saveMessage(chatId, { role: "assistant", content: noteMsg.content, timestamp: noteMsg.timestamp });
+        }
+        setLoading(false);
+        return;
+      }
+
       if (data.renamedChat) {
         setActiveChatName(data.renamedChat);
       }
@@ -401,9 +442,15 @@ export default function ChatPanel() {
           ...(assistantMsg.actions ? { actions: assistantMsg.actions } : {}),
         });
       }
-    } catch {
-      toast.error("Failed to get response");
-      setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to get response");
+      // Roll back the optimistically-saved user message too — otherwise the chat is
+      // left ending on a user turn, and the next send produces two consecutive user
+      // messages, which the Anthropic API rejects (permanently breaking the chat).
+      setMessages((prev) => prev.filter((m) => m.id !== placeholderId && m.id !== userMsg.id));
+      if (savedUserRef) await deleteDoc(savedUserRef).catch(() => { /* best-effort */ });
+      // Put the text back so a failed send doesn't lose what the user typed.
+      setInput(displayText);
     } finally {
       setLoading(false);
       // Use a short delay so React's render cycle has time to re-enable the

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 
 /**
@@ -7,6 +7,7 @@ import { format } from "date-fns";
  */
 export function useToday(): string {
   const [today, setToday] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     function scheduleNextUpdate() {
@@ -16,14 +17,14 @@ export function useToday(): string {
       tomorrow.setHours(0, 0, 0, 0);
       const msUntilMidnight = tomorrow.getTime() - now.getTime();
 
-      return setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         setToday(format(new Date(), "yyyy-MM-dd"));
         scheduleNextUpdate();
       }, msUntilMidnight);
     }
 
-    const timer = scheduleNextUpdate();
-    return () => clearTimeout(timer);
+    scheduleNextUpdate();
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
   return today;

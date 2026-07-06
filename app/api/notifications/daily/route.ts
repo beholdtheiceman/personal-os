@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     const uid = userDoc.id;
     const fired: string[] = [];
 
+    try {
     const settingsDoc = await db.doc(`users/${uid}/settings/notifications`).get();
     const settings = mergeNotificationSettings(settingsDoc.data());
 
@@ -158,7 +159,8 @@ export async function GET(req: NextRequest) {
     ) {
       const n = await subscriptionRenewalHandler(
         uid,
-        settings.subscription_renewal.days_before ?? 3
+        settings.subscription_renewal.days_before ?? 3,
+        timeInfo.tz
       );
       if (n) await send(n.title, n.body, n.tag ?? "subscription-renewal");
     }
@@ -243,6 +245,10 @@ export async function GET(req: NextRequest) {
     }
 
     results[uid] = fired;
+    } catch (err) {
+      // One user's failure must not abort notifications for everyone after them.
+      console.error(`notifications/daily failed for ${uid}:`, err);
+    }
   }
 
   return NextResponse.json({ ok: true, results });

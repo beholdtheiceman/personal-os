@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
+    try {
     const habitsSnap = await db.collection(`users/${uid}/habits`).get();
     if (habitsSnap.empty) continue;
 
@@ -61,6 +62,10 @@ export async function GET(req: NextRequest) {
       });
 
       notified.push(`${uid}:${habit.name}`);
+    }
+    } catch (err) {
+      // One user's failure must not abort habit reminders for everyone after them.
+      console.error(`notifications/habits failed for ${uid}:`, err);
     }
   }
 

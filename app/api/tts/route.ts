@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
 
 const OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech";
 const MAX_CHARS = 4096;
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "TTS not configured" }, { status: 503 });

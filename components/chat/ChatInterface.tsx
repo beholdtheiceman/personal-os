@@ -7,7 +7,7 @@ import { useQuickLinks } from "@/hooks/useQuickLinks";
 import { runClientTool } from "@/lib/client-actions";
 import { RiAlertLine } from "react-icons/ri";
 import {
-  collection, addDoc, getDocs, query, orderBy, limit,
+  collection, addDoc, getDocs, query, orderBy, limit, limitToLast,
   onSnapshot, doc, updateDoc, setDoc, getDoc, writeBatch, deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -90,6 +90,8 @@ export default function ChatInterface() {
   // ── Chats list state ─────────────────────────────────────────────────────
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const activeChatIdRef = useRef(activeChatId);
+  useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -207,7 +209,7 @@ export default function ChatInterface() {
       setChats(list);
       setChatsLoaded(true);
       // Auto-select the most recent chat on first load
-      if (!activeChatId && list.length > 0) {
+      if (!activeChatIdRef.current && list.length > 0) {
         setActiveChatId(list[0].id);
       }
     });
@@ -221,7 +223,7 @@ export default function ChatInterface() {
     const q = query(
       collection(db, "users", user.uid, "chats", activeChatId, "messages"),
       orderBy("timestamp", "asc"),
-      limit(100)
+      limitToLast(100)
     );
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AssistantMessage)));

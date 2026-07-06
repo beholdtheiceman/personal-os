@@ -10,7 +10,7 @@ import { ANTHROPIC_API_KEY, CRON_SECRET } from "@/lib/env";
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 function isCronAuthed(req: NextRequest) {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 async function getUidFromToken(req: NextRequest): Promise<string | null> {
   try {

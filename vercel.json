@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/goals/checkin",
-      "schedule": "0 9 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/health/auto-sync",

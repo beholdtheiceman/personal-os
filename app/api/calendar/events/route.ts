@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { requireAuth } from "@/lib/api-auth";
 
 const ADMIN_CONFIGURED =
   !!process.env.FIREBASE_ADMIN_CLIENT_EMAIL &&
@@ -39,8 +40,9 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid");
-  if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
 
   // Return gracefully if admin SDK isn't configured yet
   if (!ADMIN_CONFIGURED) {

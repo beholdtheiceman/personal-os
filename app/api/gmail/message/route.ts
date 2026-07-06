@@ -1,11 +1,14 @@
 // GET /api/gmail/message?uid=...&id=... — fetches full email body
 import { NextRequest, NextResponse } from "next/server";
 import { refreshGmailToken, findPart, htmlToReadable, finalClean } from "@/lib/gmail-token";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid");
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
   const id  = req.nextUrl.searchParams.get("id");
-  if (!uid || !id) return NextResponse.json({ error: "Missing params" }, { status: 400 });
+  if (!id) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
   try {
     const accessToken = await refreshGmailToken(uid);

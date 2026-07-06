@@ -95,7 +95,9 @@ export async function POST(req: NextRequest) {
   const origin = req.nextUrl.origin;
   let data: HealthDataResponse;
   try {
-    const res = await fetch(`${origin}/api/health/data?uid=${uid}`);
+    const res = await fetch(`${origin}/api/health/data?uid=${uid}`, {
+      headers: { Authorization: `Bearer ${getEnv("CRON_SECRET")}` },
+    });
     if (!res.ok) throw new Error(`data endpoint returned ${res.status}`);
     data = (await res.json()) as HealthDataResponse;
   } catch (err) {
@@ -131,11 +133,9 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const cronSecret = getEnv("CRON_SECRET");
-  if (cronSecret) {
-    const authHeader = req.headers.get("authorization") ?? "";
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const authHeader = req.headers.get("authorization") ?? "";
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // req.nextUrl.origin is always the correct deployment URL — avoids the stale
@@ -154,6 +154,7 @@ export async function GET(req: NextRequest) {
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id;
       checked++;
+      try {
       const today = await getUserLocalDate(uid);
 
       // ── Check google_fit integration ─────────────────────────────────────
@@ -178,7 +179,9 @@ export async function GET(req: NextRequest) {
       // ── Fetch health data via internal API ───────────────────────────────
       let data: HealthDataResponse;
       try {
-        const res = await fetch(`${origin}/api/health/data?uid=${uid}`);
+        const res = await fetch(`${origin}/api/health/data?uid=${uid}`, {
+          headers: { Authorization: `Bearer ${getEnv("CRON_SECRET")}` },
+        });
         if (!res.ok) throw new Error(`status ${res.status}`);
         data = (await res.json()) as HealthDataResponse;
       } catch (err) {
@@ -199,6 +202,11 @@ export async function GET(req: NextRequest) {
       } else {
         await logRef.set(buildHealthLog(today, data));
         created++;
+      }
+      } catch (err) {
+        // One user's failure must not abort the sync for everyone after them.
+        console.error(`auto-sync: failed for ${uid}:`, err);
+        skipped++;
       }
     }
 

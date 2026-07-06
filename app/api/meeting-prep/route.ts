@@ -12,7 +12,7 @@ import { mergeNotificationSettings } from "@/types";
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 function isCronAuthed(req: NextRequest): boolean {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 async function getUidFromToken(req: NextRequest): Promise<string | null> {
   try {

@@ -1,10 +1,14 @@
 // POST /api/gmail/action — archive, trash, mark read/unread
 import { NextRequest, NextResponse } from "next/server";
 import { refreshGmailToken } from "@/lib/gmail-token";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
-  const { uid, id, action } = await req.json();
-  if (!uid || !id || !action) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
+  const { id, action } = await req.json();
+  if (!id || !action) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
   }
 

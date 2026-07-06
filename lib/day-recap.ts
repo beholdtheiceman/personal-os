@@ -2,6 +2,7 @@
 // Extracts structured data from a free-form day description (Haiku → JSON) and writes
 // to each module's canonical collection. Used by both /api/ingest/day-recap (UI) and
 // the run_day_recap chat tool (so the agent can trigger it mid-conversation).
+import { createHash } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY } from "@/lib/env";
 import { getAdminDb } from "@/lib/firebase-admin";
@@ -80,6 +81,21 @@ export async function runDayRecap(uid: string, text: string, today: string): Pro
 
   const db = getAdminDb();
   const userRef = db.collection("users").doc(uid);
+
+  // Idempotency: atomically claim this exact recap before writing anything, so a
+  // double-submit, a retry, or the agent re-triggering run_day_recap after a UI
+  // submit can't duplicate every line item (meals, transactions, journal…).
+  // create() throws if the marker already exists — treat that as "already done".
+  const runHash = createHash("sha256").update(`${today}:${text}`).digest("hex").slice(0, 32);
+  try {
+    await userRef.collection("day_recap_runs").doc(runHash).create({
+      claimed_at: new Date().toISOString(),
+      preview: text.slice(0, 120),
+    });
+  } catch {
+    return { actions: [], summary: "Already logged this recap.", xp_awarded: 0 };
+  }
+
   const now = FieldValue.serverTimestamp();
   const actions: string[] = [];
   const xpEvents: Array<{ type: string; xp: number; description: string }> = [];

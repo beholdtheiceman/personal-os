@@ -9,7 +9,7 @@ import { CRON_SECRET } from "@/lib/env";
 import { generateWhatMatters, getWhatMatters } from "@/lib/what-matters";
 
 function isCronAuthed(req: NextRequest): boolean {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 
 async function getUidFromToken(req: NextRequest): Promise<string | null> {

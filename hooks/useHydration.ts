@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { doc, onSnapshot, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, updateDoc, arrayUnion, increment as fbIncrement } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToday } from "@/hooks/useToday";
@@ -49,12 +49,13 @@ export function useHydration() {
       });
     } else {
       await updateDoc(ref, {
-        glasses: current + 1,
+        glasses: fbIncrement(1),
         logs: arrayUnion(now),
         updated_at: now,
       });
     }
 
+    // NOTE: goal-XP award is best-effort; not transactional
     // Award 10 XP exactly when the goal is first hit
     if (current + 1 === goal) {
       await awardXP(user.uid, 10, "hydration_goal", `Hydration goal hit: ${goal} glasses`, totalXP);

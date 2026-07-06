@@ -1,12 +1,15 @@
 // POST /api/journal/summarize — Claude summarizes a journal entry and extracts mood + tags
 import { NextRequest, NextResponse } from "next/server";
 import { ANTHROPIC_API_KEY } from "@/lib/env";
+import { requireAuth } from "@/lib/api-auth";
 
 function stripFences(raw: string): string {
   return raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   try {
     const { text } = await req.json();
     if (!text?.trim()) {

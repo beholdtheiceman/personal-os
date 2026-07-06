@@ -1,6 +1,7 @@
 // POST /api/gmail/reply — send a reply in the same thread
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { requireAuth } from "@/lib/api-auth";
 import { GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET } from "@/lib/env";
 
 async function refreshToken(uid: string): Promise<string> {
@@ -29,8 +30,11 @@ async function refreshToken(uid: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const { uid, threadId, messageId, to, subject, body } = await req.json();
-  if (!uid || !threadId || !to || !body) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
+  const { threadId, messageId, to, subject, body } = await req.json();
+  if (!threadId || !to || !body) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
   }
 

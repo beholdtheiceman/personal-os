@@ -69,7 +69,9 @@ export default function GmailView() {
   const fetchMessages = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/gmail/messages?uid=${user.uid}&max=50`);
+      const res = await fetch(`/api/gmail/messages?max=50`, {
+        headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+      });
       const data = await res.json();
       setConnected(data.connected);
       setMessages(data.messages ?? []);
@@ -90,7 +92,9 @@ export default function GmailView() {
     setReplyText("");
     setLoadingBody(true);
     try {
-      const res = await fetch(`/api/gmail/message?uid=${user!.uid}&id=${msg.id}`);
+      const res = await fetch(`/api/gmail/message?id=${msg.id}`, {
+        headers: { Authorization: `Bearer ${await user!.getIdToken()}` },
+      });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setBody(data);
@@ -108,8 +112,11 @@ export default function GmailView() {
     try {
       const res = await fetch("/api/gmail/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: user.uid, id: selected.id, action }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await user.getIdToken()}`,
+        },
+        body: JSON.stringify({ id: selected.id, action }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -138,9 +145,11 @@ export default function GmailView() {
     try {
       const res = await fetch("/api/gmail/reply", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await user.getIdToken()}`,
+        },
         body: JSON.stringify({
-          uid: user.uid,
           threadId: body.threadId,
           messageId: body.messageId,
           to: body.from,

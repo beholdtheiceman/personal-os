@@ -11,7 +11,7 @@ import type { Objective } from "@/types";
 const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 function isCronAuthed(req: NextRequest) {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 
 function prevQuarter(): string {

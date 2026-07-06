@@ -60,9 +60,19 @@ export async function speak(text: string, voice = "nova"): Promise<void> {
   stopActive();
 
   try {
+    // /api/tts spends OpenAI credits, so it requires auth. Attach the current
+    // user's Firebase ID token; if nobody is signed in, skip (the route 401s and
+    // speak() degrades silently, which is the intended graceful fallback).
+    const { auth } = await import("@/lib/firebase");
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) return;
+
     const res = await fetch("/api/tts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
       body: JSON.stringify({ text: cleaned, voice }),
     });
 

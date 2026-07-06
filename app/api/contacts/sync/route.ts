@@ -70,13 +70,11 @@ function mapPerson(g: GooglePerson, now: string): Record<string, unknown> | null
 // ── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  // Auth: validate CRON_SECRET if set
+  // Auth: require a matching CRON_SECRET (fail closed when unset)
   const cronSecret = getEnv("CRON_SECRET");
-  if (cronSecret) {
-    const authHeader = req.headers.get("authorization") ?? "";
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const authHeader = req.headers.get("authorization") ?? "";
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const db = getAdminDb();

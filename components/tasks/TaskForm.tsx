@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import LoadingDots from "@/components/ui/LoadingDots";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Task, TaskTag, RecurrenceCadence } from "@/types";
 
 const ALL_TAGS: TaskTag[] = ["personal", "business", "health", "finance"];
@@ -20,6 +21,7 @@ interface TaskFormProps {
 }
 
 export default function TaskForm({ initial, onSave, onClose }: TaskFormProps) {
+  const { user } = useAuth();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [tags, setTags] = useState<TaskTag[]>(initial?.tags ?? ["personal"]);
@@ -35,13 +37,13 @@ export default function TaskForm({ initial, onSave, onClose }: TaskFormProps) {
   };
 
   const handleSubmit = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !user) return;
     setSaving(true);
     try {
       // Get AI priority score
       const scoreRes = await fetch("/api/tasks/score", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
         body: JSON.stringify({ title, description, tags, due_date: dueDate || null }),
       });
       const { score } = await scoreRes.json();

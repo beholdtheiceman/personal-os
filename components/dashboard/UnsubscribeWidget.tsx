@@ -25,7 +25,9 @@ export default function UnsubscribeWidget() {
     setStatus("scanning");
     setResults({});
     try {
-      const res = await fetch(`/api/gmail/unsubscribe-scan?uid=${user.uid}`);
+      const res = await fetch(`/api/gmail/unsubscribe-scan`, {
+        headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Scan failed");
       setCandidates(data.candidates ?? []);
@@ -67,12 +69,16 @@ export default function UnsubscribeWidget() {
 
     let successCount = 0;
     let failCount = 0;
+    const token = await user.getIdToken();
 
     for (const emailId of selected) {
       try {
-        const res = await fetch(`/api/gmail/unsubscribe?uid=${user.uid}`, {
+        const res = await fetch(`/api/gmail/unsubscribe`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({ emailId }),
         });
         const data = await res.json();

@@ -18,7 +18,7 @@ const MAX_EXTRACTIONS = 5; // Keeps runs well inside Vercel timeout on Hobby pla
 
 function isCronAuthed(req: NextRequest): boolean {
   const auth = req.headers.get("Authorization") ?? "";
-  return auth === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && auth === `Bearer ${CRON_SECRET}`;
 }
 
 async function getUidFromIdToken(req: NextRequest): Promise<string | null> {

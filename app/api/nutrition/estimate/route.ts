@@ -2,12 +2,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_API_KEY } from "@/lib/env";
+import { requireAuth } from "@/lib/api-auth";
 
 function stripFences(raw: string): string {
   return raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   try {
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const { description, meal } = await req.json();

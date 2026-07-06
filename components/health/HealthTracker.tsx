@@ -82,7 +82,9 @@ export default function HealthTracker() {
     if (!user) return;
     setFitLoading(true);
     try {
-      const res = await fetch(`/api/health/data?uid=${user.uid}`);
+      const res = await fetch(`/api/health/data`, {
+        headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+      });
       const data: FitData = await res.json();
       setFitData(data);
     } catch {

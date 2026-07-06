@@ -3,6 +3,7 @@
 // deduplicates by sender address, returns one entry per sender.
 import { NextRequest, NextResponse } from "next/server";
 import { refreshGmailToken } from "@/lib/gmail-token";
+import { requireAuth } from "@/lib/api-auth";
 
 export interface UnsubscribeCandidate {
   emailId: string;       // most recent email ID from this sender (used to unsubscribe)
@@ -15,8 +16,9 @@ export interface UnsubscribeCandidate {
 }
 
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid");
-  if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
 
   try {
     const accessToken = await refreshGmailToken(uid);

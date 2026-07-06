@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
 
   for (const userDoc of usersSnap.docs) {
     const uid = userDoc.id;
+    try {
     // Compute week key in user's local timezone — server runs UTC on Vercel.
     const timeInfo = await getLocalTimeInfo(uid);
     const daysToMonday = timeInfo.localDayOfWeek === 0 ? -6 : 1 - timeInfo.localDayOfWeek;
@@ -42,6 +43,13 @@ export async function GET(req: NextRequest) {
       ...(settingsDoc.data() as Partial<NotificationSettings> ?? {}),
     };
     if (!settings.goal_inactivity.enabled) continue;
+
+    // Cron runs hourly; only fire at the user's preferred local hour (default 9am
+    // local) so western-timezone users aren't woken at 2am by a fixed-UTC schedule.
+    const targetHour = settings.goal_inactivity.time
+      ? parseInt(settings.goal_inactivity.time.split(":")[0], 10)
+      : 9;
+    if (timeInfo.localHour !== targetHour) continue;
 
     // Find active goals that haven't been touched in INACTIVE_DAYS
     const goalsSnap = await db.collection(`users/${uid}/goals`)
@@ -73,6 +81,10 @@ export async function GET(req: NextRequest) {
 
     await sendPushToUser(uid, { title, body, tag: "goal-inactivity" });
     notified.push(uid);
+    } catch (err) {
+      // One user's failure must not abort the nudge for everyone after them.
+      console.error(`goals/checkin: failed for ${uid}:`, err);
+    }
   }
 
   return NextResponse.json({ checked: usersSnap.size, notified });

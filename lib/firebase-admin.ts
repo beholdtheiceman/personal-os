@@ -22,9 +22,16 @@ function initAdmin() {
   return getApp();
 }
 
+let _settingsApplied = false;
+
 export function getAdminDb() {
   initAdmin();
-  return getFirestore();
+  const db = getFirestore();
+  if (!_settingsApplied) {
+    try { db.settings({ ignoreUndefinedProperties: true }); } catch { /* already initialized */ }
+    _settingsApplied = true;
+  }
+  return db;
 }
 
 export function getAdminMessaging() {

@@ -2,6 +2,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAdminAuth } from "@/lib/firebase-admin";
+import { CRON_SECRET } from "@/lib/env";
+
+// Dual auth: a Firebase ID token (browser — uid derived from the token, any query
+// uid ignored) OR the CRON_SECRET bearer (trusted internal server-to-server call
+// from health/auto-sync — uid taken from the query). Returns null if neither holds.
+async function resolveUid(req: NextRequest): Promise<string | null> {
+  const header = req.headers.get("Authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) return null;
+  if (CRON_SECRET !== "" && token === CRON_SECRET) {
+    return req.nextUrl.searchParams.get("uid");
+  }
+  const decoded = await getAdminAuth().verifyIdToken(token).catch(() => null);
+  return decoded?.uid ?? null;
+}
 
 const ADMIN_CONFIGURED =
   !!process.env.FIREBASE_ADMIN_CLIENT_EMAIL &&
@@ -137,8 +153,8 @@ function getPointStartTime(pt: Record<string, unknown>, dataType: string): numbe
 }
 
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid");
-  if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+  const uid = await resolveUid(req);
+  if (!uid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!ADMIN_CONFIGURED) {
     return NextResponse.json({ connected: false, reason: "admin_not_configured" });

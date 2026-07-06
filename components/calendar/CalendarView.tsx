@@ -43,7 +43,9 @@ export default function CalendarView() {
   const fetchEvents = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/calendar/events?uid=${user.uid}`);
+      const res = await fetch(`/api/calendar/events`, {
+        headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+      });
       const data = await res.json();
       setConnected(data.connected);
       setEvents(data.events ?? []);

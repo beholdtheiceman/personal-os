@@ -2,10 +2,12 @@
 // Fires the List-Unsubscribe action for a single email.
 import { NextRequest, NextResponse } from "next/server";
 import { refreshGmailToken } from "@/lib/gmail-token";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid");
-  if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
 
   const { emailId } = await req.json() as { emailId: string };
   if (!emailId) return NextResponse.json({ error: "Missing emailId" }, { status: 400 });

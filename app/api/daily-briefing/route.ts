@@ -32,7 +32,7 @@ function localDayBounds(date: string, tz: string): { start: string; end: string 
 }
 
 function isCronAuthed(req: NextRequest): boolean {
-  return (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
+  return CRON_SECRET !== "" && (req.headers.get("Authorization") ?? "") === `Bearer ${CRON_SECRET}`;
 }
 
 async function getUidFromToken(req: NextRequest): Promise<string | null> {

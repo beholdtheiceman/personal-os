@@ -1,6 +1,7 @@
 // GET /api/gmail/messages?uid=... — fetches recent Gmail messages
 import { NextRequest, NextResponse } from "next/server";
 import { refreshGmailToken } from "@/lib/gmail-token";
+import { requireAuth } from "@/lib/api-auth";
 
 function parseFrom(raw: string) {
   const match = raw.match(/^"?([^"<]+)"?\s*<?([^>]*)>?$/);
@@ -9,11 +10,11 @@ function parseFrom(raw: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid");
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
+  const uid = auth.uid;
   const maxResults = parseInt(req.nextUrl.searchParams.get("max") ?? "50");
   const labelIds = req.nextUrl.searchParams.get("labels") ?? "INBOX";
-
-  if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
   try {
     const accessToken = await refreshGmailToken(uid);
